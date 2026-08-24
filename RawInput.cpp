@@ -443,5 +443,5 @@ namespace RadarKeys {
 			//Redirect WndProc for hWnd
 			WndProc_Orig = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WndProc_Hook);
 		}
-	}//namespace RawInput
-}//namespace RadarKeys
+	}
+}
