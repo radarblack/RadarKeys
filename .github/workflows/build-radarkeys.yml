@@ -1,0 +1,90 @@
+name: Build RadarKeys.dll
+
+on:
+  workflow_dispatch:      # only runs when you manually trigger it from the Actions tab
+
+jobs:
+  build:
+    runs-on: windows-latest   # only Windows runners have MSVC/MSBuild available
+
+    steps:
+      # tex: unlike the IHHook repo, this is a fresh project we created from scratch - no
+      # inherited bad-symlink file, so the git-symlink workaround that build was needing isn't
+      # necessary here. Left out deliberately, not an oversight.
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      # Same proven auto-detection as the IHHook workflow - RadarKeys.vcxproj pins a reasonable
+      # modern default (v143 / WindowsTargetPlatformVersion=10.0) rather than an exact pinned SDK
+      # version, specifically to avoid the MSB8036/MSB8020 problems that cost real debugging time
+      # on the IHHook build - but detecting and overriding explicitly here is still worth keeping,
+      # since "10.0" alone doesn't guarantee MSBuild resolves to a version that actually exists on
+      # whatever the runner image ships this week.
+      - name: Find best available PlatformToolset
+        id: toolset
+        shell: pwsh
+        run: |
+          function Find-VsTool($name) {
+            foreach ($base in @("${env:ProgramFiles(x86)}", "${env:ProgramFiles}")) {
+              $candidate = Join-Path $base "Microsoft Visual Studio\Installer\$name"
+              if (Test-Path $candidate) { return $candidate }
+            }
+            throw "$name not found under either Program Files location"
+          }
+          $vswhere = Find-VsTool "vswhere.exe"
+          $installPath = & $vswhere -latest -products * -property installationPath
+          Write-Host "VS install path: $installPath"
+
+          $msvcRoot = Join-Path $installPath "VC\Tools\MSVC"
+          if (Test-Path $msvcRoot) {
+            Write-Host "MSVC toolset versions found under VC\Tools\MSVC:"
+            Get-ChildItem $msvcRoot -Directory | ForEach-Object { Write-Host "  $($_.Name)" }
+          }
+
+          $auxBuild = Join-Path $installPath "VC\Auxiliary\Build"
+          $markers = Get-ChildItem $auxBuild -Filter "Microsoft.VCToolsVersion.v*.default.txt" -ErrorAction SilentlyContinue
+          if ($markers.Count -eq 0) {
+            throw "No Microsoft.VCToolsVersion.v*.default.txt marker files found under $auxBuild - can't determine PlatformToolset label"
+          }
+          $labels = $markers | ForEach-Object {
+            if ($_.Name -match '^Microsoft\.VCToolsVersion\.(v\d+)\.default\.txt$') { $Matches[1] }
+          } | Sort-Object -Descending
+          Write-Host "PlatformToolset labels available: $($labels -join ', ')"
+          $best = $labels[0]
+          Write-Host "Using: $best"
+          echo "toolset=$best" >> $env:GITHUB_OUTPUT
+
+      - name: Find installed Windows 10 SDK version
+        id: sdk
+        shell: pwsh
+        run: |
+          $sdkVersions = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Directory |
+            Where-Object { $_.Name -match '^10\.' } |
+            Sort-Object Name -Descending
+          if ($sdkVersions.Count -eq 0) {
+            Write-Error "No Windows 10 SDK found under Windows Kits\10\Include"
+            exit 1
+          }
+          $latest = $sdkVersions[0].Name
+          Write-Host "Installed SDK versions found:"
+          $sdkVersions | ForEach-Object { Write-Host "  $($_.Name)" }
+          Write-Host "Using: $latest"
+          echo "version=$latest" >> $env:GITHUB_OUTPUT
+
+      - name: Build Release|x64
+        run: msbuild RadarKeys.sln /p:Configuration=Release /p:Platform=x64 /p:WindowsTargetPlatformVersion=${{ steps.sdk.outputs.version }} /p:PlatformToolset=${{ steps.toolset.outputs.toolset }} /m
+
+      # RadarKeys.vcxproj's own Release|x64 post-build step copies the built dll to
+      # makebite/GameDir/RadarKeys.dll - the companion RadarKeys_Core.lua already sits in
+      # makebite/GameDir/mod/modules/ as a plain committed file (nothing to compile there).
+      # Uploading the whole GameDir folder bundles both together in one download.
+      - name: Upload RadarKeys build
+        uses: actions/upload-artifact@v4
+        with:
+          name: RadarKeys-build
+          path: makebite/GameDir
+          if-no-files-found: error
