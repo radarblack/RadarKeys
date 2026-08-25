@@ -30,7 +30,7 @@ local function RunDoScript(luaExpr)
     InfCore.Log(tostring(runErr))
     RK.MenuMessage("DoScriptResult","0|DoScriptResult|0|"..tostring(runErr))
   end
-end--RunDoScript
+end
 
 function this.Update()
   local messages=RK.GetMenuMessages()
@@ -49,6 +49,6 @@ function this.Update()
       InfCore.Log("RadarKeys_Core: unknown command '"..tostring(cmd).."'")
     end
   end
-end--Update
+end
 
 return this
