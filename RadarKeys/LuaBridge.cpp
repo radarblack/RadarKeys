@@ -48,6 +48,5 @@ namespace RadarKeys {
 				messageOpt = messagesOut.pop();
 			}
 		}
-
 	}
 }
