@@ -19,11 +19,6 @@ namespace RadarKeys {
 		void LogBindEvent(const std::string& message);
 		void LogButtonPress(const std::string& message);
 
-		// does the dll-side file-existence check itself, always (not just when logScriptResult
-		// is on) - this doubles as validation, not just logging: false means the script file wasn't
-		// found on disk, so the caller should NOT queue the DoScript IPC message at all. Returns
-		// true if the file exists and the caller should proceed. The eventual success/failure of
-		// actually running it arrives later, asynchronously, via the registered DoScriptResult command.
 		bool LogScriptAttempt(const std::string& scriptPath);
 	}
 }
