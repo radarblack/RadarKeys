@@ -14,7 +14,7 @@
 
 namespace RadarKeys {
 
-	// intercepts the game's OWN calls to the real Win32 SetCursorPos, swallowing them while our menu wants the cursor free
+	// matches IHHook's proven SetCursorPos hook pattern - intercepts the game's OWN calls to the real Win32 SetCursorPos, swallowing them while our menu wants the cursor free
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
 	SetCursorPosFunc SetCursorPos_Orig = NULL;
 
@@ -36,9 +36,8 @@ namespace RadarKeys {
 	}
 
 	void SetupLog() {
-		// simplified from IHHook's SetupLog
-		auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("radarkeys_log.txt", true);
-		auto logger = std::make_shared<spdlog::logger>("radarkeys", fileSink);
+		// simplified from IHHook's SetupLog - no config file in this build
+		auto logger = spdlog::basic_logger_mt("radarkeys", L"radarkeys_log.txt");
 		spdlog::set_default_logger(logger);
 		spdlog::set_level(spdlog::level::debug);
 		spdlog::flush_on(spdlog::level::warn);
@@ -117,7 +116,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
 	switch (ul_reason_for_call) {
 	case DLL_PROCESS_ATTACH:
-		DisableThreadLibraryCalls(hModule);// we don't need DLL_THREAD_ATTACH/DETACH notifications
+		DisableThreadLibraryCalls(hModule); // we don't need DLL_THREAD_ATTACH/DETACH notifications
 		std::thread(RadarKeys::InitThread).detach();
 		break;
 	case DLL_PROCESS_DETACH:
