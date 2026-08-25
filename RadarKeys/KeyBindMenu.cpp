@@ -353,13 +353,15 @@ namespace RadarKeys {
 			ImGui::BeginChild("BindingsList", ImVec2(0, 180), true);
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
-				ImGui::Text("%s", CombinedDisplayName(bindings[i]).c_str());
-				ImGui::SameLine(140);
-				ImGui::TextWrapped("%s", bindings[i].scriptPath.c_str());
-				ImGui::SameLine();
 				if (ImGui::Button("Remove")) {
 					removeIndex = i;
 				}
+				ImGui::SameLine();
+				ImGui::Text("%s", CombinedDisplayName(bindings[i]).c_str());
+				ImGui::SameLine(160);
+				// change to just use the LUA script name. it takes long space.
+				std::string scriptName = std::filesystem::path(bindings[i].scriptPath).filename().string();
+				ImGui::TextWrapped("%s", scriptName.c_str());
 				ImGui::PopID();
 				ImGui::Separator();
 			}
@@ -428,5 +430,5 @@ namespace RadarKeys {
 			ImGui::End();
 		}
 
-	}//namespace KeyBindMenu
-}//namespace RadarKeys
+	}
+}
