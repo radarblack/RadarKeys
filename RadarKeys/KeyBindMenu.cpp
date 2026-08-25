@@ -66,12 +66,29 @@ namespace RadarKeys {
 		// ctrl/shift/alt ordering matches the common Windows accelerator-key convention.
 		std::string CombinedDisplayName(const KeyBind& bind) {
 			std::string result;
-			if (bind.needCtrl) result += "Ctrl+";
-			if (bind.needShift) result += "Shift+";
-			if (bind.needAlt) result += "Alt+";
+			if (bind.needCtrl) result += "Ctrl + ";
+			if (bind.needShift) result += "Shift + ";
+			if (bind.needAlt) result += "Alt + ";
 			result += bind.keyName;
 			return result;
 		}
+
+		//tex: if the typed path has no directory separator at all (just a bare filename, e.g.
+		//"keyZ_script.lua"), assume it lives in mod/modules/ and resolve it there - so players
+		//don't have to type the full path for the common case. If the player DID type a path
+		//(contains '/' or '\'), leave it exactly as typed - that's an explicit override.
+		//GOTCHA: mod/modules/ is Infinite Heaven's own auto-loaded module folder - any .lua file
+		//placed there gets executed once automatically at IH startup (and its this.Update(), if
+		//it defines one, runs every frame from then on) IN ADDITION to being dofile()'d again
+		//each time its bound key is pressed. A script written as a plain one-shot action (like
+		//the example scripts we've used so far) is harmless either way, but a script that assumes
+		//it's ONLY ever run on keypress would behave unexpectedly if it also auto-runs at startup.
+		std::string ResolveScriptPath(const std::string& typedPath) {
+			if (typedPath.find('/') != std::string::npos || typedPath.find('\\') != std::string::npos) {
+				return typedPath;
+			}
+			return "mod/modules/" + typedPath;
+		}//ResolveScriptPath
 
 		// Menu-toggle key: plain key only (no modifiers) for  access; persisted via LoadBindings/SaveBindings. default F7.
 		USHORT menuToggleVKey = VK_F7;
@@ -124,9 +141,9 @@ namespace RadarKeys {
 
 			// logs raw ONDOWN events for bound vKeys, irrespective of script binding success.
 			std::string pressedName;
-			if (ctrlHeld) pressedName += "Ctrl+";
-			if (shiftHeld) pressedName += "Shift+";
-			if (altHeld) pressedName += "Alt+";
+			if (ctrlHeld) pressedName += "Ctrl + ";
+			if (shiftHeld) pressedName += "Shift + ";
+			if (altHeld) pressedName += "Alt + ";
 			pressedName += NameForVKey(vKey);
 			DebuggerMenu::LogButtonPress(pressedName + " pressed");
 
@@ -181,6 +198,7 @@ namespace RadarKeys {
 
 		void SaveBindings() {
 			// ensure mod/radarKeys/ directory exists before writing bindings file (ofstream won't create it).
+			// this creates the folder
 			std::error_code ec;
 			std::filesystem::create_directories("mod/radarKeys", ec);
 			if (ec) {
@@ -286,7 +304,7 @@ namespace RadarKeys {
 				menuToggleVKey = (USHORT)defaultVKey;
 			}
 			else if (!defaultMenuKeyName.empty()) {
-				spdlog::warn("KeyBindMenu::Init: unknown keyBindMenuToggleKey '{}' in ihhook_config.lua, using F4", defaultMenuKeyName);
+				spdlog::warn("KeyBindMenu::Init: unknown keyBindMenuToggleKey '{}' in ihhook_config.lua, using F7", defaultMenuKeyName);
 			}
 
 			LoadBindings(); // may override menuToggleVKey again if radar_keybinds.conf has a persisted MENUKEY
@@ -345,7 +363,7 @@ namespace RadarKeys {
 			}
 
 			ImGui::Separator();
-			ImGui::TextWrapped("Custom bindings - press a key (+ Ctrl/Shift/Alt if set) in-game to dofile() the matching script. A modified binding (e.g. Shift+X) falls back to the plain key's binding (X) if no exact match exists for the modifiers currently held.");
+			ImGui::TextWrapped("Note: Key with aassigned scripts without modifiers (CTRL/SHIFT/ALT) will still trigger when pressed even when modifier keys are pressed, except if there is an assigned script to that key combination.");
 			ImGui::Spacing();
 
 			// existing bindings list, each with its own remove button, plus a bulk "Remove All"
@@ -359,7 +377,8 @@ namespace RadarKeys {
 				ImGui::SameLine();
 				ImGui::Text("%s", CombinedDisplayName(bindings[i]).c_str());
 				ImGui::SameLine(160);
-				// change to just use the LUA script name. it takes long space.
+				// adjusted so that if you just type the file name, it automatically assumes it is in the mod/modules folder.
+				// otherwise, you can type the full path and it will run from there instead.
 				std::string scriptName = std::filesystem::path(bindings[i].scriptPath).filename().string();
 				ImGui::TextWrapped("%s", scriptName.c_str());
 				ImGui::PopID();
@@ -408,7 +427,7 @@ namespace RadarKeys {
 			static char scriptPathBuffer[512] = "";
 			ImGui::SetNextItemWidth(-1);
 			ImGui::InputText("##scriptPathInput", scriptPathBuffer, IM_ARRAYSIZE(scriptPathBuffer));
-			ImGui::TextDisabled("Full path to a .lua file, or one relative to the game folder");
+			ImGui::TextDisabled("Just a filename assumes mod/modules/ - or type a path (with /) to use elsewhere");
 
 			USHORT selectedVKey = vkNameTable[addComboIndex].vKey;
 			bool comboAvailable = IsComboAvailable(selectedVKey, addCtrl, addShift, addAlt);
@@ -417,7 +436,7 @@ namespace RadarKeys {
 				ImGui::BeginDisabled();
 			}
 			if (ImGui::Button("Add Binding")) {
-				AddBinding(selectedVKey, vkNameTable[addComboIndex].name, addCtrl, addShift, addAlt, scriptPathBuffer);
+				AddBinding(selectedVKey, vkNameTable[addComboIndex].name, addCtrl, addShift, addAlt, ResolveScriptPath(scriptPathBuffer));
 				scriptPathBuffer[0] = '\0';
 			}
 			if (!canAdd) {
