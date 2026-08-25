@@ -16,6 +16,8 @@
 #include <string>
 #include <chrono>
 
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 namespace RadarKeys {
 	namespace Render {
 
@@ -146,8 +148,8 @@ namespace RadarKeys {
 
 				RawInput::InitializeInput();
 
-				DebuggerMenu::Init();// must come before KeyBindMenu can log anything useful through it
-				KeyBindMenu::Init("F4");// no config file in this build - starting key is just hardcoded here
+				DebuggerMenu::Init(); // must come before KeyBindMenu can log anything useful through it
+				KeyBindMenu::Init("F4"); // no config file in this build - starting key is just hardcoded here
 			}
 
 			return true;
@@ -224,7 +226,7 @@ namespace RadarKeys {
 				log->flush();
 			}
 
-			//RE2FW: crashes if we don't release it at this point
+			// RE2FW: crashes if we don't release it at this point
 			CleanupRenderTarget();
 			frameInitialized = false;
 
