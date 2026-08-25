@@ -69,14 +69,8 @@ namespace RadarKeys {
 			return true;
 		}
 
-		// registered as the "DoScriptResult" command (see Init) - our companion
-		// RadarKeys_Core.lua calls RadarKeys.MenuMessage("DoScriptResult", success, errorMsg) after
-		// actually attempting to run a script. args follows LuaBridge's usual layout: args[0]=seq,
-		// args[1]=cmd, args[2]=success ("1"/"0"), args[3]=error message (empty string on success).
-
 		// by the time this fires, LogScriptAttempt has already confirmed the file exists
-		// (see above) - so any failure reported here is necessarily a lua-side problem (syntax or
-		// runtime error inside the script itself), never a missing/bad path.
+		// (see above) - so any failure reported here is necessarily a lua-side problem
 		void OnDoScriptResult(std::vector<std::string> args) {
 			if (args.size() < 1 + 3) {
 				spdlog::warn("DebuggerMenu::OnDoScriptResult: malformed args (size {})", args.size());
@@ -130,7 +124,6 @@ namespace RadarKeys {
 				ImGui::TextWrapped("[%s] %s", entry.timestamp.c_str(), entry.text.c_str());
 			}
 			// auto-scroll only while already at the bottom, so scrolling up to read history
-			// isn't constantly yanked back down by new entries arriving.
 			if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
 				ImGui::SetScrollHereY(1.0f);
 			}
