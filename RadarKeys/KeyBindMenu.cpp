@@ -75,11 +75,13 @@ namespace RadarKeys {
 
 		// adjusted so that if you just type the file name, it automatically assumes it is in the mod/modules folder.
 		// otherwise, you can type the full path and it will run from there instead.
-		std::string ResolveScriptPath(const std::string& typedPath) {
-			if (typedPath.find('/') != std::string::npos || typedPath.find('\\') != std::string::npos) {
-				return typedPath;
-			}
-			return "mod/modules/" + typedPath;
+		std::string ResolveScriptPath(const std::string& typedPath)
+		{
+    		char path[MAX_PATH];
+    		GetModuleFileNameA(nullptr, path, MAX_PATH);
+
+    		return (std::filesystem::path(path).parent_path() /
+            "mod" / "modules" / typedPath).string();
 		}
 
 		// Menu-toggle key: plain key only (no modifiers) for  access; persisted via LoadBindings/SaveBindings. default F7.
