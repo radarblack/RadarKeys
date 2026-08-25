@@ -427,7 +427,7 @@ namespace RadarKeys {
 			static char scriptPathBuffer[512] = "";
 			ImGui::SetNextItemWidth(-1);
 			ImGui::InputText("##scriptPathInput", scriptPathBuffer, IM_ARRAYSIZE(scriptPathBuffer));
-			ImGui::TextDisabled("Just a filename assumes mod/modules/ - or type a path (with /) to use elsewhere");
+			ImGui::TextDisabled("Just a filename assumes mod/modules/ - or type a path (with / or \\) to use elsewhere");
 
 			USHORT selectedVKey = vkNameTable[addComboIndex].vKey;
 			bool comboAvailable = IsComboAvailable(selectedVKey, addCtrl, addShift, addAlt);
