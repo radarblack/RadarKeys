@@ -12,7 +12,7 @@ namespace RadarKeys {
 		void AddMenuCommand(const std::string& cmd, MenuCommandFunc func);
 
 		// called once per frame from the render thread
-    // Drains messagesOut and dispatches each to its registered command handler.
+        // Drains messagesOut and dispatches each to its registered command handler.
 		void ProcessMessages();
 
 		// lua -> c++ direction, pushed by l_MenuMessage (see dllmain.cpp), drained by ProcessMessages
