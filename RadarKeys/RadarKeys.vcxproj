@@ -111,12 +111,7 @@ copy /Y "$(TargetDir)$(TargetName).dll" "$(SolutionDir)makebite\GameDir\$(Target
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
-    <ClCompile Include="lua\lapi.cpp" />
-    <ClCompile Include="lua\lauxlib.cpp" />
-    <ClCompile Include="lua\ldebug.cpp" />
-    <ClCompile Include="lua\ldo.cpp" />
-    <ClCompile Include="lua\lobject.cpp" />
-    <ClCompile Include="lua\ltm.cpp" />
+    <ClCompile Include="LuaApi.cpp" />
     <ClCompile Include="MinHook\buffer.c" />
     <ClCompile Include="MinHook\hde\hde32.c" />
     <ClCompile Include="MinHook\hde\hde64.c" />
@@ -129,6 +124,8 @@ copy /Y "$(TargetDir)$(TargetName).dll" "$(SolutionDir)makebite\GameDir\$(Target
     <ClInclude Include="SafeQueue.h" />
     <ClInclude Include="Render.h" />
     <ClInclude Include="LuaBridge.h" />
+    <ClInclude Include="LuaApi.h" />
+    <ClInclude Include="HookUtils.h" />
     <ClInclude Include="RawInput.h" />
     <ClInclude Include="KeyBindMenu.h" />
     <ClInclude Include="DebuggerMenu.h" />
