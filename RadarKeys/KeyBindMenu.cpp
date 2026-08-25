@@ -73,22 +73,14 @@ namespace RadarKeys {
 			return result;
 		}
 
-		//tex: if the typed path has no directory separator at all (just a bare filename, e.g.
-		//"keyZ_script.lua"), assume it lives in mod/modules/ and resolve it there - so players
-		//don't have to type the full path for the common case. If the player DID type a path
-		//(contains '/' or '\'), leave it exactly as typed - that's an explicit override.
-		//GOTCHA: mod/modules/ is Infinite Heaven's own auto-loaded module folder - any .lua file
-		//placed there gets executed once automatically at IH startup (and its this.Update(), if
-		//it defines one, runs every frame from then on) IN ADDITION to being dofile()'d again
-		//each time its bound key is pressed. A script written as a plain one-shot action (like
-		//the example scripts we've used so far) is harmless either way, but a script that assumes
-		//it's ONLY ever run on keypress would behave unexpectedly if it also auto-runs at startup.
+		// adjusted so that if you just type the file name, it automatically assumes it is in the mod/modules folder.
+		// otherwise, you can type the full path and it will run from there instead.
 		std::string ResolveScriptPath(const std::string& typedPath) {
 			if (typedPath.find('/') != std::string::npos || typedPath.find('\\') != std::string::npos) {
 				return typedPath;
 			}
 			return "mod/modules/" + typedPath;
-		}//ResolveScriptPath
+		}
 
 		// Menu-toggle key: plain key only (no modifiers) for  access; persisted via LoadBindings/SaveBindings. default F7.
 		USHORT menuToggleVKey = VK_F7;
@@ -377,8 +369,6 @@ namespace RadarKeys {
 				ImGui::SameLine();
 				ImGui::Text("%s", CombinedDisplayName(bindings[i]).c_str());
 				ImGui::SameLine(160);
-				// adjusted so that if you just type the file name, it automatically assumes it is in the mod/modules folder.
-				// otherwise, you can type the full path and it will run from there instead.
 				std::string scriptName = std::filesystem::path(bindings[i].scriptPath).filename().string();
 				ImGui::TextWrapped("%s", scriptName.c_str());
 				ImGui::PopID();
