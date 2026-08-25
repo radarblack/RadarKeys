@@ -12,7 +12,6 @@
 
 namespace RadarKeys {
 	namespace KeyBindMenu {
-
 		std::vector<KeyBind> bindings;
 
 		// mod/radarKeys/ config. existing root files not migrated - re-add bindings needed.
@@ -79,7 +78,6 @@ namespace RadarKeys {
 		{
     		char path[MAX_PATH];
     		GetModuleFileNameA(nullptr, path, MAX_PATH);
-
     		return (std::filesystem::path(path).parent_path() /
             "mod" / "modules" / typedPath).string();
 		}
@@ -183,6 +181,7 @@ namespace RadarKeys {
 					return; // still in use by another binding
 				}
 			}
+			
 			auto it = vKeyDispatchers.find(vKey);
 			if (it != vKeyDispatchers.end()) {
 				RawInput::UnRegisterAction(vKey, it->second);
@@ -208,6 +207,7 @@ namespace RadarKeys {
 			for (const KeyBind& bind : bindings) {
 				outFile << "BIND|" << bind.keyName << "|" << (bind.needCtrl ? "1" : "0") << "|" << (bind.needShift ? "1" : "0") << "|" << (bind.needAlt ? "1" : "0") << "|" << bind.scriptPath << "\n";
 			}
+			
 			outFile.close();
 			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), bindsFileName);
 		}
@@ -230,7 +230,6 @@ namespace RadarKeys {
 					spdlog::warn("KeyBindMenu::LoadBindings: skipping malformed line: {}", line);
 					continue;
 				}
-
 				if (parts[0] == "MENUKEY") {
 					int vKey = VKeyForName(trim(parts[1]));
 					if (vKey != -1) {
@@ -273,6 +272,7 @@ namespace RadarKeys {
 			if (index < 0 || index >= (int)bindings.size()) {
 				return;
 			}
+			
 			std::string removedDesc = CombinedDisplayName(bindings[index]) + " -> " + bindings[index].scriptPath;
 			USHORT vKey = bindings[index].vKey;
 			bindings.erase(bindings.begin() + index);
@@ -286,6 +286,7 @@ namespace RadarKeys {
 			for (const auto& entry : vKeyDispatchers) {
 				RawInput::UnRegisterAction(entry.first, entry.second);
 			}
+			
 			vKeyDispatchers.clear();
 			bindings.clear();
 			SaveBindings();
@@ -314,7 +315,6 @@ namespace RadarKeys {
 				ImGui::End();
 				return;
 			}
-
 			if (ImGui::Button("Debugger")) {
 				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 			}
@@ -333,6 +333,7 @@ namespace RadarKeys {
 				}
 				if (menuKeyComboIndex == -1) menuKeyComboIndex = 0;
 			}
+			
 			ImGui::SetNextItemWidth(100);
 			if (ImGui::BeginCombo("##menuKeyCombo", vkNameTable[menuKeyComboIndex].name)) {
 				for (int i = 0; i < vkNameTableCount; i++) {
@@ -343,6 +344,7 @@ namespace RadarKeys {
 				}
 				ImGui::EndCombo();
 			}
+			
 			ImGui::SameLine();
 			if (ImGui::Button("Apply##menuKey")) {
 				USHORT newVKey = vkNameTable[menuKeyComboIndex].vKey;
@@ -376,6 +378,7 @@ namespace RadarKeys {
 				ImGui::PopID();
 				ImGui::Separator();
 			}
+			
 			ImGui::EndChild();
 			if (removeIndex != -1) {
 				RemoveBinding(removeIndex);
@@ -390,7 +393,7 @@ namespace RadarKeys {
 			if (bindings.empty()) {
 				ImGui::EndDisabled();
 			}
-
+			
 			ImGui::Spacing();
 			ImGui::Text("Add new binding");
 
@@ -405,6 +408,7 @@ namespace RadarKeys {
 				}
 				ImGui::EndCombo();
 			}
+			
 			ImGui::SameLine();
 			static bool addCtrl = false;
 			static bool addShift = false;
@@ -437,9 +441,8 @@ namespace RadarKeys {
 			if (scriptPathBuffer[0] != '\0' && !comboAvailable) {
 				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key is already in use");
 			}
-
+			
 			ImGui::End();
 		}
-
 	}
 }
