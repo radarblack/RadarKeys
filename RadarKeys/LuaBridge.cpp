@@ -24,7 +24,7 @@ namespace RadarKeys {
 		}
 
 		// IHHook-style IPC: pipe-separated "seq|cmd|payload..."
-    // args[0]=seq (unused), args[1]=cmd (dispatch key), args[2+]=payload
+        // args[0]=seq (unused), args[1]=cmd (dispatch key), args[2+]=payload
 		void DispatchMessage(const std::string& message) {
 			std::vector<std::string> args = split(message, "|");
 			if (args.size() < 2) {
