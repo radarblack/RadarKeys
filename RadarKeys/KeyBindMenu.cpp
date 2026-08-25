@@ -357,7 +357,7 @@ namespace RadarKeys {
 			}
 
 			ImGui::Separator();
-			ImGui::TextWrapped("Note: Key with aassigned scripts without modifiers (CTRL/SHIFT/ALT) will still trigger when pressed even when modifier keys are pressed, except if there is an assigned script to that key combination.");
+			ImGui::TextWrapped("Note: Key with assigned scripts without modifiers (CTRL/SHIFT/ALT) will still trigger when pressed even when modifier keys are pressed, except if there is an assigned script to that key combination.");
 			ImGui::Spacing();
 
 			// existing bindings list, each with its own remove button, plus a bulk "Remove All"
@@ -435,7 +435,7 @@ namespace RadarKeys {
 				ImGui::EndDisabled();
 			}
 			if (scriptPathBuffer[0] != '\0' && !comboAvailable) {
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key + modifier combination is already in use");
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key is already in use");
 			}
 
 			ImGui::End();
