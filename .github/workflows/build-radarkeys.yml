@@ -1,16 +1,13 @@
 name: Build RadarKeys.dll
 
 on:
-  workflow_dispatch:      # only runs when you manually trigger it from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest   # only Windows runners have MSVC/MSBuild available
 
     steps:
-      # tex: unlike the IHHook repo, this is a fresh project we created from scratch - no
-      # inherited bad-symlink file, so the git-symlink workaround that build was needing isn't
-      # necessary here. Left out deliberately, not an oversight.
 
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -18,12 +15,6 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      # Same proven auto-detection as the IHHook workflow - RadarKeys.vcxproj pins a reasonable
-      # modern default (v143 / WindowsTargetPlatformVersion=10.0) rather than an exact pinned SDK
-      # version, specifically to avoid the MSB8036/MSB8020 problems that cost real debugging time
-      # on the IHHook build - but detecting and overriding explicitly here is still worth keeping,
-      # since "10.0" alone doesn't guarantee MSBuild resolves to a version that actually exists on
-      # whatever the runner image ships this week.
       - name: Find best available PlatformToolset
         id: toolset
         shell: pwsh
@@ -78,10 +69,6 @@ jobs:
       - name: Build Release|x64
         run: msbuild RadarKeys.sln /p:Configuration=Release /p:Platform=x64 /p:WindowsTargetPlatformVersion=${{ steps.sdk.outputs.version }} /p:PlatformToolset=${{ steps.toolset.outputs.toolset }} /m
 
-      # RadarKeys.vcxproj's own Release|x64 post-build step copies the built dll to
-      # makebite/GameDir/RadarKeys.dll - the companion RadarKeys_Core.lua already sits in
-      # makebite/GameDir/mod/modules/ as a plain committed file (nothing to compile there).
-      # Uploading the whole GameDir folder bundles both together in one download.
       - name: Upload RadarKeys build
         uses: actions/upload-artifact@v4
         with:
