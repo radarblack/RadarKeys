@@ -38,9 +38,11 @@ To use an assigned script:
 - [x] Cull unnecessary/unused function from the IHHook and VFramework implementations
 - [x] Improve error logging and readability in the log files
 - [ ] Make a showcase script of how "core" and "trigger" script functions
+- [ ] Release the mod on NexusMods (First Official Release)
 - [ ] Make some template scripts for a simple and complex script mods
 - [ ] Final clean up (review, reassessment, function refactoring to shorten runtime execution if needed)
-- [ ] Release the mod
 - [ ] Find a way to read and run certain function within the script without passing through every functions on the script
 - [ ] Add in mouse and gamepad support
+- [ ] Add in "Hold" functionality to the key assignment
 - [ ] \(Optional) Less hopeful, but attempt to bind the mod directly towards the game binding file, instead of using IHHook
+- And, redesign some of the old mods that may benefit to this module.
