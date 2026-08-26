@@ -47,6 +47,7 @@ To use an assigned script:
 - [ ] Add in mouse and gamepad support
 - [ ] Enhance key assignment feature (eliminating the dropdown box selection and instead a direct input detection through RawInput)
 - [ ] Add in "Hold" functionality to the key assignment
+- [ ] Add in auto detection for RadarKeys mod
 - [ ] Add in presets that can enhance gameplay experience
 - [ ] \(Optional) Less hopeful, but attempt to bind the mod directly towards the game binding file, instead of using IHHook
 - [ ] Consider this project complete with continued updates until EOS.
