@@ -2,9 +2,10 @@
 
 #include <Windows.h>
 #include <cstdint>
+#include <string>
+#include <filesystem>
 
 namespace RadarKeys {
-
 	inline uintptr_t GetExeBase() {
 		return reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
 	}
@@ -26,4 +27,14 @@ namespace RadarKeys {
 		return reinterpret_cast<void*>(base + ToRva(absAddr));
 	}
 
+	inline const std::string& GetGameDirectory() {
+		static std::string cached;
+		if (cached.empty()) {
+			wchar_t exePathBuf[MAX_PATH]{};
+			GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
+			std::filesystem::path exePath(exePathBuf);
+			cached = exePath.parent_path().string();
+		}
+		return cached;
+	}
 }
