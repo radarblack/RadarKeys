@@ -43,6 +43,9 @@ To use an assigned script:
 - [ ] Final clean up (review, reassessment, function refactoring to shorten runtime execution if needed)
 - [ ] Find a way to read and run certain function within the script without passing through every functions on the script
 - [ ] Add in mouse and gamepad support
+- [ ] Enhance key assignment feature (eliminating the dropdown box selection and instead a direct input detection through RawInput)
 - [ ] Add in "Hold" functionality to the key assignment
+- [ ] Add in presets that can enhance gameplay experience
 - [ ] \(Optional) Less hopeful, but attempt to bind the mod directly towards the game binding file, instead of using IHHook
+- [ ] Consider this project complete with continued updates until EOS.
 - And, redesign some of the old mods that may benefit to this module.
