@@ -3,6 +3,7 @@
 #include "LuaBridge.h"
 #include "DebuggerMenu.h"
 #include "Util.h"
+#include "HookUtils.h"
 #include "spdlog/spdlog.h"
 #include "imgui/imgui.h"
 
@@ -13,9 +14,13 @@
 namespace RadarKeys {
 	namespace KeyBindMenu {
 		std::vector<KeyBind> bindings;
-
-		// mod/radarKeys/ config. existing root files not migrated - re-add bindings needed.
-		const std::string bindsFileName = "mod/radarKeys/radar_keybinds.conf";
+		const std::string& GetBindsFileName() {
+			static std::string cached;
+			if (cached.empty()) {
+				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radar_keybinds.conf").string();
+			}
+			return cached;
+		}
 
 		// Modifiers as checkboxes; dropdown shows persistable base keys only.
 		struct VkNameEntry { const char* name; USHORT vKey; };
@@ -65,21 +70,29 @@ namespace RadarKeys {
 		// ctrl/shift/alt ordering matches the common Windows accelerator-key convention.
 		std::string CombinedDisplayName(const KeyBind& bind) {
 			std::string result;
-			if (bind.needCtrl) result += "Ctrl + ";
-			if (bind.needShift) result += "Shift + ";
-			if (bind.needAlt) result += "Alt + ";
+			if (bind.needCtrl) result += "Ctrl+";
+			if (bind.needShift) result += "Shift+";
+			if (bind.needAlt) result += "Alt+";
 			result += bind.keyName;
 			return result;
 		}
 
-		// adjusted so that if you just type the file name, it automatically assumes it is in the mod/modules folder.
-		// otherwise, you can type the full path and it will run from there instead.
-		std::string ResolveScriptPath(const std::string& typedPath)
-		{
-    		char path[MAX_PATH];
-    		GetModuleFileNameA(nullptr, path, MAX_PATH);
-    		return (std::filesystem::path(path).parent_path() /
-            "mod" / "modules" / typedPath).string();
+		std::string ResolveScriptPath(const std::string& typedPath) {
+			std::filesystem::path typed(typedPath);
+			if (typed.is_absolute()) {
+				return typedPath;
+			}
+
+			std::filesystem::path relativePart;
+			if (typedPath.find('/') != std::string::npos || typedPath.find('\\') != std::string::npos) {
+				relativePart = typedPath;
+			}
+			else {
+				relativePart = std::filesystem::path("mod") / "modules" / typedPath;
+			}
+
+			std::filesystem::path fullPath = std::filesystem::path(GetGameDirectory()) / relativePart;
+			return fullPath.string();
 		}
 
 		// Menu-toggle key: plain key only (no modifiers) for  access; persisted via LoadBindings/SaveBindings. default F7.
@@ -133,9 +146,9 @@ namespace RadarKeys {
 
 			// logs raw ONDOWN events for bound vKeys, irrespective of script binding success.
 			std::string pressedName;
-			if (ctrlHeld) pressedName += "Ctrl + ";
-			if (shiftHeld) pressedName += "Shift + ";
-			if (altHeld) pressedName += "Alt + ";
+			if (ctrlHeld) pressedName += "Ctrl+";
+			if (shiftHeld) pressedName += "Shift+";
+			if (altHeld) pressedName += "Alt+";
 			pressedName += NameForVKey(vKey);
 			DebuggerMenu::LogButtonPress(pressedName + " pressed");
 
@@ -181,7 +194,6 @@ namespace RadarKeys {
 					return; // still in use by another binding
 				}
 			}
-			
 			auto it = vKeyDispatchers.find(vKey);
 			if (it != vKeyDispatchers.end()) {
 				RawInput::UnRegisterAction(vKey, it->second);
@@ -191,31 +203,30 @@ namespace RadarKeys {
 
 		void SaveBindings() {
 			// ensure mod/radarKeys/ directory exists before writing bindings file (ofstream won't create it).
-			// this creates the folder
 			std::error_code ec;
-			std::filesystem::create_directories("mod/radarKeys", ec);
+			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
+			std::filesystem::create_directories(bindsDir, ec);
 			if (ec) {
-				spdlog::warn("KeyBindMenu::SaveBindings: couldn't create mod/radarKeys directory: {}", ec.message());
+				spdlog::warn("KeyBindMenu::SaveBindings: couldn't create {} directory: {}", bindsDir.string(), ec.message());
 			}
 
-			std::ofstream outFile(bindsFileName);
+			std::ofstream outFile(GetBindsFileName());
 			if (!outFile) {
-				spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", bindsFileName);
+				spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", GetBindsFileName());
 				return;
 			}
 			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
 			for (const KeyBind& bind : bindings) {
 				outFile << "BIND|" << bind.keyName << "|" << (bind.needCtrl ? "1" : "0") << "|" << (bind.needShift ? "1" : "0") << "|" << (bind.needAlt ? "1" : "0") << "|" << bind.scriptPath << "\n";
 			}
-			
 			outFile.close();
-			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), bindsFileName);
+			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), GetBindsFileName());
 		}
 
 		void LoadBindings() {
-			std::ifstream inFile(bindsFileName);
+			std::ifstream inFile(GetBindsFileName());
 			if (!inFile) {
-				spdlog::debug("KeyBindMenu::LoadBindings: no {} yet (fine on first run)", bindsFileName);
+				spdlog::debug("KeyBindMenu::LoadBindings: no {} yet (fine on first run)", GetBindsFileName());
 				return;
 			}
 
@@ -230,6 +241,7 @@ namespace RadarKeys {
 					spdlog::warn("KeyBindMenu::LoadBindings: skipping malformed line: {}", line);
 					continue;
 				}
+
 				if (parts[0] == "MENUKEY") {
 					int vKey = VKeyForName(trim(parts[1]));
 					if (vKey != -1) {
@@ -257,7 +269,7 @@ namespace RadarKeys {
 					spdlog::warn("KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}", line);
 				}
 			}
-			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), bindsFileName);
+			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), GetBindsFileName());
 		}
 
 		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, const std::string& scriptPath) {
@@ -272,7 +284,6 @@ namespace RadarKeys {
 			if (index < 0 || index >= (int)bindings.size()) {
 				return;
 			}
-			
 			std::string removedDesc = CombinedDisplayName(bindings[index]) + " -> " + bindings[index].scriptPath;
 			USHORT vKey = bindings[index].vKey;
 			bindings.erase(bindings.begin() + index);
@@ -286,7 +297,6 @@ namespace RadarKeys {
 			for (const auto& entry : vKeyDispatchers) {
 				RawInput::UnRegisterAction(entry.first, entry.second);
 			}
-			
 			vKeyDispatchers.clear();
 			bindings.clear();
 			SaveBindings();
@@ -299,7 +309,7 @@ namespace RadarKeys {
 				menuToggleVKey = (USHORT)defaultVKey;
 			}
 			else if (!defaultMenuKeyName.empty()) {
-				spdlog::warn("KeyBindMenu::Init: unknown keyBindMenuToggleKey '{}' in ihhook_config.lua, using F7", defaultMenuKeyName);
+				spdlog::warn("KeyBindMenu::Init: unknown keyBindMenuToggleKey '{}' in ihhook_config.lua, using F4", defaultMenuKeyName);
 			}
 
 			LoadBindings(); // may override menuToggleVKey again if radar_keybinds.conf has a persisted MENUKEY
@@ -315,6 +325,7 @@ namespace RadarKeys {
 				ImGui::End();
 				return;
 			}
+
 			if (ImGui::Button("Debugger")) {
 				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 			}
@@ -333,7 +344,6 @@ namespace RadarKeys {
 				}
 				if (menuKeyComboIndex == -1) menuKeyComboIndex = 0;
 			}
-			
 			ImGui::SetNextItemWidth(100);
 			if (ImGui::BeginCombo("##menuKeyCombo", vkNameTable[menuKeyComboIndex].name)) {
 				for (int i = 0; i < vkNameTableCount; i++) {
@@ -344,7 +354,6 @@ namespace RadarKeys {
 				}
 				ImGui::EndCombo();
 			}
-			
 			ImGui::SameLine();
 			if (ImGui::Button("Apply##menuKey")) {
 				USHORT newVKey = vkNameTable[menuKeyComboIndex].vKey;
@@ -359,7 +368,7 @@ namespace RadarKeys {
 			}
 
 			ImGui::Separator();
-			ImGui::TextWrapped("Note: Key with assigned scripts without modifiers (CTRL/SHIFT/ALT) will still trigger when pressed even when modifier keys are pressed, except if there is an assigned script to that key combination.");
+			ImGui::TextWrapped("Custom bindings - press a key (+ Ctrl/Shift/Alt if set) in-game to dofile() the matching script. A modified binding (e.g. Shift+X) falls back to the plain key's binding (X) if no exact match exists for the modifiers currently held.");
 			ImGui::Spacing();
 
 			// existing bindings list, each with its own remove button, plus a bulk "Remove All"
@@ -378,7 +387,6 @@ namespace RadarKeys {
 				ImGui::PopID();
 				ImGui::Separator();
 			}
-			
 			ImGui::EndChild();
 			if (removeIndex != -1) {
 				RemoveBinding(removeIndex);
@@ -393,7 +401,7 @@ namespace RadarKeys {
 			if (bindings.empty()) {
 				ImGui::EndDisabled();
 			}
-			
+
 			ImGui::Spacing();
 			ImGui::Text("Add new binding");
 
@@ -408,7 +416,6 @@ namespace RadarKeys {
 				}
 				ImGui::EndCombo();
 			}
-			
 			ImGui::SameLine();
 			static bool addCtrl = false;
 			static bool addShift = false;
@@ -439,9 +446,9 @@ namespace RadarKeys {
 				ImGui::EndDisabled();
 			}
 			if (scriptPathBuffer[0] != '\0' && !comboAvailable) {
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key is already in use");
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key + modifier combination is already in use");
 			}
-			
+
 			ImGui::End();
 		}
 	}
