@@ -368,7 +368,7 @@ namespace RadarKeys {
 			}
 
 			ImGui::Separator();
-			ImGui::TextWrapped("Custom bindings - press a key (+ Ctrl/Shift/Alt if set) in-game to dofile() the matching script. A modified binding (e.g. Shift+X) falls back to the plain key's binding (X) if no exact match exists for the modifiers currently held.");
+			ImGui::TextWrapped("Scripts assigned on keys trigger even while holding a modifier key, except if there is an assigned script to that keys combination.");
 			ImGui::Spacing();
 
 			// existing bindings list, each with its own remove button, plus a bulk "Remove All"
@@ -430,7 +430,7 @@ namespace RadarKeys {
 			static char scriptPathBuffer[512] = "";
 			ImGui::SetNextItemWidth(-1);
 			ImGui::InputText("##scriptPathInput", scriptPathBuffer, IM_ARRAYSIZE(scriptPathBuffer));
-			ImGui::TextDisabled("Just a filename assumes mod/modules/ - or type a path (with / or \\) to use elsewhere");
+			ImGui::TextDisabled("Just a filename assumes .../mod/modules/ - or type a path with / or \\ to use elsewhere within the MGSVTPP directory.");
 
 			USHORT selectedVKey = vkNameTable[addComboIndex].vKey;
 			bool comboAvailable = IsComboAvailable(selectedVKey, addCtrl, addShift, addAlt);
@@ -446,7 +446,7 @@ namespace RadarKeys {
 				ImGui::EndDisabled();
 			}
 			if (scriptPathBuffer[0] != '\0' && !comboAvailable) {
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key + modifier combination is already in use");
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key combination is already in use");
 			}
 
 			ImGui::End();
