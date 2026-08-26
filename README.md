@@ -8,11 +8,19 @@ It runs on a separate thread, running side by side with other hooks and framewor
 1. Install InfiniteHeaven
 2. Place the RadarKeys.dll in the main directory (with the mgsvtpp.exe).
 3. Place the RadarKeys_Core.lua in MGSV-TPP directory → ".../mod/modules"
-4. Default hotkey is F7 to open the RadarKeys menu in-game.
 ```
 ## Usage
 ```
-1.  WIP  
+• Default hotkey is F7 to open the RadarKeys menu in-game.
+
+To bind a key:
+1. Select the key from the dropdown box at the bottom.
+2. In the text box, place the name of the script where the trigger is located.
+3. Hit Assign and it will be listed above in the list.
+
+To unbind a key:
+1. Guess what button "removes" it from the list?
+2. Or, you can just press the "Remove All Bindings".
 ```
 ## Updates
 ```
