@@ -1,4 +1,4 @@
-# RadarKeys — an external InfiniteHeaven module
+# RadarKeys — An InfiniteHeaven Module
 
 Allows keybinds to run scripts through button interactions using the IHHook implementation.
 It runs on a separate thread, running side by side with other hooks and frameworks.  
