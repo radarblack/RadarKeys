@@ -21,6 +21,11 @@ To bind a key:
 To unbind a key:
 1. Guess what button "removes" it from the list?
 2. Or, you can just press the "Remove All Bindings".
+
+To use an assigned script:
+1. Like, do I really have to explain how to do this...?
+2. Like, seriously?
+3. No. You're trolling.
 ```
 ## Updates
 ```
