@@ -49,6 +49,6 @@ To use an assigned script:
 - [ ] Add in "Hold" functionality to the key assignment
 - [ ] Add in auto detection for RadarKeys mod
 - [ ] Add in presets that can enhance gameplay experience
-- [ ] \(Optional) Less hopeful, but attempt to bind the mod directly towards the game binding file, instead of using IHHook
 - [ ] Consider this project complete with continued updates until EOS.
+- [ ] \(Optional) Less hopeful, but attempt to bind the mod directly towards the game binding file, instead of using IHHook
 - And, redesign some of the old mods that may benefit to this module.
