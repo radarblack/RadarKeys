@@ -40,6 +40,7 @@ namespace RadarKeys {
 		}
 
 		void LogBindEvent(const std::string& message) {
+			spdlog::info("[bind] {}", message);
 			if (!logBindUnbind) {
 				return;
 			}
@@ -50,43 +51,45 @@ namespace RadarKeys {
 			if (!logButtonPress) {
 				return;
 			}
+			spdlog::debug("[button] {}", message);
 			AddLogEntry("[button] " + message);
 		}
 
 		bool LogScriptAttempt(const std::string& scriptPath) {
-			// always actually checked (this gates whether the caller queues DoScript at all) -
-			// only the LOGGING of it is conditional on the toggle.
 			bool exists = std::filesystem::exists(scriptPath);
 			if (!exists) {
+				spdlog::error("[script][dll] NOT FOUND, skipping: {}", scriptPath);
 				if (logScriptResult) {
 					AddLogEntry("[script][dll] NOT FOUND, skipping: " + scriptPath);
 				}
 				return false;
 			}
+			spdlog::debug("[script][dll] attempting: {}", scriptPath);
 			if (logScriptResult) {
 				AddLogEntry("[script][dll] attempting: " + scriptPath);
 			}
 			return true;
 		}
 
-		// by the time this fires, LogScriptAttempt has already confirmed the file exists
-		// (see above) - so any failure reported here is necessarily a lua-side problem
 		void OnDoScriptResult(std::vector<std::string> args) {
 			if (args.size() < 1 + 3) {
 				spdlog::warn("DebuggerMenu::OnDoScriptResult: malformed args (size {})", args.size());
 				return;
 			}
-			if (!logScriptResult) {
-				return;
-			}
 
 			bool success = args[2] == "1";
 			if (success) {
-				AddLogEntry("[script][lua] success");
+				spdlog::debug("[script][lua] success");
+				if (logScriptResult) {
+					AddLogEntry("[script][lua] success");
+				}
 			}
 			else {
 				std::string errorMsg = args[3];
-				AddLogEntry("[script][lua] FAILED: " + errorMsg);
+				spdlog::error("[script][lua] FAILED: {}", errorMsg);
+				if (logScriptResult) {
+					AddLogEntry("[script][lua] FAILED: " + errorMsg);
+				}
 			}
 		}
 
@@ -124,6 +127,7 @@ namespace RadarKeys {
 				ImGui::TextWrapped("[%s] %s", entry.timestamp.c_str(), entry.text.c_str());
 			}
 			// auto-scroll only while already at the bottom, so scrolling up to read history
+			// isn't constantly yanked back down by new entries arriving.
 			if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
 				ImGui::SetScrollHereY(1.0f);
 			}
@@ -131,6 +135,5 @@ namespace RadarKeys {
 
 			ImGui::End();
 		}
-
 	}
 }
