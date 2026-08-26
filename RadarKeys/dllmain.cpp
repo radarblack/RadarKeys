@@ -2,6 +2,7 @@
 #include "Render.h"
 #include "LuaBridge.h"
 #include "LuaApi.h"
+#include "HookUtils.h"
 #include "KeyBindMenu.h"
 #include "DebuggerMenu.h"
 #include "spdlog/spdlog.h"
@@ -11,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <cassert>
+#include <filesystem>
 
 namespace RadarKeys {
 
@@ -36,8 +38,13 @@ namespace RadarKeys {
 	}
 
 	void SetupLog() {
-		// simplified from IHHook's SetupLog - no config file in this build
-		auto logger = spdlog::basic_logger_mt("radarkeys", L"radarkeys_log.txt");
+		// simplified from IHHook. stays with the .conf file in mod/radarKeys folder
+		std::filesystem::path logDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
+		std::error_code ec;
+		std::filesystem::create_directories(logDir, ec);//tex: spdlog's file sink won't create missing directories itself
+
+		std::filesystem::path logPath = logDir / "radarkeys_log.txt";
+		auto logger = spdlog::basic_logger_mt("radarkeys", logPath.wstring());
 		spdlog::set_default_logger(logger);
 		spdlog::set_level(spdlog::level::debug);
 		spdlog::flush_on(spdlog::level::warn);
@@ -56,8 +63,6 @@ namespace RadarKeys {
 
 		if (!ResolveLuaApi()) {
 			spdlog::error("RadarKeys InitThread: ResolveLuaApi failed - Lua bindings will not work");
-			// don't return here - D3D11/menu rendering can still work even if Lua binding
-			// resolution failed; only the DoScript round-trip would be broken, not the whole DLL.
 		}
 
 		Render::CreateD3DHook();
@@ -66,7 +71,6 @@ namespace RadarKeys {
 		spdlog::info("RadarKeys InitThread done");
 	}
 
-	//--- Lua bindings ---
 	static int l_MenuMessage(lua_State* L) {
 		const char* cmd = LuaToString(L, 1);
 		const char* message = LuaToString(L, 2);
@@ -76,7 +80,7 @@ namespace RadarKeys {
 	}
 
 	static int l_GetMenuMessages(lua_State* L) {
-		std::optional<std::string> messageOpt = LuaBridge::messagesIn.pop(); // waits if empty
+		std::optional<std::string> messageOpt = LuaBridge::messagesIn.pop();//tex waits if empty
 		if (!messageOpt) {
 			LuaPushNil(L); // no messages
 			return 1;
