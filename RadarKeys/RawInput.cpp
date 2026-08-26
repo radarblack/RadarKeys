@@ -205,7 +205,8 @@ namespace RadarKeys {
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
 			std::list<std::pair<ActionHandle, ButtonAction>>* actions = buttonActions[vKey];
 			if (actions != nullptr) {
-				spdlog::debug("RawInput DoActions for vKey:{}", vKey);
+				// this fires by default, regardless of the debug option. that should not happen. fixed it.
+				spdlog::trace("RawInput DoActions for vKey:{}", vKey);
 				for (auto it = actions->begin(); it != actions->end(); ++it) {
 					ButtonAction Action = it->second;
 					Action(buttonEvent);
