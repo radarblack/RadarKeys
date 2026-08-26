@@ -5,9 +5,12 @@
 #include "HookUtils.h"
 #include "KeyBindMenu.h"
 #include "DebuggerMenu.h"
+
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/basic_file_sink.h"
+
 #include <MinHook.h>
+
 #include <thread>
 #include <optional>
 #include <string>
@@ -15,8 +18,6 @@
 #include <filesystem>
 
 namespace RadarKeys {
-
-	// matches IHHook's proven SetCursorPos hook pattern - intercepts the game's OWN calls to the real Win32 SetCursorPos, swallowing them while our menu wants the cursor free
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
 	SetCursorPosFunc SetCursorPos_Orig = NULL;
 
@@ -38,12 +39,17 @@ namespace RadarKeys {
 	}
 
 	void SetupLog() {
-		// simplified from IHHook. stays with the .conf file in mod/radarKeys folder
 		std::filesystem::path logDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 		std::error_code ec;
-		std::filesystem::create_directories(logDir, ec);//tex: spdlog's file sink won't create missing directories itself
+		std::filesystem::create_directories(logDir, ec); // spdlog's file sink won't create missing directories itself
 
 		std::filesystem::path logPath = logDir / "radarkeys_log.txt";
+		std::filesystem::path logPathPrev = logDir / "radarkeys_log_prev.txt";
+
+		DeleteFileW(logPathPrev.c_str());
+		CopyFileW(logPath.c_str(), logPathPrev.c_str(), FALSE);
+		DeleteFileW(logPath.c_str());
+
 		auto logger = spdlog::basic_logger_mt("radarkeys", logPath.wstring());
 		spdlog::set_default_logger(logger);
 		spdlog::set_level(spdlog::level::debug);
@@ -71,6 +77,7 @@ namespace RadarKeys {
 		spdlog::info("RadarKeys InitThread done");
 	}
 
+	//--- Lua bindings ---
 	static int l_MenuMessage(lua_State* L) {
 		const char* cmd = LuaToString(L, 1);
 		const char* message = LuaToString(L, 2);
@@ -80,7 +87,7 @@ namespace RadarKeys {
 	}
 
 	static int l_GetMenuMessages(lua_State* L) {
-		std::optional<std::string> messageOpt = LuaBridge::messagesIn.pop();//tex waits if empty
+		std::optional<std::string> messageOpt = LuaBridge::messagesIn.pop(); // waits if empty
 		if (!messageOpt) {
 			LuaPushNil(L); // no messages
 			return 1;
@@ -95,7 +102,7 @@ namespace RadarKeys {
 			LuaRawSetIndexed(L, tableAbsIdx, index, message.c_str());
 			messageOpt = LuaBridge::messagesIn.pop();
 		}
-		assert(LuaGetTop(L) == 1); // table still on stack
+		assert(LuaGetTop(L) == 1); //  table still on stack
 		return 1;
 	}
 
