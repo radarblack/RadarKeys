@@ -16,6 +16,7 @@ It runs on a separate thread, running side by side with other hooks and framewor
 ```
 ## Updates
 ```
-[8/26/2026] - First successful build. Working condition. Ready for release, but fixing some UI related concerns before it.
-[8/27/2026] - First public release in NexusMods.
+[08/26/2026] - First successful build. Working condition. Ready for release, but fixing some UI related concerns before it.
+[08/27/2026] - Fixing and improving the error logging system. Unifying the debug report to the spdlog reports for uniform reporting.
+[?] - First public release in NexusMods.
 ```
