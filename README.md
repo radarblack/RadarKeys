@@ -16,7 +16,6 @@ It runs on a separate thread, running side by side with other hooks and framewor
 ```
 ## Updates
 ```
-- [8/26/2026] - First successful build. Working condition. Ready for release, but fixing some UI related concerns before it.
-- [8/27/2026] - First public release in NexusMods.
-
+[8/26/2026] - First successful build. Working condition. Ready for release, but fixing some UI related concerns before it.
+[8/27/2026] - First public release in NexusMods.
 ```
