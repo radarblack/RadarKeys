@@ -26,6 +26,8 @@ To use an assigned script:
 1. Like, do I really have to explain how to do this...?
 2. Like, seriously?
 3. No. You're trolling.
+
+• For analysis and debugging, the log files are located in ".../mod/radarKeys/radarKeys_log.txt"
 ```
 ## Updates
 ```
