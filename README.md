@@ -36,9 +36,9 @@ To use an assigned script:
 [?] - First public release in NexusMods.
 ```
 ## Plans ahead
-- [x] Address some of the immediate UI concerns (misspells, formatting, and spacing, etc.)
-- [x] Cull unnecessary/unused function from the IHHook and VFramework implementations
-- [x] Improve error logging and readability in the log files
+- [x] ~~Address some of the immediate UI concerns (misspells, formatting, and spacing, etc.)~~
+- [x] ~~Cull unnecessary/unused function from the IHHook and VFramework implementations~~
+- [x] ~~Improve error logging and readability in the log files~~
 - [ ] Make a showcase script of how "core" and "trigger" script functions
 - [ ] Release the mod on NexusMods (First Official Release)
 - [ ] Make some template scripts for a simple and complex script mods
