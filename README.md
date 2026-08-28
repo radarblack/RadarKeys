@@ -2,7 +2,7 @@
 
 Allows keybinds to run scripts through button interactions using the IHHook implementation.
 It runs on a separate thread, running side by side with other hooks and frameworks.
-• NexusMod: https://www.nexusmods.com/metalgearsolidvtpp/mods/2572  
+> • NexusMod: https://www.nexusmods.com/metalgearsolidvtpp/mods/2572  
 
 ## Installation
 ```
