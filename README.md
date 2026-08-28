@@ -39,8 +39,8 @@ To use an assigned script:
 - [x] ~~Address some of the immediate UI concerns (misspells, formatting, and spacing, etc.)~~
 - [x] ~~Cull unnecessary/unused function from the IHHook and VFramework implementations~~
 - [x] ~~Improve error logging and readability in the log files~~
-- [ ] Make a showcase script of how "core" and "trigger" script functions
-- [ ] Release the mod on NexusMods (First Official Release)
+- [x] ~~Make a showcase script of how "core" and "trigger" script functions~~
+- [x] ~~Release the mod on NexusMods (First Official Release)~~
 - [ ] Make some template scripts for a simple and complex script mods
 - [ ] Final clean up (review, reassessment, function refactoring to shorten runtime execution if needed)
 - [ ] Find a way to read and run certain function within the script without passing through every functions on the script
