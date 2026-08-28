@@ -14,6 +14,7 @@ namespace RadarKeys {
 			bool needAlt;
 			std::string keyName;     // base key display name, e.g. "F6", "A", "," - see vkNameTable
 			std::string scriptPath;  // passed to dofile() via the DoScript IPC command (see RegisterBindingAction/OnBoundKeyPressed)
+			float holdSeconds = 0.0f; // 0 = fires instantly on press (default/original behavior); >0 = fires once after being held this long, see Update()
 		};
 
 		// loads bindings and menu key at startup from mod/radarKeys/radar_keybinds.conf; uses hardcoded F7 as fallback if nopersisted menu key.
@@ -21,6 +22,9 @@ namespace RadarKeys {
 
 		// Draws key-bindings window; call only when menu open (ImGui p_open pattern).
 		void Draw(bool* p_open);
+
+		// call once per frame when the key is held (?). Doubt if this works. Hopefully. lol
+		void Update();
 
 		extern std::vector<KeyBind> bindings;
 		extern bool menuOpen; // Render.cpp's OnFrame checks this directly and passes &menuOpen into Draw()
