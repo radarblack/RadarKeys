@@ -10,10 +10,14 @@
 #include <fstream>
 #include <filesystem>
 #include <map>
+#include <chrono>
+#include <cstdio>
 
 namespace RadarKeys {
 	namespace KeyBindMenu {
+
 		std::vector<KeyBind> bindings;
+
 		const std::string& GetBindsFileName() {
 			static std::string cached;
 			if (cached.empty()) {
@@ -67,13 +71,17 @@ namespace RadarKeys {
 			return -1;
 		}
 
-		// ctrl/shift/alt ordering matches the common Windows accelerator-key convention.
 		std::string CombinedDisplayName(const KeyBind& bind) {
 			std::string result;
 			if (bind.needCtrl) result += "Ctrl+";
 			if (bind.needShift) result += "Shift+";
 			if (bind.needAlt) result += "Alt+";
 			result += bind.keyName;
+			if (bind.holdSeconds > 0.0f) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), " (hold %.1fs)", bind.holdSeconds);
+				result += buf;
+			}
 			return result;
 		}
 
@@ -134,8 +142,43 @@ namespace RadarKeys {
 			return true;
 		}
 
-		// fires once per vKey: exact modifier match first, then falls back to plain key binding if no match.
+		struct HoldTrack {
+			std::chrono::steady_clock::time_point startTime;
+			bool fired = false;
+		};
+		std::map<USHORT, HoldTrack> holdTracks;
+
+		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld) {
+			const KeyBind* exactMatch = nullptr;
+			const KeyBind* fallbackMatch = nullptr; // the plain/no-modifier binding on this vKey, if any
+			for (const KeyBind& bind : bindings) {
+				if (bind.vKey != vKey) {
+					continue;
+				}
+				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
+					exactMatch = &bind;
+					break;
+				}
+				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) {
+					fallbackMatch = &bind;
+				}
+			}
+			return exactMatch != nullptr ? exactMatch : fallbackMatch;
+		}
+
+		void FireBinding(const KeyBind& bind) {
+			// Checks if file exists
+			if (DebuggerMenu::LogScriptAttempt(bind.scriptPath)) {
+				LuaBridge::QueueMessageIn("DoScript|dofile([[" + bind.scriptPath + "]])");
+			}
+		}
+
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
+			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
+				// key released - clear any in-progress hold tracking so a fresh press starts clean.
+				holdTracks.erase(vKey);
+				return;
+			}
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
 			}
@@ -152,27 +195,51 @@ namespace RadarKeys {
 			pressedName += NameForVKey(vKey);
 			DebuggerMenu::LogButtonPress(pressedName + " pressed");
 
-			const KeyBind* exactMatch = nullptr;
-			const KeyBind* fallbackMatch = nullptr; // the plain/no-modifier binding on this vKey, if any
-			for (const KeyBind& bind : bindings) {
-				if (bind.vKey != vKey) {
-					continue;
-				}
-				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
-					exactMatch = &bind;
-					break;
-				}
-				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) {
-					fallbackMatch = &bind;
-				}
+			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
+			if (toRun == nullptr) {
+				return;
 			}
 
-			const KeyBind* toRun = exactMatch != nullptr ? exactMatch : fallbackMatch;
-			if (toRun != nullptr) {
-				// Checks file existence; logs "not found" internally; only queues IPC to Lua if file exists.
-				if (DebuggerMenu::LogScriptAttempt(toRun->scriptPath)) {
-					LuaBridge::QueueMessageIn("DoScript|dofile([[" + toRun->scriptPath + "]])");
+			if (toRun->holdSeconds <= 0.0f) {
+				// normal, original behavior - fires the instant the key goes down.
+				FireBinding(*toRun);
+			}
+			else {
+				// hold-configured binding - don't fire yet. Start (or restart) tracking how long this vKey stays down; 
+				// Update() below checks elapsed time every frame and fires it once toRun->holdSeconds is reached, as long as the key's still held then.
+				HoldTrack track;
+				track.startTime = std::chrono::steady_clock::now();
+				track.fired = false;
+				holdTracks[vKey] = track;
+			}
+		}
+
+		void Update() {
+			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
+				USHORT vKey = it->first;
+				HoldTrack& track = it->second;
+
+				if (track.fired || !RawInput::IsKeyDown(vKey)) {
+					// already fired for this hold, or the key's no longer down (covers a missed
+					// ONUP too) - nothing left to track for this key.
+					it = holdTracks.erase(it);
+					continue;
 				}
+
+				bool ctrlHeld = RawInput::IsKeyDown(VK_CONTROL);
+				bool shiftHeld = RawInput::IsKeyDown(VK_SHIFT);
+				bool altHeld = RawInput::IsKeyDown(VK_MENU);
+				const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
+
+				if (toRun != nullptr && toRun->holdSeconds > 0.0f) {
+					float elapsedSeconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count();
+					if (elapsedSeconds >= toRun->holdSeconds) {
+						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held " + std::to_string(toRun->holdSeconds) + "s");
+						FireBinding(*toRun);
+						track.fired = true;
+					}
+				}
+				++it;
 			}
 		}
 
@@ -217,7 +284,7 @@ namespace RadarKeys {
 			}
 			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
 			for (const KeyBind& bind : bindings) {
-				outFile << "BIND|" << bind.keyName << "|" << (bind.needCtrl ? "1" : "0") << "|" << (bind.needShift ? "1" : "0") << "|" << (bind.needAlt ? "1" : "0") << "|" << bind.scriptPath << "\n";
+				outFile << "BIND|" << bind.keyName << "|" << (bind.needCtrl ? "1" : "0") << "|" << (bind.needShift ? "1" : "0") << "|" << (bind.needAlt ? "1" : "0") << "|" << bind.holdSeconds << "|" << bind.scriptPath << "\n";
 			}
 			outFile.close();
 			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), GetBindsFileName());
@@ -251,18 +318,25 @@ namespace RadarKeys {
 						spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
 					}
 				}
-				else if (parts[0] == "BIND" && parts.size() >= 6) {
+				else if (parts[0] == "BIND" && parts.size() >= 7) {
 					std::string keyName = trim(parts[1]);
 					bool needCtrl = trim(parts[2]) == "1";
 					bool needShift = trim(parts[3]) == "1";
 					bool needAlt = trim(parts[4]) == "1";
-					std::string scriptPath = trim(parts[5]);
+					float holdSeconds = 0.0f;
+					try {
+						holdSeconds = std::stof(trim(parts[5]));
+					}
+					catch (...) {
+						spdlog::warn("KeyBindMenu::LoadBindings: bad holdSeconds value '{}', defaulting to 0", parts[5]);
+					}
+					std::string scriptPath = trim(parts[6]);
 					int vKey = VKeyForName(keyName);
 					if (vKey == -1) {
 						spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName);
 						continue;
 					}
-					bindings.push_back(KeyBind{ (USHORT)vKey, needCtrl, needShift, needAlt, keyName, scriptPath });
+					bindings.push_back(KeyBind{ (USHORT)vKey, needCtrl, needShift, needAlt, keyName, scriptPath, holdSeconds });
 				}
 				else if (parts[0] == "BIND") {
 					// handles old config formats safely by skipping invalid entries.
@@ -272,8 +346,8 @@ namespace RadarKeys {
 			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), GetBindsFileName());
 		}
 
-		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, const std::string& scriptPath) {
-			KeyBind bind{ vKey, needCtrl, needShift, needAlt, keyName, scriptPath };
+		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, const std::string& scriptPath) {
+			KeyBind bind{ vKey, needCtrl, needShift, needAlt, keyName, scriptPath, holdSeconds };
 			bindings.push_back(bind);
 			EnsureDispatcherRegistered(vKey);
 			SaveBindings();
@@ -368,7 +442,7 @@ namespace RadarKeys {
 			}
 
 			ImGui::Separator();
-			ImGui::TextWrapped("Scripts assigned on keys trigger even while holding a modifier key, except if there is an assigned script to that keys combination.");
+			ImGui::TextWrapped("Custom bindings - press a key (+ Ctrl/Shift/Alt if set) in-game to dofile() the matching script. A modified binding (e.g. Shift+X) falls back to the plain key's binding (X) if no exact match exists for the modifiers currently held.");
 			ImGui::Spacing();
 
 			// existing bindings list, each with its own remove button, plus a bulk "Remove All"
@@ -426,11 +500,18 @@ namespace RadarKeys {
 			ImGui::SameLine();
 			ImGui::Checkbox("Alt", &addAlt);
 
+			static float addHoldSeconds = 0.0f;
+			ImGui::SetNextItemWidth(120);
+			ImGui::InputFloat("Hold seconds (0 = instant)", &addHoldSeconds, 0.5f, 1.0f, "%.1f");
+			if (addHoldSeconds < 0.0f) {
+				addHoldSeconds = 0.0f;
+			}
+
 			// plain text file path input (abs/rel to game root); no Win32 dialog deps.
 			static char scriptPathBuffer[512] = "";
 			ImGui::SetNextItemWidth(-1);
 			ImGui::InputText("##scriptPathInput", scriptPathBuffer, IM_ARRAYSIZE(scriptPathBuffer));
-			ImGui::TextDisabled("Just a filename assumes .../mod/modules/ - or type a path with / or \\ to use elsewhere within the MGSVTPP directory.");
+			ImGui::TextDisabled("Just a filename assumes mod/modules/ - or type a path (with / or \\) to use elsewhere");
 
 			USHORT selectedVKey = vkNameTable[addComboIndex].vKey;
 			bool comboAvailable = IsComboAvailable(selectedVKey, addCtrl, addShift, addAlt);
@@ -439,14 +520,15 @@ namespace RadarKeys {
 				ImGui::BeginDisabled();
 			}
 			if (ImGui::Button("Add Binding")) {
-				AddBinding(selectedVKey, vkNameTable[addComboIndex].name, addCtrl, addShift, addAlt, ResolveScriptPath(scriptPathBuffer));
+				AddBinding(selectedVKey, vkNameTable[addComboIndex].name, addCtrl, addShift, addAlt, addHoldSeconds, ResolveScriptPath(scriptPathBuffer));
 				scriptPathBuffer[0] = '\0';
+				addHoldSeconds = 0.0f;
 			}
 			if (!canAdd) {
 				ImGui::EndDisabled();
 			}
 			if (scriptPathBuffer[0] != '\0' && !comboAvailable) {
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key combination is already in use");
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key + modifier combination is already in use");
 			}
 
 			ImGui::End();
