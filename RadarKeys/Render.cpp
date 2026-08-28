@@ -148,8 +148,8 @@ namespace RadarKeys {
 
 				RawInput::InitializeInput();
 
-				DebuggerMenu::Init(); // must come before KeyBindMenu can log anything useful through it
-				KeyBindMenu::Init("F4"); // no config file in this build - starting key is just hardcoded here
+				DebuggerMenu::Init();// must come before KeyBindMenu can log anything useful through it
+				KeyBindMenu::Init("F4");// no config file in this build - starting key is just hardcoded here
 			}
 
 			return true;
@@ -157,6 +157,7 @@ namespace RadarKeys {
 
 		void DrawUI() {
 			LuaBridge::ProcessMessages();
+			KeyBindMenu::Update(); // hold-to-trigger poll
 
 			auto& io = ImGui::GetIO();
 			bool unlock = IsUnlockCursor();
@@ -184,7 +185,7 @@ namespace RadarKeys {
 			if (DebuggerMenu::menuOpen) {
 				DebuggerMenu::Draw(&DebuggerMenu::menuOpen);
 			}
-		}//DrawUI
+		}
 
 		void OnFrame() {
 			auto frameTimeStart = std::chrono::high_resolution_clock::now();
@@ -226,7 +227,7 @@ namespace RadarKeys {
 				log->flush();
 			}
 
-			// RE2FW: crashes if we don't release it at this point
+			//RE2FW: crashes if we don't release it at this point
 			CleanupRenderTarget();
 			frameInitialized = false;
 
