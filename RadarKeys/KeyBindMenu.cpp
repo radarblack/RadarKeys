@@ -442,7 +442,7 @@ namespace RadarKeys {
 			}
 
 			ImGui::Separator();
-			ImGui::TextWrapped("Custom bindings - press a key (+ Ctrl/Shift/Alt if set) in-game to dofile() the matching script. A modified binding (e.g. Shift+X) falls back to the plain key's binding (X) if no exact match exists for the modifiers currently held.");
+			ImGui::TextWrapped("Scripts assigned on keys trigger even while holding a modifier key, except if there is an assigned script to that keys combination.");
 			ImGui::Spacing();
 
 			// existing bindings list, each with its own remove button, plus a bulk "Remove All"
