@@ -149,7 +149,7 @@ namespace RadarKeys {
 				RawInput::InitializeInput();
 
 				DebuggerMenu::Init(); // must come before KeyBindMenu can log anything useful through it
-				KeyBindMenu::Init("F4"); // no config file in this build - starting key is just hardcoded here
+				KeyBindMenu::Init("F7"); // no config file in this build - starting key is just hardcoded here
 			}
 
 			return true;
