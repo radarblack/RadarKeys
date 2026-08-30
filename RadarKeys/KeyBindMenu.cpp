@@ -244,10 +244,9 @@ namespace RadarKeys {
 				altHeld = false;
 			}
 
-			// look to see if there is ANY binding on this virtual key setup that uses a hold delay
 			bool hasHoldOptionOnKey = false;
 			for (const KeyBind& bind : bindings) {
-				if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) {
+				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
 					hasHoldOptionOnKey = true;
 					break;
 				}
