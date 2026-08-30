@@ -208,12 +208,6 @@ namespace RadarKeys {
 
 			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
 
-			if (toRun != nullptr && !toRun->needCtrl && !toRun->needShift && !toRun->needAlt) {
-				ctrlHeld = false;
-				shiftHeld = false;
-				altHeld = false;
-			}
-
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
@@ -242,6 +236,12 @@ namespace RadarKeys {
 
 			if (toRun == nullptr) {
 				return;
+			}
+
+			if (!toRun->needCtrl && !toRun->needShift && !toRun->needAlt) {
+				ctrlHeld = false;
+				shiftHeld = false;
+				altHeld = false;
 			}
 
 			// look to see if there is ANY binding on this virtual key setup that uses a hold delay
