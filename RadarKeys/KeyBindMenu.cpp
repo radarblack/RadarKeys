@@ -512,7 +512,7 @@ namespace RadarKeys {
 			
 			float titleWidth = ImGui::CalcTextSize("Key").x;
 			ImGui::SetCursorPosX((availWidth - titleWidth) * 0.5f);
-			ImGui::Text("  Key");
+			ImGui::Text(" Key");
 			ImGui::Separator();
 
 			float lowerBoxTopY = ImGui::GetCursorPosY();
@@ -525,10 +525,10 @@ namespace RadarKeys {
 				
 				ImGui::SetCursorPosY(startVerticalY);
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("PRESS").x) * 0.5f);
-				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "PRESS");
+				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), " PRESS");
 				
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("KEY...").x) * 0.5f);
-				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "KEY...");
+				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "  KEY...");
 			} else {
 				std::string keyName = NameForVKey(capturedVKey);
 				
