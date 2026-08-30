@@ -184,6 +184,11 @@ namespace RadarKeys {
 		}
 
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
+			// prevents 'tap' scripts from running when the input detection prompt is up
+			if (showCapturePrompt) {
+				return;
+			}
+
 			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL);
 			bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
 			bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
@@ -255,6 +260,10 @@ namespace RadarKeys {
 		}
 
 		void Update() {
+			if (showCapturePrompt) {
+				return;
+			}
+
 			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
 				USHORT vKey = it->first;
 				HoldTrack& track = it->second;
