@@ -458,11 +458,10 @@ namespace RadarKeys {
 		static char capturedScriptPathBuffer[512] = "";
 
 		void DrawKeyCapturePrompt() {
-			// center the  overlay nicely on the viewport screen
-			ImGui::SetNextWindowSize(ImVec2(500, 250), ImGuiCond_Always);
-			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 250, ImGui::GetIO().DisplaySize.y * 0.5f - 125), ImGuiCond_Always);
+			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_Always);
+			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_Always);
 
-			if (!ImGui::Begin("Assign Hotkey Connection", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
+			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
 				ImGui::End();
 				return;
 			}
@@ -470,19 +469,14 @@ namespace RadarKeys {
 			// key capture
 			if (capturedVKey == 0) {
 				for (int i = 1; i < 256; i++) {
-					// skip processing modifier keys independently so they don't break the listener
 					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN) {
 						continue;
 					}
-					// ignore left mouse clicks inside the menu bounds so checking checkboxes works safely
 					if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
 						continue;
 					}
-
 					if (ImGui::IsKeyPressed((ImGuiKey)i)) {
 						capturedVKey = (USHORT)i;
-						
-						// lock in active modifier states the instant the base key is registered
 						capturedCtrl = ImGui::GetIO().KeyCtrl;
 						capturedShift = ImGui::GetIO().KeyShift;
 						capturedAlt = ImGui::GetIO().KeyAlt;
@@ -491,84 +485,79 @@ namespace RadarKeys {
 				}
 			}
 
-			ImGui::BeginChild("KeyDisplayFrame", ImVec2(160, 100), true);
+			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true);
+			float availWidth = ImGui::GetContentRegionAvail().x;
+			
+			float titleWidth = ImGui::CalcTextSize("Key").x;
+			ImGui::SetCursorPosX((availWidth - titleWidth) * 0.5f);
+			ImGui::Text("Key");
+			ImGui::Separator();
+			ImGui::Spacing();
+
 			if (capturedVKey == 0) {
-				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "PRESS ANY KEY...");
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("PRESS").x) * 0.5f);
+				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "PRESS");
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("KEY...").x) * 0.5f);
+				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "KEY...");
 			} else {
-				ImGui::Text("Captured Base:");
-				ImGui::Separator();
-				ImGui::Spacing();
-				ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "  %s", NameForVKey(capturedVKey).c_str());
-				ImGui::Spacing();
-				ImGui::TextDisabled("(Click here to reset)");
-				if (ImGui::IsItemClicked()) {
-					capturedVKey = 0;
-				}
+				std::string keyName = NameForVKey(capturedVKey);
+				float nameWidth = ImGui::CalcTextSize(keyName.c_str()).x;
+				ImGui::SetCursorPosX((availWidth - nameWidth) * 0.5f);
+				ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s", keyName.c_str());
 			}
 			ImGui::EndChild();
 
 			ImGui::SameLine();
 
-			// column stack layout for modifiers matching your wireframe center boxes alignment
+			// reset trigger
 			ImGui::BeginGroup();
 			ImGui::Checkbox("Ctrl", &capturedCtrl);
 			ImGui::Checkbox("Shift", &capturedShift);
 			ImGui::Checkbox("Alt", &capturedAlt);
-			ImGui::EndGroup();
-
-			ImGui::SameLine(260);
-
-			// right side panel for Hold seconds numerical display controls
-			ImGui::BeginGroup();
-			ImGui::Text("Hold Configuration:");
-			
-			// upper Horizontal Rectangle display container matching your graphic design layout
-			ImGui::BeginChild("HoldValueBox", ImVec2(180, 28), true, ImGuiWindowFlags_NoScrollbar);
-			if (capturedHoldSeconds <= 0.0f) {
-				ImGui::Text("Instant Trigger (0.0s)");
-			} else {
-				ImGui::Text("Duration: %.1fs", capturedHoldSeconds);
+			ImGui::Spacing();
+			if (ImGui::Button("Reset", ImVec2(55, 22))) {
+				capturedVKey = 0;
 			}
-			ImGui::EndChild();
+			
+			ImGui::EndGroup();
+			ImGui::SameLine(190);
+			ImGui::BeginGroup();
+			ImGui::Text("Long Press:");
+			
+			ImGui::SetNextItemWidth(88); 
+			ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
+			if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
 
-			// math calculation adjustments via [+] and [-] control buttons
-			if (ImGui::Button(" - ##SubHold", ImVec2(40, 25))) {
+			if (ImGui::Button(" - ##SubHold", ImVec2(40, 24))) {
 				capturedHoldSeconds -= 0.5f;
 				if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
 			}
 			ImGui::SameLine();
-			if (ImGui::Button(" + ##AddHold", ImVec2(40, 25))) {
+			if (ImGui::Button(" + ##AddHold", ImVec2(40, 24))) {
 				capturedHoldSeconds += 0.5f;
 			}
 			
-			ImGui::SameLine(115);
+			ImGui::Spacing();
 			
 			// tooltip
 			bool comboAvailable = (capturedVKey == 0) ? true : IsComboAvailable(capturedVKey, capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds);
 			if (!comboAvailable) {
-				// red warning visual status container box
-				ImGui::BeginChild("StatusIndicatorBox", ImVec2(65, 25), true);
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), " BLOCKED ");
-				ImGui::EndChild();
-				
-				// hover tooltip execution string block explaining the structural assignment issue
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "[ BLOCKED ]");
 				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Conflict! Key combination is already in use.\nAdjust 'Hold seconds' value to unlock a secondary script assignment.");
+					ImGui::SetTooltip("Conflict! Key combination is already in use.\nYou can assign the key as Long Press by adding duration.");
 				}
 			} else {
-				// green safe status
-				ImGui::BeginChild("StatusIndicatorBox", ImVec2(65, 25), true);
-				ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " READY ");
-				ImGui::EndChild();
+				ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "[ READY ]");
 				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Configuration slot is open and ready to register target script execution.");
+					ImGui::SetTooltip("Valid key assignment.");
 				}
 			}
 			ImGui::EndGroup();
 
 			ImGui::Separator();
 
-			ImGui::Text("Target Script Path:");
+			// script path
+			ImGui::Text("Path to Trigger Script:");
 			ImGui::SetNextItemWidth(-1);
 			ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
 
@@ -576,26 +565,23 @@ namespace RadarKeys {
 			ImGui::Separator();
 
 			// finalize
-			bool canFinalize = capturedVKey != 0 && capturedScriptPathBuffer[0] != '\0' && comboAvailable;
+			bool canFinalize = capturedVKey != 0 && capturedScriptPathBuffer != '\0' && comboAvailable;
 			if (!canFinalize) ImGui::BeginDisabled();
 			
-			// "Finalize" button assignment hook
-			if (ImGui::Button("Finalize Assignment", ImVec2(235, 30))) {
+			if (ImGui::Button("Finalize", ImVec2(145, 30))) {
 				AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
-				
-				// safely clean context loops, reset local parameter buffers, and return control
 				capturedVKey = 0;
 				capturedHoldSeconds = 0.0f;
-				capturedScriptPathBuffer[0] = '\0';
+				capturedScriptPathBuffer = '\0';
 				showCapturePrompt = false;
 			}
 			if (!canFinalize) ImGui::EndDisabled();
 
 			ImGui::SameLine();
-			if (ImGui::Button("Cancel", ImVec2(235, 30))) {
+			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
 				capturedVKey = 0;
 				capturedHoldSeconds = 0.0f;
-				capturedScriptPathBuffer[0] = '\0';
+				capturedScriptPathBuffer = '\0';
 				showCapturePrompt = false;
 			}
 
