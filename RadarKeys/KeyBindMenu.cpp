@@ -534,7 +534,7 @@ namespace RadarKeys {
 				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), " PRESS");
 				
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("KEY...").x) * 0.5f);
-				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "  KEY...");
+				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "  KEY..");
 			} else {
 				std::string keyName = NameForVKey(capturedVKey);
 				
@@ -544,7 +544,7 @@ namespace RadarKeys {
 				
 				ImGui::SetCursorPosY(startVerticalY);
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(keyName.c_str()).x) * 0.5f);
-				ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s", keyName.c_str());
+				ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "  %s", keyName.c_str());
 			}
 			ImGui::EndChild();
 
@@ -593,14 +593,14 @@ namespace RadarKeys {
 			if (!comboAvailable) {
 				float labelTextWidth = ImGui::CalcTextSize("[ In Use ]").x;
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (columnWidth - labelTextWidth) * 0.5f);
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "[ In Use ]");
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "[ UNFIT ]");
 				if (ImGui::IsItemHovered()) {
 					ImGui::SetTooltip("Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
 				}
 			} else {
 				float labelTextWidth = ImGui::CalcTextSize("[ Ready ]").x;
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (columnWidth - labelTextWidth) * 0.5f);
-				ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "[ Ready ]");
+				ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "[ READY ]");
 				if (ImGui::IsItemHovered()) {
 					ImGui::SetTooltip("The key combination is valid. Key assignment can finalize.");
 				}
@@ -669,7 +669,7 @@ namespace RadarKeys {
 			}
 			ImGui::Separator();
 
-			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "] (Click to reassign)";
+			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
 			if (ImGui::Button(buttonLabel.c_str(), ImVec2(-1, 28))) {
 				isAssigningMenuToggleKey = true;
 				showCapturePrompt = true;
