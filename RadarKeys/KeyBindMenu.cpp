@@ -130,17 +130,27 @@ namespace RadarKeys {
 		}
 
 		// binding free if exact (vKey,Ctrl,Shift,Alt) tuple unused; modifiers create separate bindings.
-		bool IsComboAvailable(USHORT vKey, bool needCtrl, bool needShift, bool needAlt) {
+		// updated to allow a Tap and a Hold configuration on the same key combo
+		bool IsComboAvailable(USHORT vKey, bool needCtrl, bool needShift, bool needAlt, float holdSeconds) {
 			if (IsReservedVKey(vKey)) {
 				return false;
 			}
 			for (const KeyBind& bind : bindings) {
 				if (bind.vKey == vKey && bind.needCtrl == needCtrl && bind.needShift == needShift && bind.needAlt == needAlt) {
-					return false;
+					// If the hold seconds match, they are conflicting duplicates.
+					if (bind.holdSeconds == holdSeconds) {
+						return false;
+					}
+					
+					// chceks if the hold second remains at 0.0
+					if ((holdSeconds <= 0.0f && bind.holdSeconds <= 0.0f) || (holdSeconds > 0.0f && bind.holdSeconds > 0.0f)) {
+						return false;
+					}
 				}
 			}
 			return true;
 		}
+
 
 		struct HoldTrack {
 			std::chrono::steady_clock::time_point startTime;
@@ -174,20 +184,33 @@ namespace RadarKeys {
 		}
 
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
+			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL);
+			bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
+			bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
+
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
-				// key released - clear any in-progress hold tracking so a fresh press starts clean.
-				holdTracks.erase(vKey);
+				// the key was released. Check if we were tracking a hold for this key.
+				auto it = holdTracks.find(vKey);
+				if (it != holdTracks.end()) {
+					// if it hasn't fired the hold script yet, it means it's a short tap!
+					if (!it->second.fired) {
+						// look for a structural 'instant' (holdSeconds == 0) fallback binding on the same key combo
+						const KeyBind* tapBind = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
+						if (tapBind && tapBind->holdSeconds <= 0.0f) {
+							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
+							FireBinding(*tapBind);
+						}
+					}
+					holdTracks.erase(it);
+				}
 				return;
 			}
+
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
 			}
 
-			bool ctrlHeld = RawInput::IsKeyDown(VK_CONTROL);
-			bool shiftHeld = RawInput::IsKeyDown(VK_SHIFT);
-			bool altHeld = RawInput::IsKeyDown(VK_MENU);
-
-			// logs raw ONDOWN events for bound vKeys, irrespective of script binding success.
+			// log raw down event
 			std::string pressedName;
 			if (ctrlHeld) pressedName += "Ctrl+";
 			if (shiftHeld) pressedName += "Shift+";
@@ -200,13 +223,30 @@ namespace RadarKeys {
 				return;
 			}
 
+			// look to see if there is ANY binding on this virtual key setup that uses a hold delay
+			bool hasHoldOptionOnKey = false;
+			for (const KeyBind& bind : bindings) {
+				if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) {
+					hasHoldOptionOnKey = true;
+					break;
+				}
+			}
+
 			if (toRun->holdSeconds <= 0.0f) {
-				// normal, original behavior - fires the instant the key goes down.
-				FireBinding(*toRun);
+				// if there's no hold profile registered anywhere on this key, fire instantly like normal
+				if (!hasHoldOptionOnKey) {
+					FireBinding(*toRun);
+				}
+				else {
+					// if the user lets go early, OnBoundKeyPressed's ONUP section above catches it as a tap.
+					HoldTrack track;
+					track.startTime = std::chrono::steady_clock::now();
+					track.fired = false;
+					holdTracks[vKey] = track;
+				}
 			}
 			else {
-				// hold-configured binding - don't fire yet. Start (or restart) tracking how long this vKey stays down; 
-				// Update() below checks elapsed time every frame and fires it once toRun->holdSeconds is reached, as long as the key's still held then.
+				// this is explicitly a hold binding. Start the clock timer ticker.
 				HoldTrack track;
 				track.startTime = std::chrono::steady_clock::now();
 				track.fired = false;
@@ -219,23 +259,29 @@ namespace RadarKeys {
 				USHORT vKey = it->first;
 				HoldTrack& track = it->second;
 
-				if (track.fired || !RawInput::IsKeyDown(vKey)) {
-					// already fired for this hold, or the key's no longer down (covers a missed
-					// ONUP too) - nothing left to track for this key.
+				if (track.fired || !RawInput::IsKeyHeldReal(vKey)) {
 					it = holdTracks.erase(it);
 					continue;
 				}
 
-				bool ctrlHeld = RawInput::IsKeyDown(VK_CONTROL);
-				bool shiftHeld = RawInput::IsKeyDown(VK_SHIFT);
-				bool altHeld = RawInput::IsKeyDown(VK_MENU);
-				const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
+				bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL);
+				bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
+				bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
+				
+				// look specifically for the binding configured with a hold delay
+				const KeyBind* holdBind = nullptr;
+				for (const KeyBind& bind : bindings) {
+					if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) {
+						holdBind = &bind;
+						break;
+					}
+				}
 
-				if (toRun != nullptr && toRun->holdSeconds > 0.0f) {
+				if (holdBind != nullptr) {
 					float elapsedSeconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count();
-					if (elapsedSeconds >= toRun->holdSeconds) {
-						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held " + std::to_string(toRun->holdSeconds) + "s");
-						FireBinding(*toRun);
+					if (elapsedSeconds >= holdBind->holdSeconds) {
+						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
+						FireBinding(*holdBind);
 						track.fired = true;
 					}
 				}
@@ -431,7 +477,7 @@ namespace RadarKeys {
 			ImGui::SameLine();
 			if (ImGui::Button("Apply##menuKey")) {
 				USHORT newVKey = vkNameTable[menuKeyComboIndex].vKey;
-				if (newVKey == menuToggleVKey || IsComboAvailable(newVKey, false, false, false)) {
+				if (newVKey == menuToggleVKey || IsComboAvailable(newVKey, false, false, false, 0.0f)) {
 					RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
 					RegisterMenuToggleKey(newVKey);
 					SaveBindings();
@@ -514,7 +560,7 @@ namespace RadarKeys {
 			ImGui::TextDisabled("Just a filename assumes mod/modules/ - or type a path (with / or \\) to use elsewhere");
 
 			USHORT selectedVKey = vkNameTable[addComboIndex].vKey;
-			bool comboAvailable = IsComboAvailable(selectedVKey, addCtrl, addShift, addAlt);
+			bool comboAvailable = IsComboAvailable(selectedVKey, addCtrl, addShift, addAlt, addHoldSeconds);
 			bool canAdd = scriptPathBuffer[0] != '\0' && comboAvailable;
 			if (!canAdd) {
 				ImGui::BeginDisabled();
@@ -528,7 +574,19 @@ namespace RadarKeys {
 				ImGui::EndDisabled();
 			}
 			if (scriptPathBuffer[0] != '\0' && !comboAvailable) {
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key + modifier combination is already in use");
+				// Check if the key combo exists at all
+				bool baseComboExists = false;
+				for (const KeyBind& bind : bindings) {
+					if (bind.vKey == selectedVKey && bind.needCtrl == addCtrl && bind.needShift == addShift && bind.needAlt == addAlt) {
+						baseComboExists = true;
+						break;
+					}
+				}
+				if (baseComboExists) {
+					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Key in use! Adjust 'Hold seconds' to map a unique secondary script.");
+				} else {
+					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "The key setting is already in use. Check the assigned scripts above.");
+				}
 			}
 
 			ImGui::End();
