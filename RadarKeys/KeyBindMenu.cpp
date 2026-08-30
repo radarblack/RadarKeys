@@ -208,17 +208,6 @@ namespace RadarKeys {
 
 			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
 
-			bool hasAnyHoldOption = false;
-			for (const KeyBind& bind : bindings) {
-				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
-					hasAnyHoldOption = true;
-					break;
-				}
-			}
-			if (hasAnyHoldOption) {
-				return; // bypass
-			}
-
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
@@ -304,7 +293,6 @@ namespace RadarKeys {
 				auto it = holdTracks.find(bind.vKey);
 
 				if (isPhysicallyPressed) {
-					// verify if current modifier states match this specific bind configuration
 					if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
 						if (it == holdTracks.end()) {
 							// start the long press interval tracker
@@ -330,6 +318,14 @@ namespace RadarKeys {
 				bool isStillPressed = (GetAsyncKeyState(activeVKey) & 0x8000) != 0;
 
 				if (!isStillPressed) {
+					if (!it->second.fired) {
+						// look up the fallback binding if there is an assigned script to the key
+						const KeyBind* tapBind = FindMatchingBinding(activeVKey, ctrlHeld, shiftHeld, altHeld);
+						if (tapBind && tapBind->holdSeconds <= 0.0f) {
+							DebuggerMenu::LogButtonPress(NameForVKey(activeVKey) + " tapped cleanly (Hold bypassed)");
+							FireBinding(*tapBind);
+						}
+					}
 					// clean the tracking sequence
 					it = holdTracks.erase(it);
 				} else {
