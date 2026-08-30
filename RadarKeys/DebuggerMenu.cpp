@@ -72,7 +72,8 @@ namespace RadarKeys {
 		}
 
 		void OnDoScriptResult(std::vector<std::string> args) {
-			if (args.size() < 1 + 3) {
+			// A valid success return needs at least 3 arguments ("DoScriptResult", identifier, successFlag)
+			if (args.size() < 3) {
 				spdlog::warn("DebuggerMenu::OnDoScriptResult: malformed args (size {})", args.size());
 				return;
 			}
@@ -85,6 +86,12 @@ namespace RadarKeys {
 				}
 			}
 			else {
+				// A failure return requires a 4th argument containing the error text string
+				if (args.size() < 4) {
+					spdlog::warn("DebuggerMenu::OnDoScriptResult: script failed but no error message provided (size {})", args.size());
+					return;
+				}
+
 				std::string errorMsg = args[3];
 				spdlog::error("[script][lua] FAILED: {}", errorMsg);
 				if (logScriptResult) {
