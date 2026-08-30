@@ -450,6 +450,7 @@ namespace RadarKeys {
 		void HookWndProc(HWND hWnd) {
 			//Redirect WndProc for hWnd
 			WndProc_Orig = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WndProc_Hook);
+		}
 
 		bool IsKeyHeldReal(USHORT vKey) {
 			// this is for the hold function.
