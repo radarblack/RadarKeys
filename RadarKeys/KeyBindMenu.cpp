@@ -209,12 +209,16 @@ namespace RadarKeys {
 			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
 
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
+				// the key was released. Check if we were tracking a hold for this key.
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
+					// if it hasn't fired the hold script yet, it means it's a short tap!
 					if (!it->second.fired) {
-						if (toRun && toRun->holdSeconds <= 0.0f) {
+						// look for a structural 'instant' (holdSeconds == 0) fallback binding on the same key combo
+						const KeyBind* tapBind = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
+						if (tapBind && tapBind->holdSeconds <= 0.0f) {
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
-							FireBinding(*toRun);
+							FireBinding(*tapBind);
 						}
 					}
 					holdTracks.erase(it);
@@ -238,26 +242,22 @@ namespace RadarKeys {
 				return;
 			}
 
-			if (!toRun->needCtrl && !toRun->needShift && !toRun->needAlt) {
-				ctrlHeld = false;
-				shiftHeld = false;
-				altHeld = false;
-			}
-
 			// look to see if there is ANY binding on this virtual key setup that uses a hold delay
 			bool hasHoldOptionOnKey = false;
 			for (const KeyBind& bind : bindings) {
-				if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) {
+				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
 					hasHoldOptionOnKey = true;
 					break;
 				}
 			}
 
 			if (toRun->holdSeconds <= 0.0f) {
+				// if there's no hold profile registered anywhere on this key, fire instantly like normal
 				if (!hasHoldOptionOnKey) {
 					FireBinding(*toRun);
 				}
 				else {
+					// if the user lets go early, OnBoundKeyPressed's ONUP section above catches it as a tap.
 					HoldTrack track;
 					track.startTime = std::chrono::steady_clock::now();
 					track.fired = false;
@@ -265,7 +265,7 @@ namespace RadarKeys {
 				}
 			}
 			else {
-				// long press interval tracker
+				// this is explicitly a hold binding. Start the clock timer ticker.
 				HoldTrack track;
 				track.startTime = std::chrono::steady_clock::now();
 				track.fired = false;
@@ -278,66 +278,37 @@ namespace RadarKeys {
 				return;
 			}
 
-			// query the modifier keys
-			bool ctrlHeld  = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-			bool shiftHeld = (GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0;
-			bool altHeld   = (GetAsyncKeyState(VK_MENU)    & 0x8000) != 0;
+			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
+				USHORT vKey = it->first;
+				HoldTrack& track = it->second;
 
-			for (const KeyBind& bind : bindings) {
-				if (bind.holdSeconds <= 0.0f) {
+				if (track.fired || !RawInput::IsKeyHeldReal(vKey)) {
+					it = holdTracks.erase(it);
 					continue;
 				}
 
-				auto it = holdTracks.find(bind.vKey);
-				bool isPhysicallyPressed = (GetAsyncKeyState(bind.vKey) & 0x8000) != 0 || (it != holdTracks.end());
-
-				if (isPhysicallyPressed) {
-					if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
-						if (it == holdTracks.end()) {
-							// start the long press interval tracker
-							HoldTrack newTrack;
-							newTrack.startTime = std::chrono::steady_clock::now();
-							newTrack.fired = false;
-							holdTracks[bind.vKey] = newTrack;
-						}
-						else if (!it->second.fired) {
-							float elapsedSeconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - it->second.startTime).count();
-							if (elapsedSeconds >= bind.holdSeconds) {
-								DebuggerMenu::LogButtonPress(NameForVKey(bind.vKey) + " long-press held past threshold " + std::to_string(bind.holdSeconds) + "s");
-								FireBinding(bind);
-								it->second.fired = true; // prevent duplicate triggers on this hold cycle
-							}
-						}
+				bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL);
+				bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
+				bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
+				
+				// look specifically for the binding configured with a hold delay
+				const KeyBind* holdBind = nullptr;
+				for (const KeyBind& bind : bindings) {
+					if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) {
+						holdBind = &bind;
+						break;
 					}
 				}
-			}
 
-			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
-				USHORT activeVKey = it->first;
-				bool isStillPressed = (GetAsyncKeyState(activeVKey) & 0x8000) != 0;
-
-				if (!isStillPressed) {
-					if (it->second.fired) {
-						// clean the tracking sequence
-						it = holdTracks.erase(it);
-						continue;
+				if (holdBind != nullptr) {
+					float elapsedSeconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count();
+					if (elapsedSeconds >= holdBind->holdSeconds) {
+						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
+						FireBinding(*holdBind);
+						track.fired = true;
 					}
-
-					// fire the fallback tap script here directly from the hardware switch release state!
-					bool activeShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-					if (activeShift) {
-						const KeyBind* tapBind = FindMatchingBinding(activeVKey, ctrlHeld, shiftHeld, altHeld);
-						if (tapBind && tapBind->holdSeconds <= 0.0f) {
-							DebuggerMenu::LogButtonPress(NameForVKey(activeVKey) + " tapped cleanly (Sprinting fallback)");
-							FireBinding(*tapBind);
-						}
-					}
-
-					// clean the tracking sequence
-					it = holdTracks.erase(it);
-				} else {
-					++it;
 				}
+				++it;
 			}
 		}
 
