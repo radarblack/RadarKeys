@@ -649,8 +649,11 @@ namespace RadarKeys {
 			}
 			ImGui::Separator();
 
-			// configuration mapping tracking table rows
-			ImGui::Text("Current Menu Toggle Hotkey: %s", NameForVKey(menuToggleVKey).c_str());
+			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "] (Click to reassign)";
+			if (ImGui::Button(buttonLabel.c_str(), ImVec2(-1, 28))) {
+				isAssigningMenuToggleKey = true;
+				showCapturePrompt = true;
+			}
 			ImGui::Separator();
 
 			int removeIndex = -1;
@@ -675,7 +678,7 @@ namespace RadarKeys {
 			}
 
 			if (bindings.empty()) ImGui::BeginDisabled();
-			if (ImGui::Button("Clear All Registered Hotkeys")) {
+			if (ImGui::Button("Clear All Hotkeys")) {
 				RemoveAllBindings();
 			}
 			if (bindings.empty()) ImGui::EndDisabled();
