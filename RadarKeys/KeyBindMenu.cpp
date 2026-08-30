@@ -184,6 +184,10 @@ namespace RadarKeys {
 		}
 
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
+			if (showCapturePrompt) {
+				return;
+			}
+
 			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL);
 			bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
 			bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
@@ -255,6 +259,11 @@ namespace RadarKeys {
 		}
 
 		void Update() {
+			// this should prevent any script running when pressing the same button to bind a long press. hopefully. lol
+			if (showCapturePrompt) {
+				return;
+			}
+
 			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
 				USHORT vKey = it->first;
 				HoldTrack& track = it->second;
