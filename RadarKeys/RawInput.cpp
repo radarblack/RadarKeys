@@ -444,10 +444,5 @@ namespace RadarKeys {
 			//Redirect WndProc for hWnd
 			WndProc_Orig = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WndProc_Hook);
 		}
-
-		bool IsKeyHeldReal(USHORT vKey) {
-			if (vKey >= vKeyMax) return false;
-			return realStateHeld[vKey];
-		}
 	}
 }
