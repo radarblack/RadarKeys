@@ -278,37 +278,46 @@ namespace RadarKeys {
 				return;
 			}
 
-			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
-				USHORT vKey = it->first;
-				HoldTrack& track = it->second;
-
-				if (track.fired || !RawInput::IsKeyHeldReal(vKey)) {
-					it = holdTracks.erase(it);
+			for (const KeyBind& bind : bindings) {
+				if (bind.holdSeconds <= 0.0f) {
 					continue;
 				}
 
-				bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL);
-				bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
-				bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
-				
-				// look specifically for the binding configured with a hold delay
-				const KeyBind* holdBind = nullptr;
-				for (const KeyBind& bind : bindings) {
-					if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) {
-						holdBind = &bind;
-						break;
-					}
-				}
+				// check the hardware state of the modifier keys
+				bool isPhysicallyPressed = (GetAsyncKeyState(bind.holdSeconds > 0.0f ? bind.vKey : bind.vKey) & 0x8000) != 0;
+				auto it = holdTracks.find(bind.vKey);
 
-				if (holdBind != nullptr) {
-					float elapsedSeconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count();
-					if (elapsedSeconds >= holdBind->holdSeconds) {
-						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
-						FireBinding(*holdBind);
-						track.fired = true;
+				if (isPhysicallyPressed) {
+					// query the modifier keys
+					bool ctrlHeld  = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+					bool shiftHeld = (GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0;
+					bool altHeld   = (GetAsyncKeyState(VK_MENU)    & 0x8000) != 0;
+
+					// Verify if current modifier states match this specific bind configuration
+					if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
+						if (it == holdTracks.end()) {
+							// start the long press interval tracker
+							HoldTrack newTrack;
+							newTrack.startTime = std::chrono::steady_clock::now();
+							newTrack.fired = false;
+							holdTracks[bind.vKey] = newTrack;
+						}
+						else if (!it->second.fired) {
+							float elapsedSeconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - it->second.startTime).count();
+							if (elapsedSeconds >= bind.holdSeconds) {
+								DebuggerMenu::LogButtonPress(NameForVKey(bind.vKey) + " long-press held past threshold " + std::to_string(bind.holdSeconds) + "s");
+								FireBinding(bind);
+								it->second.fired = true; // prevent duplicate triggers on this hold cycle
+							}
+						}
 					}
 				}
-				++it;
+				else {
+					// clean the tracking sequence
+					if (it != holdTracks.end()) {
+						holdTracks.erase(it);
+					}
+				}
 			}
 		}
 
