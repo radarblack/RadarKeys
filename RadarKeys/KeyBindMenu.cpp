@@ -562,34 +562,35 @@ namespace RadarKeys {
 			ImGui::SameLine(186);
 			
 			ImGui::BeginGroup();
-			ImGui::Text("Long Press");
-			ImGui::SetNextItemWidth(88); 
-			ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
-			if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
-			if (ImGui::Button(" - ##SubHold", ImVec2(40, 24))) {
-				capturedHoldSeconds -= 0.5f;
+			if (!isAssigningMenuToggleKey) {
+				ImGui::Text("Long Press:");
+				ImGui::SetNextItemWidth(88); 
+				ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
 				if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
+				if (ImGui::Button(" - ##SubHold", ImVec2(40, 24))) {
+					capturedHoldSeconds -= 0.5f;
+					if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
+				}
+				ImGui::SameLine(48);
+				if (ImGui::Button(" + ##AddHold", ImVec2(40, 24))) {
+					capturedHoldSeconds += 0.5f;
+				}
+				ImGui::Spacing();
 			}
-			ImGui::SameLine(48);
-			if (ImGui::Button(" + ##AddHold", ImVec2(40, 24))) {
-				capturedHoldSeconds += 0.5f;
-			}
-			
-			ImGui::Spacing();
 			
 			// tooltip
 			bool comboAvailable = (capturedVKey == 0) ? true : IsComboAvailable(capturedVKey, capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds);
 			
 			float columnWidth = 88.0f;
 			if (!comboAvailable) {
-				float labelTextWidth = ImGui::CalcTextSize("[ BLOCKED ]").x;
+				float labelTextWidth = ImGui::CalcTextSize("[ In Use ]").x;
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (columnWidth - labelTextWidth) * 0.5f);
 				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "[ In Use ]");
 				if (ImGui::IsItemHovered()) {
 					ImGui::SetTooltip("Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
 				}
 			} else {
-				float labelTextWidth = ImGui::CalcTextSize("[ READY ]").x;
+				float labelTextWidth = ImGui::CalcTextSize("[ Ready ]").x;
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (columnWidth - labelTextWidth) * 0.5f);
 				ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "[ Ready ]");
 				if (ImGui::IsItemHovered()) {
@@ -601,11 +602,12 @@ namespace RadarKeys {
 			ImGui::Separator();
 
 			// script path
-			ImGui::Text("Script Path:");
-			ImGui::SetNextItemWidth(-1);
-			ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
-
-			ImGui::Spacing();
+			if (!isAssigningMenuToggleKey) {
+				ImGui::Text("Script Path:");
+				ImGui::SetNextItemWidth(-1);
+				ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
+				ImGui::Spacing();
+			}
 
 			// finalize
 			bool canFinalize = capturedVKey != 0 && (isAssigningMenuToggleKey || capturedScriptPathBuffer[0] != '\0') && comboAvailable;
