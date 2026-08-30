@@ -458,11 +458,12 @@ namespace RadarKeys {
 		static char capturedScriptPathBuffer[512] = "";
 
 		void DrawKeyCapturePrompt() {
-			// box boundary symmetry calc
-			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_Always);
-			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_Always);
+			// makes the original window size persistent
+			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
 
-			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
+			// makes it resizable
+			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
 				ImGui::End();
 				return;
 			}
@@ -538,7 +539,6 @@ namespace RadarKeys {
 			ImGui::EndGroup();
 			
 			ImGui::SameLine(186);
-			ImGui::Text("     ");
 			
 			ImGui::BeginGroup();
 			ImGui::Text("Long Press");
