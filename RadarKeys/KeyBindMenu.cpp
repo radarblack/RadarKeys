@@ -472,7 +472,7 @@ namespace RadarKeys {
 			ImGui::SameLine();
 			if (ImGui::Button("Apply##menuKey")) {
 				USHORT newVKey = vkNameTable[menuKeyComboIndex].vKey;
-				if (newVKey == menuToggleVKey || IsComboAvailable(newVKey, false, false, false)) {
+				if (newVKey == menuToggleVKey || IsComboAvailable(newVKey, false, false, false, 0.0f)) {
 					RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
 					RegisterMenuToggleKey(newVKey);
 					SaveBindings();
@@ -555,7 +555,7 @@ namespace RadarKeys {
 			ImGui::TextDisabled("Just a filename assumes mod/modules/ - or type a path (with / or \\) to use elsewhere");
 
 			USHORT selectedVKey = vkNameTable[addComboIndex].vKey;
-			bool comboAvailable = IsComboAvailable(selectedVKey, addCtrl, addShift, addAlt);
+			bool comboAvailable = IsComboAvailable(selectedVKey, addCtrl, addShift, addAlt, addHoldSeconds);
 			bool canAdd = scriptPathBuffer[0] != '\0' && comboAvailable;
 			if (!canAdd) {
 				ImGui::BeginDisabled();
