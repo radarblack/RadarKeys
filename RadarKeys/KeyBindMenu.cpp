@@ -565,14 +565,14 @@ namespace RadarKeys {
 			ImGui::Separator();
 
 			// finalize
-			bool canFinalize = capturedVKey != 0 && capturedScriptPathBuffer != '\0' && comboAvailable;
+			bool canFinalize = capturedVKey != 0 && capturedScriptPathBuffer[0] != '\0' && comboAvailable;
 			if (!canFinalize) ImGui::BeginDisabled();
 			
 			if (ImGui::Button("Finalize", ImVec2(145, 30))) {
 				AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
 				capturedVKey = 0;
 				capturedHoldSeconds = 0.0f;
-				capturedScriptPathBuffer = '\0';
+				capturedScriptPathBuffer[0] = '\0';
 				showCapturePrompt = false;
 			}
 			if (!canFinalize) ImGui::EndDisabled();
@@ -581,7 +581,7 @@ namespace RadarKeys {
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
 				capturedVKey = 0;
 				capturedHoldSeconds = 0.0f;
-				capturedScriptPathBuffer = '\0';
+				capturedScriptPathBuffer[0] = '\0';
 				showCapturePrompt = false;
 			}
 
