@@ -278,22 +278,22 @@ namespace RadarKeys {
 				return;
 			}
 
+			// query the modifier keys
+			bool ctrlHeld  = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+			bool shiftHeld = (GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0;
+			bool altHeld   = (GetAsyncKeyState(VK_MENU)    & 0x8000) != 0;
+
 			for (const KeyBind& bind : bindings) {
 				if (bind.holdSeconds <= 0.0f) {
 					continue;
 				}
 
 				// check the hardware state of the modifier keys
-				bool isPhysicallyPressed = (GetAsyncKeyState(bind.holdSeconds > 0.0f ? bind.vKey : bind.vKey) & 0x8000) != 0;
+				bool isPhysicallyPressed = (GetAsyncKeyState(bind.vKey) & 0x8000) != 0;
 				auto it = holdTracks.find(bind.vKey);
 
 				if (isPhysicallyPressed) {
-					// query the modifier keys
-					bool ctrlHeld  = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-					bool shiftHeld = (GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0;
-					bool altHeld   = (GetAsyncKeyState(VK_MENU)    & 0x8000) != 0;
-
-					// Verify if current modifier states match this specific bind configuration
+					// verify if current modifier states match this specific bind configuration
 					if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
 						if (it == holdTracks.end()) {
 							// start the long press interval tracker
@@ -312,11 +312,17 @@ namespace RadarKeys {
 						}
 					}
 				}
-				else {
+			}
+
+			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
+				USHORT activeVKey = it->first;
+				bool isStillPressed = (GetAsyncKeyState(activeVKey) & 0x8000) != 0;
+
+				if (!isStillPressed) {
 					// clean the tracking sequence
-					if (it != holdTracks.end()) {
-						holdTracks.erase(it);
-					}
+					it = holdTracks.erase(it);
+				} else {
+					++it;
 				}
 			}
 		}
