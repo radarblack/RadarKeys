@@ -184,10 +184,6 @@ namespace RadarKeys {
 		}
 
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
-			if (showCapturePrompt) {
-				return;
-			}
-
 			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL);
 			bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
 			bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
