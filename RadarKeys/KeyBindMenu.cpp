@@ -206,17 +206,21 @@ namespace RadarKeys {
 			bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
 			bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
 
+			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
+
+			if (toRun != nullptr && !toRun->needCtrl && !toRun->needShift && !toRun->needAlt) {
+				ctrlHeld = false;
+				shiftHeld = false;
+				altHeld = false;
+			}
+
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
-				// the key was released. Check if we were tracking a hold for this key.
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
-					// if it hasn't fired the hold script yet, it means it's a short tap!
 					if (!it->second.fired) {
-						// look for a structural 'instant' (holdSeconds == 0) fallback binding on the same key combo
-						const KeyBind* tapBind = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
-						if (tapBind && tapBind->holdSeconds <= 0.0f) {
+						if (toRun && toRun->holdSeconds <= 0.0f) {
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
-							FireBinding(*tapBind);
+							FireBinding(*toRun);
 						}
 					}
 					holdTracks.erase(it);
@@ -236,7 +240,6 @@ namespace RadarKeys {
 			pressedName += NameForVKey(vKey);
 			DebuggerMenu::LogButtonPress(pressedName + " pressed");
 
-			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
 			if (toRun == nullptr) {
 				return;
 			}
@@ -251,12 +254,10 @@ namespace RadarKeys {
 			}
 
 			if (toRun->holdSeconds <= 0.0f) {
-				// if there's no hold profile registered anywhere on this key, fire instantly like normal
 				if (!hasHoldOptionOnKey) {
 					FireBinding(*toRun);
 				}
 				else {
-					// if the user lets go early, OnBoundKeyPressed's ONUP section above catches it as a tap.
 					HoldTrack track;
 					track.startTime = std::chrono::steady_clock::now();
 					track.fired = false;
@@ -264,7 +265,7 @@ namespace RadarKeys {
 				}
 			}
 			else {
-				// this is explicitly a hold binding. Start the clock timer ticker.
+				// long press interval tracker
 				HoldTrack track;
 				track.startTime = std::chrono::steady_clock::now();
 				track.fired = false;
@@ -551,13 +552,15 @@ namespace RadarKeys {
 
 			// modifier
 			ImGui::BeginGroup();
-			ImGui::Checkbox("Ctrl", &capturedCtrl);
-			ImGui::Checkbox("Shift", &capturedShift);
-			ImGui::Checkbox("Alt", &capturedAlt);
-			ImGui::Spacing();
+			if (!isAssigningMenuToggleKey) {
+				ImGui::Checkbox("Ctrl", &capturedCtrl);
+				ImGui::Checkbox("Shift", &capturedShift);
+				ImGui::Checkbox("Alt", &capturedAlt);
+				ImGui::Spacing();
+			}
+			
 			if (ImGui::Button("Reset", ImVec2(55, 22))) {
 				capturedVKey = 0;
-				// resets the checkboxes if the modifier keys was released before pressing other buttons
 				capturedCtrl = false;
 				capturedShift = false;
 				capturedAlt = false;
