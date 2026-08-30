@@ -544,7 +544,7 @@ namespace RadarKeys {
 				
 				ImGui::SetCursorPosY(startVerticalY);
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(keyName.c_str()).x) * 0.5f);
-				ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "  %s", keyName.c_str());
+				ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), " %s", keyName.c_str());
 			}
 			ImGui::EndChild();
 
