@@ -168,24 +168,29 @@ namespace RadarKeys {
 
 		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld) {
 			const KeyBind* exactMatch = nullptr;
-			const KeyBind* fallbackMatch = nullptr; // the plain/no-modifier binding on this vKey, if any
+			const KeyBind* fallbackMatch = nullptr; // fallback if there is no assigned script to the key combo
+
 			for (const KeyBind& bind : bindings) {
 				if (bind.vKey != vKey) {
 					continue;
 				}
+
 				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
 					exactMatch = &bind;
 					break;
 				}
+
 				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) {
 					fallbackMatch = &bind;
 				}
 			}
+
+			// return the precise modifier profile if found; otherwise drop down to your plain key bind seamlessly
 			return exactMatch != nullptr ? exactMatch : fallbackMatch;
 		}
 
 		void FireBinding(const KeyBind& bind) {
-			// Checks if file exists
+			// checks if file exists
 			if (DebuggerMenu::LogScriptAttempt(bind.scriptPath)) {
 				LuaBridge::QueueMessageIn("DoScript|dofile([[" + bind.scriptPath + "]])");
 			}
@@ -615,8 +620,12 @@ namespace RadarKeys {
 			
 			if (ImGui::Button("Finalize", ImVec2(145, 30))) {
 				if (isAssigningMenuToggleKey) {
+					if (menuToggleHandle != 0) {
+						RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
+					}
 					menuToggleVKey = capturedVKey;
-					
+					menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
+
 					SaveBindings(); 
 					DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
 				}
