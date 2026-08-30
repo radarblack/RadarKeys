@@ -535,21 +535,21 @@ namespace RadarKeys {
 				capturedShift = false;
 				capturedAlt = false;
 			}
-			
 			ImGui::EndGroup();
+			
 			ImGui::SameLine(186);
+			ImGui::Text("     ");
+			
 			ImGui::BeginGroup();
 			ImGui::Text("Long Press");
-			
 			ImGui::SetNextItemWidth(88); 
 			ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
 			if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
-
 			if (ImGui::Button(" - ##SubHold", ImVec2(40, 24))) {
 				capturedHoldSeconds -= 0.5f;
 				if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
 			}
-			ImGui::SameLine(48); // Perfect symmetric separation gap
+			ImGui::SameLine(48);
 			if (ImGui::Button(" + ##AddHold", ImVec2(40, 24))) {
 				capturedHoldSeconds += 0.5f;
 			}
@@ -585,7 +585,6 @@ namespace RadarKeys {
 			ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
 
 			ImGui::Spacing();
-			ImGui::Separator();
 
 			// finalize
 			bool canFinalize = capturedVKey != 0 && capturedScriptPathBuffer[0] != '\0' && comboAvailable;
