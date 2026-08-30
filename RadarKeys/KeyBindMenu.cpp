@@ -118,6 +118,12 @@ namespace RadarKeys {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
 			}
+			
+			// safety gate. so that you can't close the menu when the prompt is up.
+			if (showCapturePrompt) {
+				return;
+			}
+
 			menuOpen = !menuOpen;
 		}
 
