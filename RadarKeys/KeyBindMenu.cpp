@@ -137,7 +137,12 @@ namespace RadarKeys {
 			}
 			for (const KeyBind& bind : bindings) {
 				if (bind.vKey == vKey && bind.needCtrl == needCtrl && bind.needShift == needShift && bind.needAlt == needAlt) {
-					// Block ONLY if both are trying to be tap actions or both are trying to be hold actions
+					// If the hold seconds match, they are conflicting duplicates.
+					if (bind.holdSeconds == holdSeconds) {
+						return false;
+					}
+					
+					// chceks if the hold second remains at 0.0
 					if ((holdSeconds <= 0.0f && bind.holdSeconds <= 0.0f) || (holdSeconds > 0.0f && bind.holdSeconds > 0.0f)) {
 						return false;
 					}
@@ -569,7 +574,19 @@ namespace RadarKeys {
 				ImGui::EndDisabled();
 			}
 			if (scriptPathBuffer[0] != '\0' && !comboAvailable) {
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "That key + modifier combination is already in use");
+				// Check if the key combo exists at all
+				bool baseComboExists = false;
+				for (const KeyBind& bind : bindings) {
+					if (bind.vKey == selectedVKey && bind.needCtrl == addCtrl && bind.needShift == addShift && bind.needAlt == addAlt) {
+						baseComboExists = true;
+						break;
+					}
+				}
+				if (baseComboExists) {
+					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Key in use! Adjust 'Hold seconds' to map a unique secondary script.");
+				} else {
+					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "The key setting is already in use. Check the assigned scripts above.");
+				}
 			}
 
 			ImGui::End();
