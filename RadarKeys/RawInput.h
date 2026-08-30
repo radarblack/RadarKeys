@@ -11,6 +11,9 @@ namespace RadarKeys {
 			HELD
 		};
 
+		// checks if the long press is valid.
+		bool IsKeyHeldReal(USHORT vKey);
+
 		// changed to std::function to allow capturing lambdas for dynamic key bindings while keeping plain function pointers compatible.
 		typedef std::function<void(BUTTONEVENT buttonEvent)> ButtonAction;
 
