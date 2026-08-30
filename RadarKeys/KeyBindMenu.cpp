@@ -18,6 +18,8 @@ namespace RadarKeys {
 
 		std::vector<KeyBind> bindings;
 
+		bool showCapturePrompt = false;
+
 		const std::string& GetBindsFileName() {
 			static std::string cached;
 			if (cached.empty()) {
@@ -448,7 +450,6 @@ namespace RadarKeys {
 			RegisterMenuToggleKey(menuToggleVKey);
 		}
 
-		static bool showCapturePrompt = false;
 		static USHORT capturedVKey = 0;
 		static bool capturedCtrl = false;
 		static bool capturedShift = false;
