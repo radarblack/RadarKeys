@@ -247,7 +247,7 @@ namespace RadarKeys {
 			// look to see if there is ANY binding on this virtual key setup that uses a hold delay
 			bool hasHoldOptionOnKey = false;
 			for (const KeyBind& bind : bindings) {
-				if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) {
+				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
 					hasHoldOptionOnKey = true;
 					break;
 				}
@@ -289,10 +289,11 @@ namespace RadarKeys {
 				}
 
 				// check the hardware state of the modifier keys
-				bool isPhysicallyPressed = (GetAsyncKeyState(bind.vKey) & 0x8000) != 0;
 				auto it = holdTracks.find(bind.vKey);
+				bool isPhysicallyPressed = (GetAsyncKeyState(bind.vKey) & 0x8000) != 0 || (it != holdTracks.end());
 
 				if (isPhysicallyPressed) {
+					// Verify if current modifier states match this specific bind configuration
 					if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
 						if (it == holdTracks.end()) {
 							// start the long press interval tracker
@@ -313,20 +314,12 @@ namespace RadarKeys {
 				}
 			}
 
+			// clean the tracking sequence
 			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
 				USHORT activeVKey = it->first;
 				bool isStillPressed = (GetAsyncKeyState(activeVKey) & 0x8000) != 0;
 
 				if (!isStillPressed) {
-					if (!it->second.fired) {
-						// look up the fallback binding if there is an assigned script to the key
-						const KeyBind* tapBind = FindMatchingBinding(activeVKey, ctrlHeld, shiftHeld, altHeld);
-						if (tapBind && tapBind->holdSeconds <= 0.0f) {
-							DebuggerMenu::LogButtonPress(NameForVKey(activeVKey) + " tapped cleanly (Hold bypassed)");
-							FireBinding(*tapBind);
-						}
-					}
-					// clean the tracking sequence
 					it = holdTracks.erase(it);
 				} else {
 					++it;
