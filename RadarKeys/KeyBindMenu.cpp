@@ -439,61 +439,177 @@ namespace RadarKeys {
 			RegisterMenuToggleKey(menuToggleVKey);
 		}
 
+		static bool showCapturePrompt = false;
+		static USHORT capturedVKey = 0;
+		static bool capturedCtrl = false;
+		static bool capturedShift = false;
+		static bool capturedAlt = false;
+		static float capturedHoldSeconds = 0.0f;
+		static char capturedScriptPathBuffer[512] = "";
+
+		void DrawKeyCapturePrompt() {
+			// center the  overlay nicely on the viewport screen
+			ImGui::SetNextWindowSize(ImVec2(500, 250), ImGuiCond_Always);
+			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 250, ImGui::GetIO().DisplaySize.y * 0.5f - 125), ImGuiCond_Always);
+
+			if (!ImGui::Begin("Assign Hotkey Connection", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
+				ImGui::End();
+				return;
+			}
+
+			// key capture
+			if (capturedVKey == 0) {
+				for (int i = 1; i < 256; i++) {
+					// skip processing modifier keys independently so they don't break the listener
+					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN) {
+						continue;
+					}
+					// ignore left mouse clicks inside the menu bounds so checking checkboxes works safely
+					if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
+						continue;
+					}
+
+					if (ImGui::IsKeyPressed((ImGuiKey)i)) {
+						capturedVKey = (USHORT)i;
+						
+						// lock in active modifier states the instant the base key is registered
+						capturedCtrl = ImGui::GetIO().KeyCtrl;
+						capturedShift = ImGui::GetIO().KeyShift;
+						capturedAlt = ImGui::GetIO().KeyAlt;
+						break;
+					}
+				}
+			}
+
+			ImGui::BeginChild("KeyDisplayFrame", ImVec2(160, 100), true);
+			if (capturedVKey == 0) {
+				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "PRESS ANY KEY...");
+			} else {
+				ImGui::Text("Captured Base:");
+				ImGui::Separator();
+				ImGui::Spacing();
+				ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "  %s", NameForVKey(capturedVKey).c_str());
+				ImGui::Spacing();
+				ImGui::TextDisabled("(Click here to reset)");
+				if (ImGui::IsItemClicked()) {
+					capturedVKey = 0;
+				}
+			}
+			ImGui::EndChild();
+
+			ImGui::SameLine();
+
+			// column stack layout for modifiers matching your wireframe center boxes alignment
+			ImGui::BeginGroup();
+			ImGui::Checkbox("Ctrl", &capturedCtrl);
+			ImGui::Checkbox("Shift", &capturedShift);
+			ImGui::Checkbox("Alt", &capturedAlt);
+			ImGui::EndGroup();
+
+			ImGui::SameLine(260);
+
+			// right side panel for Hold seconds numerical display controls
+			ImGui::BeginGroup();
+			ImGui::Text("Hold Configuration:");
+			
+			// upper Horizontal Rectangle display container matching your graphic design layout
+			ImGui::BeginChild("HoldValueBox", ImVec2(180, 28), true, ImGuiWindowFlags_NoScrollbar);
+			if (capturedHoldSeconds <= 0.0f) {
+				ImGui::Text("Instant Trigger (0.0s)");
+			} else {
+				ImGui::Text("Duration: %.1fs", capturedHoldSeconds);
+			}
+			ImGui::EndChild();
+
+			// math calculation adjustments via [+] and [-] control buttons
+			if (ImGui::Button(" - ##SubHold", ImVec2(40, 25))) {
+				capturedHoldSeconds -= 0.5f;
+				if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button(" + ##AddHold", ImVec2(40, 25))) {
+				capturedHoldSeconds += 0.5f;
+			}
+			
+			ImGui::SameLine(115);
+			
+			// tooltip
+			bool comboAvailable = (capturedVKey == 0) ? true : IsComboAvailable(capturedVKey, capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds);
+			if (!comboAvailable) {
+				// red warning visual status container box
+				ImGui::BeginChild("StatusIndicatorBox", ImVec2(65, 25), true);
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), " BLOCKED ");
+				ImGui::EndChild();
+				
+				// hover tooltip execution string block explaining the structural assignment issue
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Conflict! Key combination is already in use.\nAdjust 'Hold seconds' value to unlock a secondary script assignment.");
+				}
+			} else {
+				// green safe status
+				ImGui::BeginChild("StatusIndicatorBox", ImVec2(65, 25), true);
+				ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " READY ");
+				ImGui::EndChild();
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Configuration slot is open and ready to register target script execution.");
+				}
+			}
+			ImGui::EndGroup();
+
+			ImGui::Separator();
+
+			ImGui::Text("Target Script Path:");
+			ImGui::SetNextItemWidth(-1);
+			ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
+
+			ImGui::Spacing();
+			ImGui::Separator();
+
+			// finalize
+			bool canFinalize = capturedVKey != 0 && capturedScriptPathBuffer[0] != '\0' && comboAvailable;
+			if (!canFinalize) ImGui::BeginDisabled();
+			
+			// "Finalize" button assignment hook
+			if (ImGui::Button("Finalize Assignment", ImVec2(235, 30))) {
+				AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
+				
+				// safely clean context loops, reset local parameter buffers, and return control
+				capturedVKey = 0;
+				capturedHoldSeconds = 0.0f;
+				capturedScriptPathBuffer[0] = '\0';
+				showCapturePrompt = false;
+			}
+			if (!canFinalize) ImGui::EndDisabled();
+
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(235, 30))) {
+				capturedVKey = 0;
+				capturedHoldSeconds = 0.0f;
+				capturedScriptPathBuffer[0] = '\0';
+				showCapturePrompt = false;
+			}
+
+			ImGui::End();
+		}
+
 		void Draw(bool* p_open) {
-			ImGui::SetNextWindowSize(ImVec2(460, 460), ImGuiCond_::ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(480, 360), ImGuiCond_::ImGuiCond_FirstUseEver);
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) {
 				ImGui::End();
 				return;
 			}
 
-			if (ImGui::Button("Debugger")) {
+			if (ImGui::Button("Debugger Overlay")) {
 				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 			}
 			ImGui::Separator();
 
-			// trmap the menu's own toggle key (no modifier support here - see IsReservedVKey comment)
-			ImGui::Text("Menu opens with: %s", NameForVKey(menuToggleVKey).c_str());
-			ImGui::SameLine();
-			static int menuKeyComboIndex = -1;
-			if (menuKeyComboIndex == -1) {
-				for (int i = 0; i < vkNameTableCount; i++) {
-					if (vkNameTable[i].vKey == menuToggleVKey) {
-						menuKeyComboIndex = i;
-						break;
-					}
-				}
-				if (menuKeyComboIndex == -1) menuKeyComboIndex = 0;
-			}
-			ImGui::SetNextItemWidth(100);
-			if (ImGui::BeginCombo("##menuKeyCombo", vkNameTable[menuKeyComboIndex].name)) {
-				for (int i = 0; i < vkNameTableCount; i++) {
-					bool selected = (i == menuKeyComboIndex);
-					if (ImGui::Selectable(vkNameTable[i].name, selected)) {
-						menuKeyComboIndex = i;
-					}
-				}
-				ImGui::EndCombo();
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Apply##menuKey")) {
-				USHORT newVKey = vkNameTable[menuKeyComboIndex].vKey;
-				if (newVKey == menuToggleVKey || IsComboAvailable(newVKey, false, false, false, 0.0f)) {
-					RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
-					RegisterMenuToggleKey(newVKey);
-					SaveBindings();
-				}
-				else {
-					spdlog::warn("KeyBindMenu: can't remap menu-toggle key to {} - already in use", vkNameTable[menuKeyComboIndex].name);
-				}
-			}
-
+			// configuration mapping tracking table rows
+			ImGui::Text("Current Menu Toggle Hotkey: %s", NameForVKey(menuToggleVKey).c_str());
 			ImGui::Separator();
-			ImGui::TextWrapped("Scripts assigned on keys trigger even while holding a modifier key, except if there is an assigned script to that keys combination.");
-			ImGui::Spacing();
 
-			// existing bindings list, each with its own remove button, plus a bulk "Remove All"
 			int removeIndex = -1;
-			ImGui::BeginChild("BindingsList", ImVec2(0, 180), true);
+			ImGui::BeginChild("ActiveBindingsOverviewList", ImVec2(0, 200), true);
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
 				if (ImGui::Button("Remove")) {
@@ -501,95 +617,38 @@ namespace RadarKeys {
 				}
 				ImGui::SameLine();
 				ImGui::Text("%s", CombinedDisplayName(bindings[i]).c_str());
-				ImGui::SameLine(160);
+				ImGui::SameLine(180);
 				std::string scriptName = std::filesystem::path(bindings[i].scriptPath).filename().string();
-				ImGui::TextWrapped("%s", scriptName.c_str());
+				ImGui::TextWrapped("-> %s", scriptName.c_str());
 				ImGui::PopID();
 				ImGui::Separator();
 			}
 			ImGui::EndChild();
+
 			if (removeIndex != -1) {
 				RemoveBinding(removeIndex);
 			}
 
-			if (bindings.empty()) {
-				ImGui::BeginDisabled();
-			}
-			if (ImGui::Button("Remove All Bindings")) {
+			if (bindings.empty()) ImGui::BeginDisabled();
+			if (ImGui::Button("Clear All Registered Hotkeys")) {
 				RemoveAllBindings();
 			}
-			if (bindings.empty()) {
-				ImGui::EndDisabled();
-			}
+			if (bindings.empty()) ImGui::EndDisabled();
 
+			ImGui::Separator();
 			ImGui::Spacing();
-			ImGui::Text("Add new binding");
 
-			static int addComboIndex = 0;
-			ImGui::SetNextItemWidth(100);
-			if (ImGui::BeginCombo("Key##addCombo", vkNameTable[addComboIndex].name)) {
-				for (int i = 0; i < vkNameTableCount; i++) {
-					bool selected = (i == addComboIndex);
-					if (ImGui::Selectable(vkNameTable[i].name, selected)) {
-						addComboIndex = i;
-					}
-				}
-				ImGui::EndCombo();
-			}
-			ImGui::SameLine();
-			static bool addCtrl = false;
-			static bool addShift = false;
-			static bool addAlt = false;
-			ImGui::Checkbox("Ctrl", &addCtrl);
-			ImGui::SameLine();
-			ImGui::Checkbox("Shift", &addShift);
-			ImGui::SameLine();
-			ImGui::Checkbox("Alt", &addAlt);
-
-			static float addHoldSeconds = 0.0f;
-			ImGui::SetNextItemWidth(120);
-			ImGui::InputFloat("Hold seconds (0 = instant)", &addHoldSeconds, 0.5f, 1.0f, "%.1f");
-			if (addHoldSeconds < 0.0f) {
-				addHoldSeconds = 0.0f;
-			}
-
-			// plain text file path input (abs/rel to game root); no Win32 dialog deps.
-			static char scriptPathBuffer[512] = "";
-			ImGui::SetNextItemWidth(-1);
-			ImGui::InputText("##scriptPathInput", scriptPathBuffer, IM_ARRAYSIZE(scriptPathBuffer));
-			ImGui::TextDisabled("Just a filename assumes mod/modules/ - or type a path (with / or \\) to use elsewhere");
-
-			USHORT selectedVKey = vkNameTable[addComboIndex].vKey;
-			bool comboAvailable = IsComboAvailable(selectedVKey, addCtrl, addShift, addAlt, addHoldSeconds);
-			bool canAdd = scriptPathBuffer[0] != '\0' && comboAvailable;
-			if (!canAdd) {
-				ImGui::BeginDisabled();
-			}
-			if (ImGui::Button("Add Binding")) {
-				AddBinding(selectedVKey, vkNameTable[addComboIndex].name, addCtrl, addShift, addAlt, addHoldSeconds, ResolveScriptPath(scriptPathBuffer));
-				scriptPathBuffer[0] = '\0';
-				addHoldSeconds = 0.0f;
-			}
-			if (!canAdd) {
-				ImGui::EndDisabled();
-			}
-			if (scriptPathBuffer[0] != '\0' && !comboAvailable) {
-				// Check if the key combo exists at all
-				bool baseComboExists = false;
-				for (const KeyBind& bind : bindings) {
-					if (bind.vKey == selectedVKey && bind.needCtrl == addCtrl && bind.needShift == addShift && bind.needAlt == addAlt) {
-						baseComboExists = true;
-						break;
-					}
-				}
-				if (baseComboExists) {
-					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Key in use! Adjust 'Hold seconds' to map a unique secondary script.");
-				} else {
-					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "The key setting is already in use. Check the assigned scripts above.");
-				}
+			// launch the custom prompt
+			if (ImGui::Button("Add New Binding...", ImVec2(-1, 35))) {
+				showCapturePrompt = true;
 			}
 
 			ImGui::End();
+
+			// draw if hte user interacts
+			if (showCapturePrompt) {
+				DrawKeyCapturePrompt();
+			}
 		}
 	}
 }
