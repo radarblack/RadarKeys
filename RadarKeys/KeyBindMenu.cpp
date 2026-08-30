@@ -499,24 +499,39 @@ namespace RadarKeys {
 			}
 
 			// key capture
-			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true);
+			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
+			
 			float availWidth = ImGui::GetContentRegionAvail().x;
+			float availHeight = ImGui::GetContentRegionAvail().y;
 			
 			float titleWidth = ImGui::CalcTextSize("Key").x;
 			ImGui::SetCursorPosX((availWidth - titleWidth) * 0.5f);
 			ImGui::Text("Key");
 			ImGui::Separator();
-			ImGui::Spacing();
+
+			float lowerBoxTopY = ImGui::GetCursorPosY();
+			float lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 
 			if (capturedVKey == 0) {
+				// calculate text geometry sizes for "PRESS KEY..."
+				float pressTextHeight = ImGui::GetTextLineHeightWithSpacing() * 2.0f;
+				float startVerticalY = lowerBoxTopY + ((lowerBoxRemainingHeight - pressTextHeight) * 0.5f);
+				
+				ImGui::SetCursorPosY(startVerticalY);
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("PRESS").x) * 0.5f);
 				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "PRESS");
+				
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("KEY...").x) * 0.5f);
 				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "KEY...");
 			} else {
 				std::string keyName = NameForVKey(capturedVKey);
-				float nameWidth = ImGui::CalcTextSize(keyName.c_str()).x;
-				ImGui::SetCursorPosX((availWidth - nameWidth) * 0.5f);
+				
+				// calculates the height for the captured key
+				float keyTextHeight = ImGui::GetTextLineHeight();
+				float startVerticalY = lowerBoxTopY + ((lowerBoxRemainingHeight - keyTextHeight) * 0.5f);
+				
+				ImGui::SetCursorPosY(startVerticalY);
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(keyName.c_str()).x) * 0.5f);
 				ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s", keyName.c_str());
 			}
 			ImGui::EndChild();
