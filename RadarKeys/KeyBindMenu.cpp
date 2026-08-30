@@ -255,11 +255,6 @@ namespace RadarKeys {
 		}
 
 		void Update() {
-			// this should prevent any script running when pressing the same button to bind a long press. hopefully. lol
-			if (showCapturePrompt) {
-				return;
-			}
-
 			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
 				USHORT vKey = it->first;
 				HoldTrack& track = it->second;
