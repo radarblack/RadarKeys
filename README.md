@@ -36,6 +36,7 @@ To use an assigned script:
 [08/27/2026] - Fixing and improving the error logging system. Unifying the debug report to the spdlog reports for uniform reporting.
 [08/28/2026] - First public release in NexusMods.
 [08/30/2026] - Added a "Long Press" function (and fixed a minor debugger argument payload tracking array misalignment)
+[08/30/2026] - Enhancement on the input detection system (and fixed a minor debugger argument payload tracking array misalignment)
 ```
 ## Plans ahead
 - [x] ~~Address some of the immediate UI concerns (misspells, formatting, and spacing, etc.)~~
@@ -47,8 +48,8 @@ To use an assigned script:
 - [ ] Final clean up (review, reassessment, function refactoring to shorten runtime execution if needed)
 - [ ] Find a way to read and run certain function within the script without passing through every functions on the script
 - [ ] Add in mouse and gamepad support
-- [ ] Enhance key assignment feature (eliminating the dropdown box selection and instead a direct input detection through RawInput)
-- [x] Add in "Hold" functionality to the key assignment
+- [x] ~~Enhance key assignment feature (eliminating the dropdown box selection and instead a direct input detection through RawInput)~~
+- [x] ~~Add in "Hold" functionality to the key assignment~~
 - [ ] Add in auto detection for RadarKeys mod
 - [ ] Add in presets that can enhance gameplay experience
 - [ ] Consider this project complete with continued updates until EOS.
