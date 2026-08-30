@@ -458,6 +458,7 @@ namespace RadarKeys {
 		static char capturedScriptPathBuffer[512] = "";
 
 		void DrawKeyCapturePrompt() {
+			// box boundary symmetry calc
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_Always);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_Always);
 
@@ -466,25 +467,37 @@ namespace RadarKeys {
 				return;
 			}
 
-			// key capture
+			// input detection
 			if (capturedVKey == 0) {
+				// checks if the modifier keys are held
+				capturedCtrl  = ImGui::GetIO().KeyCtrl;
+				capturedShift = ImGui::GetIO().KeyShift;
+				capturedAlt   = ImGui::GetIO().KeyAlt;
+
 				for (int i = 1; i < 256; i++) {
-					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN) {
+					// explicit ignore unique window keys
+					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
+						i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
 						continue;
 					}
+					// ignore mouse buttons
 					if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
 						continue;
 					}
+
 					if (ImGui::IsKeyPressed((ImGuiKey)i)) {
 						capturedVKey = (USHORT)i;
-						capturedCtrl = ImGui::GetIO().KeyCtrl;
+						
+						// ticks the checkboxes if a modifier key is held
+						capturedCtrl  = ImGui::GetIO().KeyCtrl;
 						capturedShift = ImGui::GetIO().KeyShift;
-						capturedAlt = ImGui::GetIO().KeyAlt;
+						capturedAlt   = ImGui::GetIO().KeyAlt;
 						break;
 					}
 				}
 			}
 
+			// key capture
 			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true);
 			float availWidth = ImGui::GetContentRegionAvail().x;
 			
@@ -509,7 +522,7 @@ namespace RadarKeys {
 
 			ImGui::SameLine();
 
-			// reset trigger
+			// modifier
 			ImGui::BeginGroup();
 			ImGui::Checkbox("Ctrl", &capturedCtrl);
 			ImGui::Checkbox("Shift", &capturedShift);
@@ -517,12 +530,16 @@ namespace RadarKeys {
 			ImGui::Spacing();
 			if (ImGui::Button("Reset", ImVec2(55, 22))) {
 				capturedVKey = 0;
+				// this resets the checkboxes if the modifier keys was released before pressing other buttons
+				capturedCtrl = false;
+				capturedShift = false;
+				capturedAlt = false;
 			}
 			
 			ImGui::EndGroup();
-			ImGui::SameLine(190);
+			ImGui::SameLine(186);
 			ImGui::BeginGroup();
-			ImGui::Text("Long Press:");
+			ImGui::Text("Long Press");
 			
 			ImGui::SetNextItemWidth(88); 
 			ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
@@ -532,7 +549,7 @@ namespace RadarKeys {
 				capturedHoldSeconds -= 0.5f;
 				if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
 			}
-			ImGui::SameLine();
+			ImGui::SameLine(48); // Perfect symmetric separation gap
 			if (ImGui::Button(" + ##AddHold", ImVec2(40, 24))) {
 				capturedHoldSeconds += 0.5f;
 			}
@@ -541,15 +558,21 @@ namespace RadarKeys {
 			
 			// tooltip
 			bool comboAvailable = (capturedVKey == 0) ? true : IsComboAvailable(capturedVKey, capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds);
+			
+			float columnWidth = 88.0f;
 			if (!comboAvailable) {
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "[ BLOCKED ]");
+				float labelTextWidth = ImGui::CalcTextSize("[ BLOCKED ]").x;
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (columnWidth - labelTextWidth) * 0.5f);
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "[ In Use ]");
 				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Conflict! Key combination is already in use.\nYou can assign the key as Long Press by adding duration.");
+					ImGui::SetTooltip("Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
 				}
 			} else {
-				ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "[ READY ]");
+				float labelTextWidth = ImGui::CalcTextSize("[ READY ]").x;
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (columnWidth - labelTextWidth) * 0.5f);
+				ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "[ Ready ]");
 				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Valid key assignment.");
+					ImGui::SetTooltip("The key combination is valid. Key assignment can finalize.");
 				}
 			}
 			ImGui::EndGroup();
@@ -557,7 +580,7 @@ namespace RadarKeys {
 			ImGui::Separator();
 
 			// script path
-			ImGui::Text("Path to Trigger Script:");
+			ImGui::Text("Script Path:");
 			ImGui::SetNextItemWidth(-1);
 			ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
 
@@ -588,6 +611,7 @@ namespace RadarKeys {
 			ImGui::End();
 		}
 
+		// draws the ui
 		void Draw(bool* p_open) {
 			ImGui::SetNextWindowSize(ImVec2(480, 360), ImGuiCond_::ImGuiCond_FirstUseEver);
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) {
