@@ -10,6 +10,9 @@ namespace RadarKeys {
 		USHORT currFlags[vKeyMax]; // indexed by Virtual Keycode
 		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys
 		bool blockGameKeys[vKeyMax] = { false }; // block game from recieving message
+
+		bool realStateHeld[vKeyMax] = { false }; 
+
 		std::list<std::pair<ActionHandle, ButtonAction>>* buttonActions[vKeyMax] = { nullptr };
 		ActionHandle nextActionHandle = 1; // 0 reserved as an "invalid/none" sentinel if ever needed
 
@@ -84,9 +87,11 @@ namespace RadarKeys {
 			BUTTONEVENT buttonEvent = BUTTONEVENT::UP;
 			if (flags == RI_KEY_MAKE && oldFlags == RI_KEY_BREAK) {//OnKeyDown
 				buttonEvent = BUTTONEVENT::ONDOWN;
+				realStateHeld[vKey] = true; // Update tracking table
 			}
 			else if (flags == RI_KEY_BREAK && oldFlags == RI_KEY_MAKE) {//OnKeyUp
 				buttonEvent = BUTTONEVENT::ONUP;
+				realStateHeld[vKey] = false; // Update tracking table
 			}
 			else if (flags == RI_KEY_MAKE && oldFlags == RI_KEY_MAKE) {//Held
 				buttonEvent = BUTTONEVENT::HELD;
@@ -147,10 +152,12 @@ namespace RadarKeys {
 				USHORT vKey = k[i].vk;
 				if (usButtonFlags & k[i].downflag) {
 					currFlags[vKey] = RI_KEY_MAKE;
+					realStateHeld[vKey] = true; // Safe mouse state catch
 				}
 				//DEBUGNOW not hitting for some reason
 				if (usButtonFlags & k[i].upflag) {
 					currFlags[vKey] = RI_KEY_BREAK;
+					realStateHeld[vKey] = false; // Safe mouse state clear
 				}
 			}
 			//
@@ -443,6 +450,11 @@ namespace RadarKeys {
 		void HookWndProc(HWND hWnd) {
 			//Redirect WndProc for hWnd
 			WndProc_Orig = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WndProc_Hook);
+
+		bool IsKeyHeldReal(USHORT vKey) {
+			// this is for the hold function.
+			if (vKey >= vKeyMax) return false;
+			return realStateHeld[vKey];
 		}
 	}
 }
