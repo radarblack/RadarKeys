@@ -17,8 +17,8 @@ namespace RadarKeys {
 	namespace KeyBindMenu {
 
 		std::vector<KeyBind> bindings;
-
-		bool showCapturePrompt = false;
+		bool showCapturePrompt = false; 
+		static bool isAssigningMenuToggleKey = false; 
 
 		const std::string& GetBindsFileName() {
 			static std::string cached;
@@ -506,7 +506,7 @@ namespace RadarKeys {
 			
 			float titleWidth = ImGui::CalcTextSize("Key").x;
 			ImGui::SetCursorPosX((availWidth - titleWidth) * 0.5f);
-			ImGui::Text("Key");
+			ImGui::Text("  Key");
 			ImGui::Separator();
 
 			float lowerBoxTopY = ImGui::GetCursorPosY();
@@ -546,7 +546,7 @@ namespace RadarKeys {
 			ImGui::Spacing();
 			if (ImGui::Button("Reset", ImVec2(55, 22))) {
 				capturedVKey = 0;
-				// this resets the checkboxes if the modifier keys was released before pressing other buttons
+				// resets the checkboxes if the modifier keys was released before pressing other buttons
 				capturedCtrl = false;
 				capturedShift = false;
 				capturedAlt = false;
@@ -602,15 +602,25 @@ namespace RadarKeys {
 			ImGui::Spacing();
 
 			// finalize
-			bool canFinalize = capturedVKey != 0 && capturedScriptPathBuffer[0] != '\0' && comboAvailable;
+			bool canFinalize = capturedVKey != 0 && (isAssigningMenuToggleKey || capturedScriptPathBuffer[0] != '\0') && comboAvailable;
 			if (!canFinalize) ImGui::BeginDisabled();
 			
 			if (ImGui::Button("Finalize", ImVec2(145, 30))) {
-				AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
+				if (isAssigningMenuToggleKey) {
+					menuToggleVKey = capturedVKey;
+					
+					SaveBindings(); 
+					DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
+				}
+				else {
+					AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
+				}
+
 				capturedVKey = 0;
 				capturedHoldSeconds = 0.0f;
 				capturedScriptPathBuffer[0] = '\0';
 				showCapturePrompt = false;
+				isAssigningMenuToggleKey = false;
 			}
 			if (!canFinalize) ImGui::EndDisabled();
 
@@ -620,6 +630,7 @@ namespace RadarKeys {
 				capturedHoldSeconds = 0.0f;
 				capturedScriptPathBuffer[0] = '\0';
 				showCapturePrompt = false;
+				isAssigningMenuToggleKey = false;
 			}
 
 			ImGui::End();
