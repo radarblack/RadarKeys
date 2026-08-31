@@ -276,29 +276,42 @@ namespace RadarKeys {
 					if (vKey != -1) menuToggleVKey = (USHORT)vKey;
 					else spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
 				}
-				else if (parts[0] == "BIND" && parts.size() >= 7) {
+				else if (parts[0] == "BIND" && parts.size() >= 6) {
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
 					if (vKey == -1) { spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName); continue; }
 					
+					bool Ctrl = (trim(parts[2]) == "1");
+					bool Shift = (trim(parts[3]) == "1");
+					bool Alt = (trim(parts[4]) == "1");
+
 					float holdSeconds = 0.0f;
-					try { holdSeconds = std::stof(trim(parts[5])); }
-					catch (...) { spdlog::warn("KeyBindMenu::LoadBindings: bad holdSeconds value '{}', defaulting to 0", parts[5]); }
-					
 					bool isToggle = false;
-					std::string pathOn = "", pathOff = "";
+					std::string pathOn = "";
+					std::string pathOff = "";
 					
+					// dynamic sizing to prevent overflow when loading the .conf content
 					if (parts.size() >= 9) {
-						isToggle = trim(parts[6]) == "1";
+						try { holdSeconds = std::stof(trim(parts[5])); }
+						catch (...) { holdSeconds = 0.0f; }
+						isToggle = (trim(parts[6]) == "1");
 						pathOn = trim(parts[7]);
 						pathOff = trim(parts[8]);
-					} else {
+					} 
+					else if (parts.size() == 7) {
+						try { holdSeconds = std::stof(trim(parts[5])); }
+						catch (...) { holdSeconds = 0.0f; }
+						isToggle = false;
 						pathOn = trim(parts[6]);
+						pathOff = "";
+					} 
+					else {
+						holdSeconds = 0.0f;
+						isToggle = false;
+						pathOn = trim(parts[5]);
+						pathOff = "";
 					}
 					
-					bindings.push_back(KeyBind{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, pathOn, pathOff, false, holdSeconds });
-				}
-				else if (parts[0] == "BIND") {
-					spdlog::warn("KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}", line);
+					bindings.push_back(KeyBind{ (USHORT)vKey, Ctrl, Shift, Alt, keyName, isToggle, pathOn, pathOff, false, holdSeconds });
 				}
 			}
 			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), GetBindsFileName());
