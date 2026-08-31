@@ -403,7 +403,9 @@ namespace RadarKeys {
 				capturedVKey = 0; 
 				capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = false; 
 			}
-			ImGui::EndGroup(); ImGui::SameLine(180);
+			ImGui::EndGroup(); 
+			
+			ImGui::SameLine(205);
 
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
@@ -420,9 +422,10 @@ namespace RadarKeys {
 					ImGui::SetNextItemWidth(75);
 					ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
 					if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
-					if (ImGui::Button(" - ", ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; }
+					
+					if (ImGui::Button(" - ", ImVec2(35, 22))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; }
 					ImGui::SameLine(40);
-					if (ImGui::Button(" + ", ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
+					if (ImGui::Button(" + ", ImVec2(35, 22))) capturedHoldSeconds += 0.5f;
 				}
 			}
 			
@@ -463,7 +466,7 @@ namespace RadarKeys {
 				if (isAssigningMenuToggleKey) {
 					if (menuToggleHandle != 0) RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
 					menuToggleVKey = capturedVKey; menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
-					SaveBindings(); DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
+					SaveBindings(); DebuggerMenu::LogBindEvent("Main Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
 				} else {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 					AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
@@ -472,7 +475,7 @@ namespace RadarKeys {
 				capturedToggleMode = capturedLongPressMode = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
-			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
+			if (!canFinalize) ImGui::BeginDisabled(); ImGui::SameLine();
 			
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
 				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathBuffer[0] = '\0';
