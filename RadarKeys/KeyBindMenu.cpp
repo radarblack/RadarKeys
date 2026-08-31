@@ -349,7 +349,7 @@ namespace RadarKeys {
 		static char capturedScriptPathOffBuffer[512] = "";
 		static bool capturedToggleMode = false;
 		static bool capturedLongPressMode = false;
-		tatic int editingBindingIndex = -1;
+		static int editingBindingIndex = -1;
 
 		void DrawKeyCapturePrompt() {
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
