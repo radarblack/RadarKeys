@@ -6,14 +6,18 @@
 
 namespace RadarKeys {
 	namespace KeyBindMenu {
-		// Binding: key(+mods)→Lua file; shared dispatcher per vKey enables fallback (e.g., Shift+X→plain X).
 		struct KeyBind {
 			USHORT vKey;
 			bool needCtrl;
 			bool needShift;
 			bool needAlt;
 			std::string keyName;     // base key display name, e.g. "F6", "A", "," - see vkNameTable
-			std::string scriptPath;  // passed to dofile() via the DoScript IPC command (see RegisterBindingAction/OnBoundKeyPressed)
+			
+			bool isToggle = false;
+			std::string scriptPathOn;  // for toggle On
+			std::string scriptPathOff; // for toggle Off
+			mutable bool toggleState = false; // checks toggle state
+			
 			float holdSeconds = 0.0f; // 0 = fires instantly on press (default/original behavior); >0 = fires once after being held this long, see Update()
 		};
 
@@ -27,6 +31,6 @@ namespace RadarKeys {
 		void Update();
 
 		extern std::vector<KeyBind> bindings;
-		extern bool menuOpen; // Render.cpp's OnFrame checks this directly and passes &menuOpen into Draw()
+		extern bool menuOpen;
 	}
 }
