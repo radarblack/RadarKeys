@@ -81,6 +81,16 @@ namespace RadarKeys {
 		spdlog::info("RadarKeys log started");
 	}
 
+	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
+	SetCursorPosFunc SetCursorPos_Orig = NULL;
+
+	BOOL WINAPI SetCursorPos_Hook(int X, int Y) {
+		if (Render::IsUnlockCursor()) {
+			return FALSE;
+		}
+		return SetCursorPos_Orig(X, Y);
+	}
+
 	void InitCursorHook() {
 		if (MH_CreateHook(&SetCursorPos, &SetCursorPos_Hook, reinterpret_cast<LPVOID*>(&SetCursorPos_Orig)) != MH_OK) {
 			spdlog::error("InitCursorHook: MH_CreateHook failed for SetCursorPos");
