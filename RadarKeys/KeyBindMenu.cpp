@@ -196,13 +196,20 @@ namespace RadarKeys {
 
 		void FireBinding(const KeyBind& bind) {
 			if (bind.mode == BindMode::TOGGLE) {
-				// routing check
+				// check which toggle state is triggered
 				std::string targetScript = bind.currentToggleState ? bind.toggleOffScriptPath : bind.toggleOnScriptPath;
+				std::string stateString = bind.currentToggleState ? "SWITCHED OFF" : "SWITCHED ON";
+				std::string filename = std::filesystem::path(targetPath).filename().string();
+
+				// log the current state of the script
+				std::string logMsg = "[Toggle] " + CombinedDisplayName(bind) + " -> " + stateString + " (Running: " + filename + ")";
+				DebuggerMenu::LogButtonPress(logMsg);
+
 				if (DebuggerMenu::LogScriptAttempt(targetScript)) {
 					LuaBridge::QueueMessageIn("DoScript|dofile([[" + targetScript + "]])");
 				}
 				
-				// persistence
+				// perist
 				for (auto& b : bindings) {
 					if (b.vKey == bind.vKey && b.needCtrl == bind.needCtrl && b.needShift == bind.needShift && b.needAlt == bind.needAlt) {
 						b.currentToggleState = !b.currentToggleState;
@@ -724,9 +731,30 @@ namespace RadarKeys {
 				}
 				ImGui::SameLine();
 				ImGui::Text("%s", CombinedDisplayName(bindings[i]).c_str());
-				ImGui::SameLine(180);
-				std::string scriptName = std::filesystem::path(bindings[i].scriptPath).filename().string();
-				ImGui::TextWrapped("-> %s", scriptName.c_str());
+				
+				// a little designs lol
+				if (bindings[i].mode == BindMode::TOGGLE) {
+					ImGui::SameLine();
+					if (bindings[i].currentToggleState) {
+						ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "[STATE: ON]");
+					} else {
+						ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "[STATE: OFF]");
+					}
+				}
+
+				ImGui::SameLine(220);
+				
+				// renders the filenames
+				std::string displayScript;
+				if (bindings[i].mode == BindMode::TOGGLE) {
+					std::string onFile = std::filesystem::path(bindings[i].toggleOnScriptPath).filename().string();
+					std::string offFile = std::filesystem::path(bindings[i].toggleOffScriptPath).filename().string();
+					displayScript = "On: " + onFile + " | Off: " + offFile;
+				} else {
+					displayScript = "-> " + std::filesystem::path(bindings[i].scriptPath).filename().string();
+				}
+				
+				ImGui::TextWrapped("%s", displayScript.c_str());
 				ImGui::PopID();
 				ImGui::Separator();
 			}
