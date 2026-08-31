@@ -613,14 +613,35 @@ namespace RadarKeys {
 
 			// script path
 			if (!isAssigningMenuToggleKey) {
-				ImGui::Text("Script Path:");
-				ImGui::SetNextItemWidth(-1);
-				ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
-				ImGui::Spacing();
+    			ImGui::Text("Script Path:");
+    			ImGui::SetNextItemWidth(-1);
+    			ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
+
+    			// warning if the file is not found on the written path
+    			if (capturedScriptPathBuffer[0] != '\0') {
+			        std::string targetPath = ResolveScriptPath(capturedScriptPathBuffer);
+        			if (!std::filesystem::exists(targetPath)) {
+            			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "* Script file not found at path!");
+        			} else {
+            			ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "  Script located successfully.");
+        			}
+    			}
+    			ImGui::Spacing();
 			}
 
 			// finalize
-			bool canFinalize = capturedVKey != 0 && (isAssigningMenuToggleKey || capturedScriptPathBuffer[0] != '\0') && comboAvailable;
+			bool canFinalize = capturedVKey != 0 && comboAvailable;
+
+			if (!isAssigningMenuToggleKey) {
+    			if (capturedScriptPathBuffer[0] == '\0') {
+        			canFinalize = false;
+    			} else {
+        			std::string resolvedPath = ResolveScriptPath(capturedScriptPathBuffer);
+        			if (!std::filesystem::exists(resolvedPath)) {
+            			canFinalize = false;
+        			}
+    			}
+			}
 			if (!canFinalize) ImGui::BeginDisabled();
 			
 			if (ImGui::Button("Finalize", ImVec2(145, 30))) {
