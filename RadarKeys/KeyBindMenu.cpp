@@ -255,7 +255,12 @@ namespace RadarKeys {
 			
 			for (const auto& b : bindings) {
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
-				outFile << (b.isToggle ? "1|" : "0|") << b.scriptPathOn << "|" << b.scriptPathOff << "\n";
+				
+				if (b.isToggle) {
+					outFile << "1|" << b.scriptPathOn << "|" << b.scriptPathOff << "\n";
+				} else {
+					outFile << "0|" << b.scriptPathOn << "\n";
+				}
 			}
 			outFile.close();
 			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), GetBindsFileName());
@@ -276,41 +281,33 @@ namespace RadarKeys {
 					if (vKey != -1) menuToggleVKey = (USHORT)vKey;
 					else spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
 				}
-				else if (parts[0] == "BIND" && parts.size() >= 6) {
+				else if (parts[0] == "BIND" && parts.size() >= 7) {
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
 					if (vKey == -1) { spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName); continue; }
 					
-					KeyBind b;
-					b.vKey = (USHORT)vKey;
-					b.needCtrl = (trim(parts[2]) == "1");
-					b.needShift = (trim(parts[3]) == "1");
-					b.needAlt = (trim(parts[4]) == "1");
-					b.keyName = keyName;
-					b.toggleState = false;
+					float holdSeconds = 0.0f;
+					try { holdSeconds = std::stof(trim(parts[5])); }
+					catch (...) { holdSeconds = 0.0f; }
+					
+					bool isToggle = false;
+					std::string pathOn = "";
+					std::string pathOff = "";
 
-					// maps the .conf file
-					if (parts.size() >= 9) {
-						try { b.holdSeconds = std::stof(trim(parts[5])); }
-						catch (...) { b.holdSeconds = 0.0f; }
-						b.isToggle = (trim(parts[6]) == "1");
-						b.scriptPathOn = trim(parts[7]);
-						b.scriptPathOff = trim(parts[8]);
-					} 
-					else if (parts.size() == 7) {
-						try { b.holdSeconds = std::stof(trim(parts[5])); }
-						catch (...) { b.holdSeconds = 0.0f; }
-						b.isToggle = false;
-						b.scriptPathOn = trim(parts[6]);
-						b.scriptPathOff = "";
-					} 
-					else {
-						b.holdSeconds = 0.0f;
-						b.isToggle = false;
-						b.scriptPathOn = trim(parts[5]);
-						b.scriptPathOff = "";
+					// maps the .conf
+					if (trim(parts[6]) == "1" && parts.size() >= 9) {
+						isToggle = true;
+						pathOn = trim(parts[7]);
+						pathOff = trim(parts[8]);
+					} else {
+						isToggle = false;
+						pathOn = trim(parts[7]);
+						pathOff = "";
 					}
 					
-					bindings.push_back(b);
+					bindings.push_back(KeyBind{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, pathOn, pathOff, false, holdSeconds });
+				}
+				else if (parts[0] == "BIND") {
+					spdlog::warn("KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}", line);
 				}
 			}
 			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), GetBindsFileName());
