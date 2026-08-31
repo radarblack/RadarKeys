@@ -332,7 +332,6 @@ namespace RadarKeys {
 			// makes the original window size persistent
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
-
 			ImGui::SetNextWindowFocus();
 
 			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -411,7 +410,6 @@ namespace RadarKeys {
 			// bind options: toggle/long press
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
-				
 				if (capturedLongPressMode) ImGui::BeginDisabled();
 				ImGui::Checkbox("Toggle", &capturedToggleMode);
 				if (capturedLongPressMode) ImGui::EndDisabled();
