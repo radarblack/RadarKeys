@@ -325,6 +325,8 @@ namespace RadarKeys {
 		static bool capturedAlt = false;
 		static float capturedHoldSeconds = 0.0f;
 		static char capturedScriptPathBuffer[512] = "";
+		static bool capturedToggleMode = false;
+		static bool capturedLongPressMode = false;
 
 		void DrawKeyCapturePrompt() {
 			// makes the original window size persistent
@@ -332,7 +334,6 @@ namespace RadarKeys {
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowFocus();
 
-			// and handled focus parameters manually to prevent the overlay loop from locking out click bounds!
 			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
 				ImGui::End();
 				return;
@@ -391,26 +392,46 @@ namespace RadarKeys {
 			}
 			ImGui::EndChild(); ImGui::SameLine();
 
-			// modifier
+			// modifier & custom features column block
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
-				ImGui::Checkbox("Ctrl", &capturedCtrl); ImGui::Checkbox("Shift", &capturedShift); ImGui::Checkbox("Alt", &capturedAlt); ImGui::Spacing();
+				ImGui::Checkbox("Ctrl", &capturedCtrl); 
+				ImGui::Checkbox("Shift", &capturedShift); 
+				ImGui::Checkbox("Alt", &capturedAlt); 
 			}
-			if (ImGui::Button("Reset", ImVec2(55, 22))) { capturedVKey = 0; capturedCtrl = capturedShift = capturedAlt = false; }
-			ImGui::EndGroup(); ImGui::SameLine(186);
+			if (ImGui::Button("Reset", ImVec2(55, 22))) { 
+				capturedVKey = 0; 
+				capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = false; 
+			}
+			ImGui::EndGroup(); 
 			
+			ImGui::SameLine(205);
+
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
-				ImGui::Text("Long Press:"); ImGui::SetNextItemWidth(88); ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
-				if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
-				if (ImGui::Button(" - ##SubHold", ImVec2(40, 24))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; }
-				ImGui::SameLine(48); if (ImGui::Button(" + ##AddHold", ImVec2(40, 24))) capturedHoldSeconds += 0.5f;
-				ImGui::Spacing();
+				
+				if (capturedLongPressMode) ImGui::BeginDisabled();
+				ImGui::Checkbox("Toggle", &capturedToggleMode);
+				if (capturedLongPressMode) ImGui::EndDisabled();
+
+				if (capturedToggleMode) ImGui::BeginDisabled();
+				ImGui::Checkbox("Long Press", &capturedLongPressMode);
+				if (capturedToggleMode) ImGui::EndDisabled();
+				
+				if (capturedLongPressMode) {
+					ImGui::SetNextItemWidth(75);
+					ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
+					if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
+					
+					if (ImGui::Button(" - ", ImVec2(35, 22))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; }
+					ImGui::SameLine(40);
+					if (ImGui::Button(" + ", ImVec2(35, 22))) capturedHoldSeconds += 0.5f;
+				}
 			}
 			
 			// tooltip
 			bool comboAvailable = (capturedVKey == 0) ? true : IsComboAvailable(capturedVKey, capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds);
-			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (88.0f - ImGui::CalcTextSize(comboAvailable ? "[ READY ]" : "[ UNFIT ]").x) * 0.5f);
+			ImGui::Spacing();
 			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
 			ImGui::EndGroup(); ImGui::Separator();
@@ -445,21 +466,20 @@ namespace RadarKeys {
 				if (isAssigningMenuToggleKey) {
 					if (menuToggleHandle != 0) RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
 					menuToggleVKey = capturedVKey; menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
-					SaveBindings(); DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
+					SaveBindings(); DebuggerMenu::LogBindEvent("Main Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
 				} else {
-					AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
+					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
+					AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
 				}
-				capturedVKey = 0;
-				capturedHoldSeconds = 0.0f;
-				capturedScriptPathBuffer[0] = '\0';
+				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathBuffer[0] = '\0';
+				capturedToggleMode = capturedLongPressMode = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
 			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
 			
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
-				capturedVKey = 0;
-				capturedHoldSeconds = 0.0f;
-				capturedScriptPathBuffer[0] = '\0';
+				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathBuffer[0] = '\0';
+				capturedToggleMode = capturedLongPressMode = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
 			ImGui::End();
