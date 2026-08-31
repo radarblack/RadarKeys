@@ -70,9 +70,6 @@ namespace RadarKeys {
 		}
 	};
 
-	std::shared_ptr<spdlog::sinks::basic_file_sink_mt> startup_sink = nullptr;
-	std::shared_ptr<MemoryCappedSink> sliding_sink = nullptr;
-
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
 	SetCursorPosFunc SetCursorPos_Orig = NULL;
 
@@ -93,6 +90,9 @@ namespace RadarKeys {
 		}
 	}
 
+	std::shared_ptr<spdlog::sinks::basic_file_sink_mt> startup_sink = nullptr;
+	std::shared_ptr<MemoryCappedSink> sliding_sink = nullptr;
+
 	void SetupLog() {
 		std::filesystem::path logDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 		std::error_code ec;
@@ -106,8 +106,8 @@ namespace RadarKeys {
 		DeleteFileW(logPath.c_str());
 
 		// Initialize sinks
-		startup_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.wstring(), true);
-		auto sliding_sink = std::make_shared<MemoryCappedSink>(logPath.wstring());
+		auto startup_sink = std::make_shared<StartupFileSink>(logPath.wstring());
+		sliding_sink = std::make_shared<MemoryCappedSink>(logPath.wstring());
 
 		auto logger = std::make_shared<spdlog::logger>("radarkeys", spdlog::sinks_init_list{ startup_sink, sliding_sink });
 		spdlog::set_default_logger(logger);
@@ -137,12 +137,12 @@ namespace RadarKeys {
 
 		// remove the sinks to the disk
 		if (auto logger = spdlog::get("radarkeys")) {
-			auto& sinks = logger->sinks();
+			logger->flush();
+		}
 			
-			if (sliding_sink) {
-				sliding_sink->ActivateMemoryBufferTrack();
-			}
-			sinks.erase(std::remove(sinks.begin(), sinks.end(), startup_sink), sinks.end());
+		is_initialization_active = false;
+		if (sliding_sink) {
+			sliding_sink->CalculateRemainingPartitionRoom();
 		}
 	}
 
