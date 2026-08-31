@@ -412,10 +412,11 @@ namespace RadarKeys {
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (88.0f - ImGui::CalcTextSize(comboAvailable ? "[ READY ]" : "[ UNFIT ]").x) * 0.5f);
 			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
 			ImGui::EndGroup(); ImGui::Separator();
 
 			bool isLuaPathValid = false; int scriptStatus = 0; // 0 = empty, 1 = invalid ext, 2 = missing file, 3 = valid file
-			if (!isAssigningMenuToggleKey && capturedScriptPathBuffer != '\0') {
+			if (!isAssigningMenuToggleKey && capturedScriptPathBuffer[0] != '\0') {
 				std::string txt(capturedScriptPathBuffer);
 				if (txt.size() >= 4) {
 					std::string ext = txt.substr(txt.size() - 4);
@@ -432,7 +433,7 @@ namespace RadarKeys {
 				ImGui::Text("Script Path:"); ImGui::SetNextItemWidth(-1); ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
 				if (scriptStatus == 3) ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " Found! Ready to assign.");
 				else if (scriptStatus == 2) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), " The script file does not exist.");
-				else if (scriptStatus == 1 || capturedScriptPathBuffer != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
+				else if (scriptStatus == 1 || capturedScriptPathBuffer[0] != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
 				ImGui::Spacing();
 			}
 
@@ -448,19 +449,17 @@ namespace RadarKeys {
 				} else {
 					AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
 				}
-				// FIXED: Split assignments onto independent rows to fix data loss warnings
 				capturedVKey = 0;
 				capturedHoldSeconds = 0.0f;
-				capturedScriptPathBuffer = '\0';
+				capturedScriptPathBuffer[0] = '\0';
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
-			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
+			if (!canFinalize) ImGui::BeginDisabled(); ImGui::SameLine();
 			
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
-				// FIXED: Split assignments onto independent rows to fix data loss warnings
 				capturedVKey = 0;
 				capturedHoldSeconds = 0.0f;
-				capturedScriptPathBuffer = '\0';
+				capturedScriptPathBuffer[0] = '\0';
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
 			ImGui::End();
