@@ -69,6 +69,7 @@ namespace RadarKeys {
 	};
 
 	std::shared_ptr<spdlog::sinks::basic_file_sink_mt> startup_sink = nullptr;
+	std::shared_ptr<MemoryCappedSink> sliding_sink = nullptr;
 
 	void SetupLog() {
 		std::filesystem::path logDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
