@@ -313,7 +313,7 @@ namespace RadarKeys {
 
 		void RemoveBinding(int index) {
 			if (index < 0 || index >= (int)bindings.size()) return;
-			std::string removedDesc = CombinedDisplayName(bindings[index]) + " -> " + bindings[index].scriptPath;
+			std::string removedDesc = CombinedDisplayName(bindings[index]) + " -> " + bindings[index].scriptPathOn;
 			USHORT vKey = bindings[index].vKey;
 			bindings.erase(bindings.begin() + index);
 			RemoveDispatcherIfUnused(vKey);
@@ -490,7 +490,7 @@ namespace RadarKeys {
 					else if (upperStatus == 1 || capturedScriptPathOnBuffer[0] != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
 
 					ImGui::Text("Disable Script Path:"); ImGui::SetNextItemWidth(-1);
-					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
+					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
 					if (lowerStatus == 3) ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " Found! Ready to assign.");
 					else if (lowerStatus == 2) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), " The script file does not exist.");
 					else if (lowerStatus == 1 || capturedScriptPathOffBuffer[0] != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
