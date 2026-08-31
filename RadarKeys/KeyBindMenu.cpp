@@ -242,7 +242,6 @@ namespace RadarKeys {
 		}
 
 		void SaveBindings() {
-			// ensure mod/radarKeys/ directory exists before writing bindings file (ofstream won't create it).
 			std::error_code ec;
 			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 			std::filesystem::create_directories(bindsDir, ec);
@@ -256,14 +255,13 @@ namespace RadarKeys {
 			for (const auto& b : bindings) {
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
 				
-				// convert the paths before saving it to .conf
-				std::string cleanOn = GetRelativeOrFilenamePath(b.scriptPathOn);
-				std::string cleanOff = GetRelativeOrFilenamePath(b.scriptPathOff);
-
 				if (b.isToggle) {
-					outFile << "1|" << cleanOn << "|" << cleanOff << "\n";
+					std::string shortOff = std::filesystem::path(b.scriptPathOff).filename().string();
+					std::string shortOn = std::filesystem::path(b.scriptPathOn).filename().string();
+					outFile << "1|" << shortOn << "|" << shortOff << "\n";
 				} else {
-					outFile << "0|" << cleanOn << "\n";
+					std::string shortOn = std::filesystem::path(b.scriptPathOn).filename().string();
+					outFile << "0|" << shortOn << "\n";
 				}
 			}
 			outFile.close();
