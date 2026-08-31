@@ -330,13 +330,13 @@ namespace RadarKeys {
 			// makes the original window size persistent
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowFocus();
+
+			// and handled focus parameters manually to prevent the overlay loop from locking out click bounds!
 			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
 				ImGui::End();
 				return;
 			}
-
-			// this completely prevents background clicks from stealing mouse context and freezing your UI!
-			ImGui::SetWindowFocus();
 
 			// input detection
 			if (capturedVKey == 0) {
@@ -454,7 +454,7 @@ namespace RadarKeys {
 				capturedScriptPathBuffer[0] = '\0';
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
-			if (!canFinalize) ImGui::BeginDisabled(); ImGui::SameLine();
+			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
 			
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
 				capturedVKey = 0;
