@@ -27,32 +27,32 @@ namespace RadarKeys {
 		std::wstring file_path_;
 		std::queue<std::string> log_lines_;
 		size_t current_bytes_ = 0;
-		size_t max_runtime_bytes_ = 7168; // fallback default around 7KB
+		size_t max_runtime_bytes_ = 6144; // fallback default around 7KB
+		bool is_recording_active_ = false;
 
 	public:
-		explicit MemoryCappedSink(std::wstring path) : file_path_(std::move(path)) {
-			// low_level: be very extra careful here, ken
+		explicit MemoryCappedSink(std::wstring path) : file_path_(std::move(path)) {}
+
+		void ActivateMemoryBufferTrack() {
 			std::error_code ec;
 			size_t startup_disk_bytes = std::filesystem::file_size(file_path_, ec);
-			
-			// partitioning the sinks
 			if (!ec && startup_disk_bytes < 10240) {
 				max_runtime_bytes_ = 10240 - startup_disk_bytes;
 			}
+			is_recording_active_ = true;
 		}
 
 	protected:
 		void sink_it_(const spdlog::details::log_msg& msg) override {
+			if (!is_recording_active_) return;
 			spdlog::memory_buf_t formatted;
 			base_sink<std::mutex>::formatter_->format(msg, formatted);
 			std::string line_str(formatted.data(), formatted.size());
-
+			size_t true_disk_line_weight = line_str.size() + 45;
 			log_lines_.push(line_str);
-			current_bytes_ += line_str.size();
-
-			// slide the sink based on the remaining partition size
+			current_bytes_ += true_disk_line_weight;
 			while (current_bytes_ > max_runtime_bytes_ && !log_lines_.empty()) {
-				current_bytes_ -= log_lines_.front().size();
+				current_bytes_ -= (log_lines_.front().size() + 45);
 				log_lines_.pop();
 			}
 		}
@@ -69,7 +69,27 @@ namespace RadarKeys {
 	};
 
 	std::shared_ptr<spdlog::sinks::basic_file_sink_mt> startup_sink = nullptr;
-	std::shared_ptr<RadarKeys::MemoryCappedSink> sliding_sink = nullptr;
+	std::shared_ptr<MemoryCappedSink> sliding_sink = nullptr;
+
+	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
+	SetCursorPosFunc SetCursorPos_Orig = NULL;
+
+	BOOL WINAPI SetCursorPos_Hook(int X, int Y) {
+		if (Render::IsUnlockCursor()) {
+			return FALSE;
+		}
+		return SetCursorPos_Orig(X, Y);
+	}
+
+	void InitCursorHook() {
+		if (MH_CreateHook(&SetCursorPos, &SetCursorPos_Hook, reinterpret_cast<LPVOID*>(&SetCursorPos_Orig)) != MH_OK) {
+			spdlog::error("InitCursorHook: MH_CreateHook failed for SetCursorPos");
+			return;
+		}
+		if (MH_EnableHook(&SetCursorPos) != MH_OK) {
+			spdlog::error("InitCursorHook: MH_EnableHook failed for SetCursorPos");
+		}
+	}
 
 	void SetupLog() {
 		std::filesystem::path logDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
@@ -92,26 +112,6 @@ namespace RadarKeys {
 		spdlog::set_level(spdlog::level::debug);
 		
 		spdlog::info("RadarKeys log started");
-	}
-
-	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
-	SetCursorPosFunc SetCursorPos_Orig = NULL;
-
-	BOOL WINAPI SetCursorPos_Hook(int X, int Y) {
-		if (Render::IsUnlockCursor()) {
-			return FALSE;
-		}
-		return SetCursorPos_Orig(X, Y);
-	}
-
-	void InitCursorHook() {
-		if (MH_CreateHook(&SetCursorPos, &SetCursorPos_Hook, reinterpret_cast<LPVOID*>(&SetCursorPos_Orig)) != MH_OK) {
-			spdlog::error("InitCursorHook: MH_CreateHook failed for SetCursorPos");
-			return;
-		}
-		if (MH_EnableHook(&SetCursorPos) != MH_OK) {
-			spdlog::error("InitCursorHook: MH_EnableHook failed for SetCursorPos");
-		}
 	}
 
 	// DLL_PROCESS_ATTACH runs under the loader lock - heavy initialization
