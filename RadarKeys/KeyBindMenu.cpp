@@ -633,12 +633,12 @@ namespace RadarKeys {
         			if (typingLuaFile) {
             			std::string targetPath = ResolveScriptPath(capturedScriptPathBuffer);
             			if (!std::filesystem::exists(targetPath)) {
-                			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "[X] Error: File does not exist at this path!");
+                			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), " The script file does not exist.");
             			} else {
-                			ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "[O] Verified: Lua file ready to bind.");
+                			ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " Found! Ready to assign.");
             			}
         			} else {
-            			ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "  Typing path... (End filename with .lua to verify)");
+            			ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
         			}
     			}
     			ImGui::Spacing();
