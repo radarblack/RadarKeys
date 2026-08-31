@@ -316,21 +316,26 @@ namespace RadarKeys {
 
 		void SaveBindings() {
 			// ensure mod/radarKeys/ directory exists before writing bindings file (ofstream won't create it).
-			std::error_code ec;
 			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 			std::filesystem::create_directories(bindsDir, ec);
-			if (ec) {
-				spdlog::warn("KeyBindMenu::SaveBindings: couldn't create {} directory: {}", bindsDir.string(), ec.message());
-			}
+			if (ec) spdlog::warn("KeyBindMenu::SaveBindings: couldn't create {} directory: {}", bindsDir.string(), ec.message());
 
 			std::ofstream outFile(GetBindsFileName());
-			if (!outFile) {
-				spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", GetBindsFileName());
-				return;
-			}
+			if (!outFile) { spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", GetBindsFileName()); return; }
+			
 			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
-			for (const KeyBind& bind : bindings) {
-				outFile << "BIND|" << bind.keyName << "|" << (bind.needCtrl ? "1" : "0") << "|" << (bind.needShift ? "1" : "0") << "|" << (bind.needAlt ? "1" : "0") << "|" << bind.holdSeconds << "|" << bind.scriptPath << "\n";
+			
+			for (const auto& b : bindings) {
+				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
+				
+				if (b.isToggle) {
+					std::string shortOff = std::filesystem::path(b.scriptPathOff).filename().string();
+					std::string shortOn = std::filesystem::path(b.scriptPathOn).filename().string();
+					outFile << "1|" << shortOn << "|" << shortOff << "\n";
+				} else {
+					std::string shortOn = std::filesystem::path(b.scriptPathOn).filename().string();
+					outFile << "0|" << shortOn << "\n";
+				}
 			}
 			outFile.close();
 			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), GetBindsFileName());
