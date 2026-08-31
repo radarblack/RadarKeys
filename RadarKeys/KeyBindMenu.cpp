@@ -141,17 +141,27 @@ namespace RadarKeys {
 		std::map<USHORT, HoldTrack> holdTracks;
 
 		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld, bool preferHold) {
-			const KeyBind* bestMatch = nullptr;
+			const KeyBind* exactMatch = nullptr;
+			const KeyBind* plainFallbackMatch = nullptr;
+
 			for (const auto& bind : bindings) {
 				if (bind.vKey != vKey) continue;
+
+				// look for assigned modifier + key
 				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
-					// check if the key requires hold or tap
 					if (preferHold && bind.holdSeconds > 0.0f) return &bind;
 					if (!preferHold && bind.holdSeconds <= 0.0f) return &bind;
-					bestMatch = &bind; // fallback options if an exact mode match is not found
+					exactMatch = &bind;
+				}
+				// fallback to the pressed key if none found
+				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) {
+					if (preferHold && bind.holdSeconds > 0.0f) plainFallbackMatch = &bind;
+					if (!preferHold && bind.holdSeconds <= 0.0f) plainFallbackMatch = &bind;
 				}
 			}
-			return bestMatch;
+
+			// If no exact modifier combination was found, fall back to the plain key binding profile cleanly
+			return exactMatch ? exactMatch : plainFallbackMatch;
 		}
 
 		void FireBinding(const KeyBind& bind) {
@@ -170,12 +180,14 @@ namespace RadarKeys {
 
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
 			if (showCapturePrompt) return;
+
 			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
 
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
 					if (!it->second.fired) {
+						// for tap
 						const KeyBind* tapBind = FindMatchingBinding(vKey, it->second.ctrlOnPressed, it->second.shiftOnPressed, it->second.altOnPressed, false);
 						if (tapBind && tapBind->holdSeconds <= 0.0f) {
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
@@ -188,18 +200,22 @@ namespace RadarKeys {
 			}
 			
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) return;
+
 			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 
 			// for long press
 			bool hasHoldOptionOnKey = false;
 			for (const auto& bind : bindings) {
-				if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) { 
-					hasHoldOptionOnKey = true; 
-					break; 
+				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
+					// check if modifier key is assigned
+					if ((bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) ||
+						(!bind.needCtrl && !bind.needShift && !bind.needAlt)) {
+						hasHoldOptionOnKey = true;
+						break;
+					}
 				}
 			}
 
-			// for tap
 			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
 			if (toRun && !hasHoldOptionOnKey) {
 				FireBinding(*toRun);
