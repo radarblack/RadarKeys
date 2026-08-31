@@ -616,14 +616,29 @@ namespace RadarKeys {
     			ImGui::Text("Script Path:");
     			ImGui::SetNextItemWidth(-1);
     			ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
-
-    			// warning if the file is not found on the written path
+    
     			if (capturedScriptPathBuffer[0] != '\0') {
-			        std::string targetPath = ResolveScriptPath(capturedScriptPathBuffer);
-        			if (!std::filesystem::exists(targetPath)) {
-            			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "* Script file not found at path!");
+        			std::string currentText(capturedScriptPathBuffer);
+        
+        			bool typingLuaFile = false;
+        			if (currentText.size() >= 4) {
+            			std::string extension = currentText.substr(currentText.size() - 4);
+            			for (char &c : extension) c = std::tolower(c);
+            
+            			if (extension == ".lua") {
+                			typingLuaFile = true;
+            			}
+        			}
+
+        			if (typingLuaFile) {
+            			std::string targetPath = ResolveScriptPath(capturedScriptPathBuffer);
+            			if (!std::filesystem::exists(targetPath)) {
+                			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "[X] Error: File does not exist at this path!");
+            			} else {
+                			ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "[O] Verified: Lua file ready to bind.");
+            			}
         			} else {
-            			ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "  Script located successfully.");
+            			ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "  Typing path... (End filename with .lua to verify)");
         			}
     			}
     			ImGui::Spacing();
@@ -633,12 +648,25 @@ namespace RadarKeys {
 			bool canFinalize = capturedVKey != 0 && comboAvailable;
 
 			if (!isAssigningMenuToggleKey) {
-    			if (capturedScriptPathBuffer[0] == '\0') {
+	    		if (capturedScriptPathBuffer[0] == '\0') {
         			canFinalize = false;
     			} else {
-        			std::string resolvedPath = ResolveScriptPath(capturedScriptPathBuffer);
-        			if (!std::filesystem::exists(resolvedPath)) {
+        			std::string currentText(capturedScriptPathBuffer);
+        
+        			bool endsWithLua = false;
+        			if (currentText.size() >= 4) {
+            			std::string extension = currentText.substr(currentText.size() - 4);
+            			for (char &c : extension) c = std::tolower(c);
+            			endsWithLua = (extension == ".lua");
+        			}
+
+        			if (!endsWithLua) {
             			canFinalize = false;
+        			} else {
+            			std::string resolvedPath = ResolveScriptPath(capturedScriptPathBuffer);
+            			if (!std::filesystem::exists(resolvedPath)) {
+                			canFinalize = false;
+            			}
         			}
     			}
 			}
