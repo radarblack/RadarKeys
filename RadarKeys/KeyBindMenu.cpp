@@ -242,7 +242,6 @@ namespace RadarKeys {
 		}
 
 		void SaveBindings() {
-			// ensure mod/radarKeys/ directory exists before writing bindings file (ofstream won't create it).
 			std::error_code ec;
 			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 			std::filesystem::create_directories(bindsDir, ec);
@@ -252,14 +251,25 @@ namespace RadarKeys {
 			if (!outFile) { spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", GetBindsFileName()); return; }
 			
 			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
-			
-			for (const auto& b : bindings) {
+			std::string gameDirStr = std::filesystem::path(GetGameDirectory()).generic_string() + "/";
+
+			for (auto b : bindings) {
+				std::string genericOn = std::filesystem::path(b.scriptPathOn).generic_string();
+				std::string genericOff = std::filesystem::path(b.scriptPathOff).generic_string();
+
+				if (genericOn.find(gameDirStr) == 0) {
+					genericOn.erase(0, gameDirStr.length());
+				}
+				if (genericOff.find(gameDirStr) == 0) {
+					genericOff.erase(0, gameDirStr.length());
+				}
+
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
 				
 				if (b.isToggle) {
-					outFile << "1|" << b.scriptPathOn << "|" << b.scriptPathOff << "\n";
+					outFile << "1|" << genericOn << "|" << genericOff << "\n";
 				} else {
-					outFile << "0|" << b.scriptPathOn << "\n";
+					outFile << "0|" << genericOn << "\n";
 				}
 			}
 			outFile.close();
@@ -292,8 +302,7 @@ namespace RadarKeys {
 					bool isToggle = false;
 					std::string pathOn = "";
 					std::string pathOff = "";
-
-					// maps the .conf
+					
 					if (trim(parts[6]) == "1" && parts.size() >= 9) {
 						isToggle = true;
 						pathOn = trim(parts[7]);
@@ -304,7 +313,10 @@ namespace RadarKeys {
 						pathOff = "";
 					}
 					
-					bindings.push_back(KeyBind{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, pathOn, pathOff, false, holdSeconds });
+					std::string resolvedOn = ResolveScriptPath(pathOn);
+					std::string resolvedOff = pathOff.empty() ? "" : ResolveScriptPath(pathOff);
+
+					bindings.push_back(KeyBind{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, resolvedOn, resolvedOff, false, holdSeconds });
 				}
 				else if (parts[0] == "BIND") {
 					spdlog::warn("KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}", line);
