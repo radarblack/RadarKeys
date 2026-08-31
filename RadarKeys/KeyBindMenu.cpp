@@ -71,9 +71,9 @@ namespace RadarKeys {
 		}
 
 		std::string CombinedDisplayName(const KeyBind& bind) {
-			std::string result = (bind.needCtrl ? "Ctrl+" : "") + (bind.needShift ? "Shift+" : "") + (bind.needAlt ? "Alt+" : "") + bind.keyName;
+			std::string result = std::string(bind.needCtrl ? "Ctrl+" : "") + (bind.needShift ? "Shift+" : "") + (bind.needAlt ? "Alt+" : "") + bind.keyName;
 			if (bind.holdSeconds > 0.0f) {
-				char buf[32];
+				char buf[32]; // Compact zero-allocation layout format pass
 				snprintf(buf, sizeof(buf), " (hold %.1fs)", bind.holdSeconds);
 				result += buf;
 			}
@@ -178,7 +178,7 @@ namespace RadarKeys {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) return;
 
 			// log raw down event
-			DebuggerMenu::LogButtonPress((ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
+			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 			if (!toRun) return;
 
 			if (!toRun->needCtrl && !toRun->needShift && !toRun->needAlt) ctrlHeld = shiftHeld = altHeld = false;
@@ -327,22 +327,40 @@ namespace RadarKeys {
 		static char capturedScriptPathBuffer[512] = "";
 
 		void DrawKeyCapturePrompt() {
+			// makes the original window size persistent
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
-			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) { ImGui::End(); return; }
+
+			// makes it resizable
+			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
+				ImGui::End();
+				return;
+			}
 
 			// input detection
 			if (capturedVKey == 0) {
-				capturedCtrl = ImGui::GetIO().KeyCtrl; capturedShift = ImGui::GetIO().KeyShift; capturedAlt = ImGui::GetIO().KeyAlt;
+				// checks if the modifier keys are held
+				capturedCtrl  = ImGui::GetIO().KeyCtrl;
+				capturedShift = ImGui::GetIO().KeyShift;
+				capturedAlt   = ImGui::GetIO().KeyAlt;
+
 				for (int i = 1; i < 256; i++) {
 					// explicit ignore unique window keys
-					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN || i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) continue;
+					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
+						i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
+						continue;
+					}
 					// ignore mouse buttons
 					if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
+
 					if (ImGui::IsKeyPressed((ImGuiKey)i)) {
 						capturedVKey = (USHORT)i;
+						
 						// ticks the checkboxes if a modifier key is held
-						capturedCtrl = ImGui::GetIO().KeyCtrl; capturedShift = ImGui::GetIO().KeyShift; capturedAlt = ImGui::GetIO().KeyAlt; break;
+						capturedCtrl  = ImGui::GetIO().KeyCtrl;
+						capturedShift = ImGui::GetIO().KeyShift;
+						capturedAlt   = ImGui::GetIO().KeyAlt;
+						break;
 					}
 				}
 			}
@@ -350,13 +368,18 @@ namespace RadarKeys {
 			// key capture
 			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 			auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
-			ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Key").x) * 0.5f); ImGui::Text(" Key"); ImGui::Separator();
+			
+			ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Key").x) * 0.5f);
+			ImGui::Text(" Key");
+			ImGui::Separator();
+
 			float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 
 			if (capturedVKey == 0) {
 				// calculate text geometry sizes for "PRESS KEY..."
 				float startVerticalY = lowerBoxTopY + ((lowerBoxRemainingHeight - (ImGui::GetTextLineHeightWithSpacing() * 2.0f)) * 0.5f);
-				ImGui::SetNextTreeNodeOpen(true); ImGui::SetCursorPosY(startVerticalY);
+				ImGui::SetNextItemOpen(true); 
+				ImGui::SetCursorPosY(startVerticalY);
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("PRESS").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), " PRESS");
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("KEY...").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "  KEY..");
 			} else {
@@ -392,7 +415,7 @@ namespace RadarKeys {
 			ImGui::EndGroup(); ImGui::Separator();
 
 			bool isLuaPathValid = false; int scriptStatus = 0; // 0 = empty, 1 = invalid ext, 2 = missing file, 3 = valid file
-			if (!isAssigningMenuToggleKey && capturedScriptPathBuffer[0] != '\0') {
+			if (!isAssigningMenuToggleKey && capturedScriptPathBuffer != '\0') {
 				std::string txt(capturedScriptPathBuffer);
 				if (txt.size() >= 4) {
 					std::string ext = txt.substr(txt.size() - 4);
@@ -409,7 +432,7 @@ namespace RadarKeys {
 				ImGui::Text("Script Path:"); ImGui::SetNextItemWidth(-1); ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
 				if (scriptStatus == 3) ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " Found! Ready to assign.");
 				else if (scriptStatus == 2) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), " The script file does not exist.");
-				else if (scriptStatus == 1 || capturedScriptPathBuffer[0] != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
+				else if (scriptStatus == 1 || capturedScriptPathBuffer != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
 				ImGui::Spacing();
 			}
 
@@ -425,12 +448,20 @@ namespace RadarKeys {
 				} else {
 					AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
 				}
-				capturedVKey = capturedHoldSeconds = 0.0f; capturedScriptPathBuffer[0] = '\0'; showCapturePrompt = isAssigningMenuToggleKey = false;
+				// FIXED: Split assignments onto independent rows to fix data loss warnings
+				capturedVKey = 0;
+				capturedHoldSeconds = 0.0f;
+				capturedScriptPathBuffer = '\0';
+				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
 			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
 			
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
-				capturedVKey = capturedHoldSeconds = 0.0f; capturedScriptPathBuffer[0] = '\0'; showCapturePrompt = isAssigningMenuToggleKey = false;
+				// FIXED: Split assignments onto independent rows to fix data loss warnings
+				capturedVKey = 0;
+				capturedHoldSeconds = 0.0f;
+				capturedScriptPathBuffer = '\0';
+				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
 			ImGui::End();
 		}
