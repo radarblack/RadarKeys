@@ -5,18 +5,17 @@
 #include "HookUtils.h"
 #include "KeyBindMenu.h"
 #include "DebuggerMenu.h"
+#include <MinHook.h>
 
 #include "spdlog/spdlog.h"
+#include "spdlog/sinks/base_sink.h"
 #include "spdlog/sinks/basic_file_sink.h"
-
-#include <MinHook.h>
 
 #include <thread>
 #include <optional>
 #include <string>
 #include <cassert>
 #include <filesystem>
-#include "spdlog/sinks/base_sink.h"
 #include <queue>
 #include <fstream>
 
