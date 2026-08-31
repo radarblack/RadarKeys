@@ -332,16 +332,13 @@ namespace RadarKeys {
 			// makes the original window size persistent
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
-
 			ImGui::SetNextWindowFocus();
 
+			// makes it resizable
 			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
 				ImGui::End();
 				return;
 			}
-
-			// This keeps the prompt alive on the absolute front layer and prevents background clicks from freezing the UI!
-			ImGui::SetWindowFocus();
 
 			// input detection
 			if (capturedVKey == 0) {
@@ -472,21 +469,19 @@ namespace RadarKeys {
 				if (isAssigningMenuToggleKey) {
 					if (menuToggleHandle != 0) RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
 					menuToggleVKey = capturedVKey; menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
-					SaveBindings(); DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
+					SaveBindings(); DebuggerMenu::LogBindEvent("Main Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
 				} else {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 					AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
 				}
-				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
-				capturedScriptPathBuffer[0] = '\0';
+				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathBuffer[0] = '\0';
 				capturedToggleMode = capturedLongPressMode = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
 			if (!canFinalize) ImGui::BeginDisabled(); ImGui::SameLine();
 			
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
-				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
-				capturedScriptPathBuffer[0] = '\0';
+				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathBuffer[0] = '\0';
 				capturedToggleMode = capturedLongPressMode = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
