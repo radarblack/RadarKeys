@@ -475,7 +475,7 @@ namespace RadarKeys {
 				capturedToggleMode = capturedLongPressMode = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
-			if (!canFinalize) ImGui::BeginDisabled(); ImGui::SameLine();
+			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
 			
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
 				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathBuffer[0] = '\0';
