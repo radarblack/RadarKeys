@@ -280,37 +280,37 @@ namespace RadarKeys {
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
 					if (vKey == -1) { spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName); continue; }
 					
-					bool Ctrl  = (trim(parts[2]) == "1");
-					bool Shift = (trim(parts[3]) == "1");
-					bool Alt   = (trim(parts[4]) == "1");
+					KeyBind b;
+					b.vKey = (USHORT)vKey;
+					b.needCtrl = (trim(parts[2]) == "1");
+					b.needShift = (trim(parts[3]) == "1");
+					b.needAlt = (trim(parts[4]) == "1");
+					b.keyName = keyName;
+					b.toggleState = false;
 
-					float holdSeconds = 0.0f;
-					bool isToggle = false;
-					std::string pathOn = "";
-					std::string pathOff = "";
-					
+					// maps the .conf file
 					if (parts.size() >= 9) {
-						try { holdSeconds = std::stof(trim(parts[5])); }
-						catch (...) { holdSeconds = 0.0f; }
-						isToggle = (trim(parts[6]) == "1");
-						pathOn = trim(parts[7]);
-						pathOff = trim(parts[8]);
+						try { b.holdSeconds = std::stof(trim(parts[5])); }
+						catch (...) { b.holdSeconds = 0.0f; }
+						b.isToggle = (trim(parts[6]) == "1");
+						b.scriptPathOn = trim(parts[7]);
+						b.scriptPathOff = trim(parts[8]);
 					} 
 					else if (parts.size() == 7) {
-						try { holdSeconds = std::stof(trim(parts[5])); }
-						catch (...) { holdSeconds = 0.0f; }
-						isToggle = false;
-						pathOn = trim(parts[6]);
-						pathOff = "";
+						try { b.holdSeconds = std::stof(trim(parts[5])); }
+						catch (...) { b.holdSeconds = 0.0f; }
+						b.isToggle = false;
+						b.scriptPathOn = trim(parts[6]);
+						b.scriptPathOff = "";
 					} 
 					else {
-						holdSeconds = 0.0f;
-						isToggle = false;
-						pathOn = trim(parts[5]);
-						pathOff = "";
+						b.holdSeconds = 0.0f;
+						b.isToggle = false;
+						b.scriptPathOn = trim(parts[5]);
+						b.scriptPathOff = "";
 					}
 					
-					bindings.push_back(KeyBind{ (USHORT)vKey, Ctrl, Shift, Alt, keyName, isToggle, pathOn, pathOff, false, holdSeconds });
+					bindings.push_back(b);
 				}
 			}
 			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), GetBindsFileName());
