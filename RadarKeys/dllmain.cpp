@@ -20,6 +20,28 @@
 #include <fstream>
 
 namespace RadarKeys {
+	static bool is_initialization_active = true;
+	class StartupFileSink : public spdlog::sinks::base_sink<std::mutex> {
+	private:
+		std::wstring file_path_;
+	public:
+		explicit StartupFileSink(std::wstring path) : file_path_(std::move(path)) {}
+	protected:
+		void sink_it_(const spdlog::details::log_msg& msg) override {
+			if (!is_initialization_active) return;
+
+			spdlog::memory_buf_t formatted;
+			base_sink<std::mutex>::formatter_->format(msg, formatted);
+			
+			FILE* file_handle = nullptr;
+			if (_wfopen_s(&file_handle, file_path_.c_str(), L"ab") == 0 && file_handle) {
+				fwrite(formatted.data(), sizeof(char), formatted.size(), file_handle);
+				fclose(file_handle);
+			}
+		}
+		void flush_() override {}
+	};
+
 	class MemoryCappedSink : public spdlog::sinks::base_sink<std::mutex> {
 	private:
 		std::wstring file_path_;
