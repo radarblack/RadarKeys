@@ -302,8 +302,7 @@ namespace RadarKeys {
 					bool isToggle = false;
 					std::string pathOn = "";
 					std::string pathOff = "";
-
-					// maps the .conf
+					
 					if (trim(parts[6]) == "1" && parts.size() >= 9) {
 						isToggle = true;
 						pathOn = trim(parts[7]);
@@ -314,7 +313,10 @@ namespace RadarKeys {
 						pathOff = "";
 					}
 					
-					bindings.push_back(KeyBind{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, pathOn, pathOff, false, holdSeconds });
+					std::string resolvedOn = ResolveScriptPath(pathOn);
+					std::string resolvedOff = pathOff.empty() ? "" : ResolveScriptPath(pathOff);
+
+					bindings.push_back(KeyBind{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, resolvedOn, resolvedOff, false, holdSeconds });
 				}
 				else if (parts[0] == "BIND") {
 					spdlog::warn("KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}", line);
