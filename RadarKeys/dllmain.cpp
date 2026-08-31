@@ -135,6 +135,10 @@ namespace RadarKeys {
 		// remove the sinks to the disk
 		if (auto logger = spdlog::get("radarkeys")) {
 			auto& sinks = logger->sinks();
+			
+			if (sliding_sink) {
+				sliding_sink->ActivateMemoryBufferTrack();
+			}
 			sinks.erase(std::remove(sinks.begin(), sinks.end(), startup_sink), sinks.end());
 		}
 	}
