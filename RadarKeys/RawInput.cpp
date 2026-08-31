@@ -240,6 +240,7 @@ namespace RadarKeys {
 				return;
 			}
 			else { // HWL TODO: haven't checked if this works properly
+				buttonActions[vKey]->clear();
 				delete buttonActions[vKey];
 				buttonActions[vKey] = nullptr;
 			}
