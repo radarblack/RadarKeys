@@ -47,8 +47,7 @@ namespace RadarKeys {
 		std::wstring file_path_;
 		std::queue<std::string> log_lines_;
 		size_t current_bytes_ = 0;
-		size_t max_runtime_bytes_ = 6144; // fallback default around 7KB
-		bool is_recording_active_ = false;
+		size_t max_runtime_bytes_ = 8192; // fallback: set to 8KB 
 
 	public:
 		explicit MemoryCappedSink(std::wstring path) : file_path_(std::move(path)) {}
@@ -57,22 +56,26 @@ namespace RadarKeys {
 			std::error_code ec;
 			size_t startup_disk_bytes = std::filesystem::file_size(file_path_, ec);
 			if (!ec && startup_disk_bytes < 10240) {
-				max_runtime_bytes_ = 10240 - startup_disk_bytes;
+				max_runtime_bytes_ = 10240 - startup_disk_bytes; // tracks remainder
 			}
-			is_recording_active_ = true;
 		}
 
 	protected:
 		void sink_it_(const spdlog::details::log_msg& msg) override {
-			if (!is_recording_active_) return;
+			if (is_initialization_active) return;
+
 			spdlog::memory_buf_t formatted;
 			base_sink<std::mutex>::formatter_->format(msg, formatted);
 			std::string line_str(formatted.data(), formatted.size());
-			size_t true_disk_line_weight = line_str.size() + 45;
+
+			// trimmed overheard margin to fit the log text without bleeding parts
+			size_t true_disk_line_weight = line_str.size() + 20;
+
 			log_lines_.push(line_str);
 			current_bytes_ += true_disk_line_weight;
+
 			while (current_bytes_ > max_runtime_bytes_ && !log_lines_.empty()) {
-				current_bytes_ -= (log_lines_.front().size() + 45);
+				current_bytes_ -= (log_lines_.front().size() + 20); // align pop
 				log_lines_.pop();
 			}
 		}
