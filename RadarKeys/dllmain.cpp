@@ -81,6 +81,16 @@ namespace RadarKeys {
 		spdlog::info("RadarKeys log started");
 	}
 
+	void InitCursorHook() {
+		if (MH_CreateHook(&SetCursorPos, &SetCursorPos_Hook, reinterpret_cast<LPVOID*>(&SetCursorPos_Orig)) != MH_OK) {
+			spdlog::error("InitCursorHook: MH_CreateHook failed for SetCursorPos");
+			return;
+		}
+		if (MH_EnableHook(&SetCursorPos) != MH_OK) {
+			spdlog::error("InitCursorHook: MH_EnableHook failed for SetCursorPos");
+		}
+	}
+
 	// DLL_PROCESS_ATTACH runs under the loader lock - heavy initialization
 	void InitThread() {
 		SetupLog();
