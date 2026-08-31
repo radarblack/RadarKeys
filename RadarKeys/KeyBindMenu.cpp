@@ -12,6 +12,7 @@
 #include <map>
 #include <chrono>
 #include <cstdio>
+#include <ctype.h>
 
 namespace RadarKeys {
 	namespace KeyBindMenu {
@@ -19,6 +20,11 @@ namespace RadarKeys {
 		std::vector<KeyBind> bindings;
 		bool showCapturePrompt = false; 
 		static bool isAssigningMenuToggleKey = false; 
+
+		static bool uiToggleModeChecked = false;
+		static bool uiLongPressModeChecked = false;
+		static char capturedToggleOnPathBuffer[512] = "";
+		static char capturedToggleOffPathBuffer[512] = "";
 
 		const std::string& GetBindsFileName() {
 			static std::string cached;
@@ -28,7 +34,6 @@ namespace RadarKeys {
 			return cached;
 		}
 
-		// Modifiers as checkboxes; dropdown shows persistable base keys only.
 		struct VkNameEntry { const char* name; USHORT vKey; };
 		const VkNameEntry vkNameTable[] = {
 			{"A", 'A'}, {"B", 'B'}, {"C", 'C'}, {"D", 'D'}, {"E", 'E'}, {"F", 'F'},
@@ -63,7 +68,6 @@ namespace RadarKeys {
 			return "Unknown(" + std::to_string(vKey) + ")";
 		}
 
-		// returns -1 if not found in the table
 		int VKeyForName(const std::string& name) {
 			for (int i = 0; i < vkNameTableCount; i++) {
 				if (name == vkNameTable[i].name) {
@@ -97,7 +101,7 @@ namespace RadarKeys {
 			}
 
 			std::filesystem::path relativePart;
-			if (typedPath.find('/') != std::string::npos || typedPath.find('\\') != std::string::npos) {
+			if (typedPath.find('/') != std::string::npos || typedPath.find('\') != std::string::npos) {
 				relativePart = typedPath;
 			}
 			else {
@@ -108,25 +112,15 @@ namespace RadarKeys {
 			return fullPath.string();
 		}
 
-		// Menu-toggle key: plain key only (no modifiers) for  access; persisted via LoadBindings/SaveBindings. default F7.
 		USHORT menuToggleVKey = VK_F7;
 		RawInput::ActionHandle menuToggleHandle = 0;
 		bool menuOpen = false;
 
-		// share one RawInput action per vKey to let OnBoundKeyPressed see all bindings and fall back to plain key when modifiers don't match.
 		std::map<USHORT, RawInput::ActionHandle> vKeyDispatchers;
 
-		// RawInput action wired to whatever menuToggleVKey currently is - see RegisterMenuToggleKey
 		void OnMenuToggleKeyPressed(RawInput::BUTTONEVENT buttonEvent) {
-			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
-				return;
-			}
-			
-			// safety gate. so that you can't close the menu when the prompt is up.
-			if (showCapturePrompt) {
-				return;
-			}
-
+			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) return;
+			if (showCapturePrompt) return;
 			menuOpen = !menuOpen;
 		}
 
@@ -135,32 +129,19 @@ namespace RadarKeys {
 			menuToggleHandle = RawInput::RegisterAction(vKey, OnMenuToggleKeyPressed);
 		}
 
-		// reserved regardless of modifiers for IH commands and other default keys
 		bool IsReservedVKey(USHORT vKey) {
 			return vKey == VK_F2 || vKey == VK_F3 || vKey == VK_ESCAPE || vKey == menuToggleVKey;
 		}
 
-		// binding free if exact (vKey,Ctrl,Shift,Alt) tuple unused; modifiers create separate bindings.
-		// updated to allow a Tap and a Hold configuration on the same key combo
 		bool IsComboAvailable(USHORT vKey, bool needCtrl, bool needShift, bool needAlt, float holdSeconds) {
-			if (IsReservedVKey(vKey)) {
-				return false;
-			}
+			if (IsReservedVKey(vKey)) return false;
 			for (const KeyBind& bind : bindings) {
-				if (bind.vKey == vKey && 
-            		bind.needCtrl == needCtrl && 
-            		bind.needShift == needShift && 
-            		bind.needAlt == needAlt) {
-            
-            		if (bind.holdSeconds == holdSeconds) {
-                		return false;
-            		}
-            
-            		if ((holdSeconds <= 0.0f && bind.holdSeconds <= 0.0f) || 
-                		(holdSeconds > 0.0f && bind.holdSeconds > 0.0f)) {
-                			return false;
-            		}
-		        }
+				if (bind.vKey == vKey && bind.needCtrl == needCtrl && bind.needShift == needShift && bind.needAlt == needAlt) {
+					if (bind.holdSeconds == holdSeconds) return false;
+					if ((holdSeconds <= 0.0f && bind.holdSeconds <= 0.0f) || (holdSeconds > 0.0f && bind.holdSeconds > 0.0f)) {
+						return false;
+					}
+				}
 			}
 			return true;
 		}
@@ -173,24 +154,18 @@ namespace RadarKeys {
 
 		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld) {
 			const KeyBind* exactMatch = nullptr;
-			const KeyBind* fallbackMatch = nullptr; // fallback if there is no assigned script to the key combo
+			const KeyBind* fallbackMatch = nullptr;
 
 			for (const KeyBind& bind : bindings) {
-				if (bind.vKey != vKey) {
-					continue;
-				}
-
+				if (bind.vKey != vKey) continue;
 				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
 					exactMatch = &bind;
 					break;
 				}
-
 				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) {
 					fallbackMatch = &bind;
 				}
 			}
-
-			// return the precise modifier profile if found; otherwise drop down to your plain key bind seamlessly
 			return exactMatch != nullptr ? exactMatch : fallbackMatch;
 		}
 
@@ -221,10 +196,7 @@ namespace RadarKeys {
 		}
 
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
-			// prevents 'tap' scripts from running when the input detection prompt is up
-			if (showCapturePrompt) {
-				return;
-			}
+			if (showCapturePrompt) return;
 
 			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL);
 			bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
@@ -233,12 +205,9 @@ namespace RadarKeys {
 			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
 
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
-				// the key was released. Check if we were tracking a hold for this key.
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
-					// if it hasn't fired the hold script yet, it means it's a short tap!
 					if (!it->second.fired) {
-						// look for a structural 'instant' (holdSeconds == 0) fallback binding on the same key combo
 						const KeyBind* tapBind = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
 						if (tapBind && tapBind->holdSeconds <= 0.0f) {
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
@@ -250,11 +219,8 @@ namespace RadarKeys {
 				return;
 			}
 
-			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
-				return;
-			}
+			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) return;
 
-			// log raw down event
 			std::string pressedName;
 			if (ctrlHeld) pressedName += "Ctrl+";
 			if (shiftHeld) pressedName += "Shift+";
@@ -262,11 +228,8 @@ namespace RadarKeys {
 			pressedName += NameForVKey(vKey);
 			DebuggerMenu::LogButtonPress(pressedName + " pressed");
 
-			if (toRun == nullptr) {
-				return;
-			}
+			if (toRun == nullptr) return;
 
-			// look to see if there is ANY binding on this virtual key setup that uses a hold delay
 			bool hasHoldOptionOnKey = false;
 			for (const KeyBind& bind : bindings) {
 				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
@@ -276,12 +239,10 @@ namespace RadarKeys {
 			}
 
 			if (toRun->holdSeconds <= 0.0f) {
-				// if there's no hold profile registered anywhere on this key, fire instantly like normal
 				if (!hasHoldOptionOnKey) {
 					FireBinding(*toRun);
 				}
 				else {
-					// if the user lets go early, OnBoundKeyPressed's ONUP section above catches it as a tap.
 					HoldTrack track;
 					track.startTime = std::chrono::steady_clock::now();
 					track.fired = false;
@@ -289,7 +250,6 @@ namespace RadarKeys {
 				}
 			}
 			else {
-				// this is explicitly a hold binding. Start the clock timer ticker.
 				HoldTrack track;
 				track.startTime = std::chrono::steady_clock::now();
 				track.fired = false;
@@ -298,9 +258,7 @@ namespace RadarKeys {
 		}
 
 		void Update() {
-			if (showCapturePrompt) {
-				return;
-			}
+			if (showCapturePrompt) return;
 
 			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
 				USHORT vKey = it->first;
@@ -315,7 +273,6 @@ namespace RadarKeys {
 				bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
 				bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
 				
-				// look specifically for the binding configured with a hold delay
 				const KeyBind* holdBind = nullptr;
 				for (const KeyBind& bind : bindings) {
 					if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) {
@@ -336,23 +293,17 @@ namespace RadarKeys {
 			}
 		}
 
-		// registers shared vKey dispatcher; safe to call repeatedly per binding.
 		void EnsureDispatcherRegistered(USHORT vKey) {
-			if (vKeyDispatchers.find(vKey) != vKeyDispatchers.end()) {
-				return;
-			}
+			if (vKeyDispatchers.find(vKey) != vKeyDispatchers.end()) return;
 			RawInput::ActionHandle handle = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT buttonEvent) {
 				OnBoundKeyPressed(vKey, buttonEvent);
 			});
 			vKeyDispatchers[vKey] = handle;
 		}
 
-		// unregisters vKey dispatcher only when no bindings remain; other modifier combos may still need it.
 		void RemoveDispatcherIfUnused(USHORT vKey) {
 			for (const KeyBind& bind : bindings) {
-				if (bind.vKey == vKey) {
-					return; // still in use by another binding
-				}
+				if (bind.vKey == vKey) return;
 			}
 			auto it = vKeyDispatchers.find(vKey);
 			if (it != vKeyDispatchers.end()) {
@@ -369,7 +320,8 @@ namespace RadarKeys {
 			std::ofstream outFile(GetBindsFileName());
 			if (!outFile) return;
 
-			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
+			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "
+";
 			for (const KeyBind& bind : bindings) {
 				int modeInt = static_cast<int>(bind.mode);
 				outFile << "BIND_V2|" << bind.keyName << "|" 
@@ -380,7 +332,8 @@ namespace RadarKeys {
 						<< bind.holdSeconds << "|" 
 						<< bind.scriptPath << "|" 
 						<< bind.toggleOnScriptPath << "|" 
-						<< bind.toggleOffScriptPath << "\n";
+						<< bind.toggleOffScriptPath << "
+";
 			}
 			outFile.close();
 		}
@@ -419,7 +372,6 @@ namespace RadarKeys {
 					int vKey = VKeyForName(keyName);
 					if (vKey == -1) continue;
 
-					// Explicitly assign fields piece-by-piece to bypass initializer layout rules
 					KeyBind bind;
 					bind.vKey = (USHORT)vKey;
 					bind.needCtrl = needCtrl;
@@ -435,7 +387,6 @@ namespace RadarKeys {
 
 					bindings.push_back(bind);
 				}
-				// backwards compatibility safety catch for original layout profiles
 				else if (parts[0] == "BIND" && parts.size() >= 7) {
 					std::string keyName = trim(parts[1]);
 					bool needCtrl = (trim(parts[2]) == "1");
@@ -457,6 +408,8 @@ namespace RadarKeys {
 					bind.mode = BindMode::STANDARD;
 					bind.scriptPath = scriptPath;
 					bind.holdSeconds = holdSeconds;
+					bind.toggleOnScriptPath = "";
+					bind.toggleOffScriptPath = "";
 					bind.currentToggleState = false;
 
 					bindings.push_back(bind);
@@ -464,47 +417,13 @@ namespace RadarKeys {
 			}
 		}
 
-		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, const std::string& scriptPath) {
-			KeyBind bind{ vKey, needCtrl, needShift, needAlt, keyName, scriptPath, holdSeconds };
-			bindings.push_back(bind);
-			EnsureDispatcherRegistered(vKey);
-			SaveBindings();
-			DebuggerMenu::LogBindEvent("bound " + CombinedDisplayName(bind) + " -> " + scriptPath);
-		}
-
-		void RemoveBinding(int index) {
-			if (index < 0 || index >= (int)bindings.size()) {
-				return;
-			}
-			std::string removedDesc = CombinedDisplayName(bindings[index]) + " -> " + bindings[index].scriptPath;
-			USHORT vKey = bindings[index].vKey;
-			bindings.erase(bindings.begin() + index);
-			RemoveDispatcherIfUnused(vKey);
-			SaveBindings();
-			DebuggerMenu::LogBindEvent("unbound " + removedDesc);
-		}
-
-		void RemoveAllBindings() {
-			size_t count = bindings.size();
-			for (const auto& entry : vKeyDispatchers) {
-				RawInput::UnRegisterAction(entry.first, entry.second);
-			}
-			vKeyDispatchers.clear();
-			bindings.clear();
-			SaveBindings();
-			DebuggerMenu::LogBindEvent("unbound all (" + std::to_string(count) + " binding(s))");
-		}
-
 		void Init(const std::string& defaultMenuKeyName) {
 			int defaultVKey = VKeyForName(defaultMenuKeyName);
 			if (defaultVKey != -1) {
 				menuToggleVKey = (USHORT)defaultVKey;
 			}
-			else if (!defaultMenuKeyName.empty()) {
-				spdlog::warn("KeyBindMenu::Init: unknown keyBindMenuToggleKey '{}' in ihhook_config.lua, using F4", defaultMenuKeyName);
-			}
 
-			LoadBindings(); // may override menuToggleVKey again if radar_keybinds.conf has a persisted MENUKEY
+			LoadBindings(); 
 			for (const KeyBind& bind : bindings) {
 				EnsureDispatcherRegistered(bind.vKey);
 			}
@@ -517,17 +436,13 @@ namespace RadarKeys {
 		static bool capturedAlt = false;
 		static float capturedHoldSeconds = 0.0f;
 		static char capturedScriptPathBuffer[512] = "";
-		static bool uiToggleModeChecked = false;
-		static bool uiLongPressModeChecked = false;
-		static char capturedToggleOnPathBuffer[512] = "";
-		static char capturedToggleOffPathBuffer[512] = "";
 
 		bool IsValidLuaScript(const char* pathBuffer) {
 			if (pathBuffer == nullptr || pathBuffer[0] == '\0') return false;
 			std::string text(pathBuffer);
 			if (text.size() < 4) return false;
 			std::string ext = text.substr(text.size() - 4);
-			for (char &c : ext) c = std::tolower(c);
+			for (char &c : ext) c = (char)tolower(c);
 			return (ext == ".lua" && std::filesystem::exists(ResolveScriptPath(text)));
 		}
 
@@ -538,7 +453,6 @@ namespace RadarKeys {
 				return;
 			}
 
-			// key capture
 			if (capturedVKey == 0) {
 				capturedCtrl  = ImGui::GetIO().KeyCtrl;
 				capturedShift = ImGui::GetIO().KeyShift;
@@ -546,7 +460,9 @@ namespace RadarKeys {
 
 				for (int i = 1; i < 256; i++) {
 					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
-						i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) continue;
+						i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
+						continue;
+					}
 					if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
 
 					if (ImGui::IsKeyPressed((ImGuiKey)i)) {
@@ -559,7 +475,6 @@ namespace RadarKeys {
 				}
 			}
 
-			// key box
 			ImGui::BeginChild("KeyDisplayFrame", ImVec2(110, 95), true);
 			ImGui::Text(" Key Target");
 			ImGui::Separator();
@@ -572,7 +487,6 @@ namespace RadarKeys {
 
 			ImGui::SameLine();
 
-			// modifiers
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
 				ImGui::Checkbox("Ctrl", &capturedCtrl);
@@ -585,12 +499,9 @@ namespace RadarKeys {
 
 			ImGui::SameLine(230);
 
-			// checks what type of key assignment is triggered.
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
 				ImGui::Text("Input Sub-Mode:");
-				
-				// disables either of the bind mode
 				if (ImGui::Checkbox("Toggle Switch", &uiToggleModeChecked)) {
 					if (uiToggleModeChecked) uiLongPressModeChecked = false;
 				}
@@ -605,7 +516,6 @@ namespace RadarKeys {
 			}
 			ImGui::EndGroup();
 
-			// long press
 			if (ImGui::BeginPopupModal("Long Press Duration Setup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 				ImGui::Text("Configure Hold Ticker Requirements:");
 				ImGui::Separator();
@@ -624,42 +534,46 @@ namespace RadarKeys {
 
 			ImGui::Separator();
 
-			// script path
 			if (!isAssigningMenuToggleKey) {
 				if (uiToggleModeChecked) {
-					// toggle mode script path 1
 					ImGui::Text("ON State Script Destination:");
 					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##toggleOnInput", capturedToggleOnPathBuffer, IM_ARRAYSIZE(capturedToggleOnPathBuffer));
 					if (capturedToggleOnPathBuffer[0] != '\0') {
-						if (!IsValidLuaScript(capturedToggleOnPathBuffer)) ImGui::TextColored(ImVec4(1,0.4f,0.4f,1), "* Script target invalid or not found!");
-						else ImGui::TextColored(ImVec4(0.4f,1,0.4f,1), "  Target script recognized.");
+						if (!IsValidLuaScript(capturedToggleOnPathBuffer)) {
+							ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "* Script target invalid or not found!");
+						} else {
+							ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "  Target script recognized.");
+						}
 					}
 
-					// toggle mode script path 2
 					ImGui::Text("OFF State Script Destination:");
 					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##toggleOffInput", capturedToggleOffPathBuffer, IM_ARRAYSIZE(capturedToggleOffPathBuffer));
 					if (capturedToggleOffPathBuffer[0] != '\0') {
-						if (!IsValidLuaScript(capturedToggleOffPathBuffer)) ImGui::TextColored(ImVec4(1,0.4f,0.4f,1), "* Script target invalid or not found!");
-						else ImGui::TextColored(ImVec4(0.4f,1,0.4f,1), "  Target script recognized.");
+						if (!IsValidLuaScript(capturedToggleOffPathBuffer)) {
+							ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "* Script target invalid or not found!");
+						} else {
+							ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "  Target script recognized.");
+						}
 					}
 				} else {
-					// long press
 					std::string scriptLabel = uiLongPressModeChecked ? "Script Path (Fires after hold delay):" : "Script Path:";
 					ImGui::Text("%s", scriptLabel.c_str());
 					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
 					if (capturedScriptPathBuffer[0] != '\0') {
-						if (!IsValidLuaScript(capturedScriptPathBuffer)) ImGui::TextColored(ImVec4(1,0.4f,0.4f,1), "* Script target invalid or not found!");
-						else ImGui::TextColored(ImVec4(0.4f,1,0.4f,1), "  Target script recognized.");
+						if (!IsValidLuaScript(capturedScriptPathBuffer)) {
+							ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "* Script target invalid or not found!");
+						} else {
+							ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "  Target script recognized.");
+						}
 					}
 				}
 			}
 
 			ImGui::Separator();
 
-			// finalize
 			bool comboAvailable = (capturedVKey == 0) ? true : IsComboAvailable(capturedVKey, capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds);
 			bool pathsValidated = false;
 
@@ -708,7 +622,6 @@ namespace RadarKeys {
 					SaveBindings();
 				}
 
-				// Global cleanup resets
 				capturedVKey = 0; capturedHoldSeconds = 0.0f;
 				capturedScriptPathBuffer[0] = '\0'; 
 				capturedToggleOnPathBuffer[0] = '\0'; 
@@ -721,7 +634,9 @@ namespace RadarKeys {
 			ImGui::SameLine();
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
 				capturedVKey = 0; capturedHoldSeconds = 0.0f;
-				capturedScriptPathBuffer[0] = '\0'; capturedToggleOnPathBuffer[0] = '\0'; capturedToggleOffPathBuffer[0] = '\0';
+				capturedScriptPathBuffer[0] = '\0'; 
+				capturedToggleOnPathBuffer[0] = '\0'; 
+				capturedToggleOffPathBuffer[0] = '\0';
 				uiToggleModeChecked = false; uiLongPressModeChecked = false;
 				showCapturePrompt = false; isAssigningMenuToggleKey = false;
 			}
@@ -729,9 +644,8 @@ namespace RadarKeys {
 			ImGui::End();
 		}
 
-		// draws the ui
 		void Draw(bool* p_open) {
-			ImGui::SetNextWindowSize(ImVec2(480, 360), ImGuiCond_::ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(480, 360), ImGuiCond_FirstUseEver);
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) {
 				ImGui::End();
 				return;
@@ -759,7 +673,6 @@ namespace RadarKeys {
 				ImGui::SameLine();
 				ImGui::Text("%s", CombinedDisplayName(bindings[i]).c_str());
 				
-				// a little designs lol
 				if (bindings[i].mode == BindMode::TOGGLE) {
 					ImGui::SameLine();
 					if (bindings[i].currentToggleState) {
@@ -769,9 +682,8 @@ namespace RadarKeys {
 					}
 				}
 
-				ImGui::SameLine(220);
+				ImGui::SameLine(220); 
 				
-				// renders the filenames
 				std::string displayScript;
 				if (bindings[i].mode == BindMode::TOGGLE) {
 					std::string onFile = std::filesystem::path(bindings[i].toggleOnScriptPath).filename().string();
@@ -788,26 +700,26 @@ namespace RadarKeys {
 			ImGui::EndChild();
 
 			if (removeIndex != -1) {
-				RemoveBinding(removeIndex);
+				bindings.erase(bindings.begin() + removeIndex);
+				SaveBindings();
 			}
 
 			if (bindings.empty()) ImGui::BeginDisabled();
 			if (ImGui::Button("Clear All Hotkeys")) {
-				RemoveAllBindings();
+				bindings.clear();
+				SaveBindings();
 			}
 			if (bindings.empty()) ImGui::EndDisabled();
 
 			ImGui::Separator();
 			ImGui::Spacing();
 
-			// launch the custom prompt
 			if (ImGui::Button("Add New Binding...", ImVec2(-1, 35))) {
 				showCapturePrompt = true;
 			}
 
 			ImGui::End();
 
-			// draw if hte user interacts
 			if (showCapturePrompt) {
 				DrawKeyCapturePrompt();
 			}
