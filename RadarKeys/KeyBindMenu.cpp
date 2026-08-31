@@ -402,9 +402,9 @@ namespace RadarKeys {
 				}
 				else if (parts[0] == "BIND_V2" && parts.size() >= 10) {
 					std::string keyName = trim(parts[1]);
-					bool needCtrl = trim(parts[2]) == "1";
-					bool needShift = trim(parts[3]) == "1";
-					bool needAlt = trim(parts[4]) == "1";
+					bool needCtrl = (trim(parts[2]) == "1");
+					bool needShift = (trim(parts[3]) == "1");
+					bool needAlt = (trim(parts[4]) == "1");
 					
 					BindMode mode = BindMode::STANDARD;
 					try { mode = static_cast<BindMode>(std::stoi(trim(parts[5]))); } catch(...) {}
@@ -419,15 +419,28 @@ namespace RadarKeys {
 					int vKey = VKeyForName(keyName);
 					if (vKey == -1) continue;
 
-					KeyBind bind{ (USHORT)vKey, needCtrl, needShift, needAlt, keyName, mode, scriptPath, holdSeconds, toggleOn, toggleOff, false };
+					// Explicitly assign fields piece-by-piece to bypass initializer layout rules
+					KeyBind bind;
+					bind.vKey = (USHORT)vKey;
+					bind.needCtrl = needCtrl;
+					bind.needShift = needShift;
+					bind.needAlt = needAlt;
+					bind.keyName = keyName;
+					bind.mode = mode;
+					bind.scriptPath = scriptPath;
+					bind.holdSeconds = holdSeconds;
+					bind.toggleOnScriptPath = toggleOn;
+					bind.toggleOffScriptPath = toggleOff;
+					bind.currentToggleState = false;
+
 					bindings.push_back(bind);
 				}
 				// backwards compatibility safety catch for original layout profiles
 				else if (parts[0] == "BIND" && parts.size() >= 7) {
 					std::string keyName = trim(parts[1]);
-					bool needCtrl = trim(parts[2]) == "1";
-					bool needShift = trim(parts[3]) == "1";
-					bool needAlt = trim(parts[4]) == "1";
+					bool needCtrl = (trim(parts[2]) == "1");
+					bool needShift = (trim(parts[3]) == "1");
+					bool needAlt = (trim(parts[4]) == "1");
 					float holdSeconds = 0.0f;
 					try { holdSeconds = std::stof(trim(parts[5])); } catch (...) {}
 					std::string scriptPath = trim(parts[6]);
@@ -435,7 +448,17 @@ namespace RadarKeys {
 					int vKey = VKeyForName(keyName);
 					if (vKey == -1) continue;
 
-					KeyBind bind{ (USHORT)vKey, needCtrl, needShift, needAlt, keyName, BindMode::STANDARD, scriptPath, holdSeconds, "", "", false };
+					KeyBind bind;
+					bind.vKey = (USHORT)vKey;
+					bind.needCtrl = needCtrl;
+					bind.needShift = needShift;
+					bind.needAlt = needAlt;
+					bind.keyName = keyName;
+					bind.mode = BindMode::STANDARD;
+					bind.scriptPath = scriptPath;
+					bind.holdSeconds = holdSeconds;
+					bind.currentToggleState = false;
+
 					bindings.push_back(bind);
 				}
 			}
@@ -664,15 +687,20 @@ namespace RadarKeys {
 					bind.needShift = capturedShift;
 					bind.needAlt = capturedAlt;
 					bind.keyName = NameForVKey(capturedVKey);
+					bind.currentToggleState = false;
 					
 					if (uiToggleModeChecked) {
 						bind.mode = BindMode::TOGGLE;
 						bind.toggleOnScriptPath = ResolveScriptPath(capturedToggleOnPathBuffer);
 						bind.toggleOffScriptPath = ResolveScriptPath(capturedToggleOffPathBuffer);
+						bind.holdSeconds = 0.0f;
+						bind.scriptPath = "";
 					} else {
 						bind.mode = BindMode::STANDARD;
 						bind.holdSeconds = capturedHoldSeconds;
 						bind.scriptPath = ResolveScriptPath(capturedScriptPathBuffer);
+						bind.toggleOnScriptPath = "";
+						bind.toggleOffScriptPath = "";
 					}
 					
 					bindings.push_back(bind);
@@ -682,7 +710,9 @@ namespace RadarKeys {
 
 				// Global cleanup resets
 				capturedVKey = 0; capturedHoldSeconds = 0.0f;
-				capturedScriptPathBuffer[0] = '\0'; capturedToggleOnPathBuffer[0] = '\0'; capturedToggleOffPathBuffer[0] = '\0';
+				capturedScriptPathBuffer[0] = '\0'; 
+				capturedToggleOnPathBuffer[0] = '\0'; 
+				capturedToggleOffPathBuffer[0] = '\0';
 				uiToggleModeChecked = false; uiLongPressModeChecked = false;
 				showCapturePrompt = false; isAssigningMenuToggleKey = false;
 			}
