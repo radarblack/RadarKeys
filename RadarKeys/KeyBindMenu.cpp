@@ -196,12 +196,10 @@ namespace RadarKeys {
 
 		void FireBinding(const KeyBind& bind) {
 			if (bind.mode == BindMode::TOGGLE) {
-				// check which toggle state is triggered
 				std::string targetScript = bind.currentToggleState ? bind.toggleOffScriptPath : bind.toggleOnScriptPath;
 				std::string stateString = bind.currentToggleState ? "SWITCHED OFF" : "SWITCHED ON";
-				std::string filename = std::filesystem::path(targetPath).filename().string();
+				std::string filename = std::filesystem::path(targetScript).filename().string();
 
-				// log the current state of the script
 				std::string logMsg = "[Toggle] " + CombinedDisplayName(bind) + " -> " + stateString + " (Running: " + filename + ")";
 				DebuggerMenu::LogButtonPress(logMsg);
 
@@ -209,7 +207,6 @@ namespace RadarKeys {
 					LuaBridge::QueueMessageIn("DoScript|dofile([[" + targetScript + "]])");
 				}
 				
-				// perist
 				for (auto& b : bindings) {
 					if (b.vKey == bind.vKey && b.needCtrl == bind.needCtrl && b.needShift == bind.needShift && b.needAlt == bind.needAlt) {
 						b.currentToggleState = !b.currentToggleState;
