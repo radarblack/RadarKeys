@@ -280,16 +280,15 @@ namespace RadarKeys {
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
 					if (vKey == -1) { spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName); continue; }
 					
-					bool Ctrl = (trim(parts[2]) == "1");
+					bool Ctrl  = (trim(parts[2]) == "1");
 					bool Shift = (trim(parts[3]) == "1");
-					bool Alt = (trim(parts[4]) == "1");
+					bool Alt   = (trim(parts[4]) == "1");
 
 					float holdSeconds = 0.0f;
 					bool isToggle = false;
 					std::string pathOn = "";
 					std::string pathOff = "";
 					
-					// dynamic sizing to prevent overflow when loading the .conf content
 					if (parts.size() >= 9) {
 						try { holdSeconds = std::stof(trim(parts[5])); }
 						catch (...) { holdSeconds = 0.0f; }
