@@ -112,7 +112,7 @@ namespace RadarKeys {
 		}
 	}
 
-	std::shared_ptr<spdlog::sinks::basic_file_sink_mt> startup_sink = nullptr;
+	std::shared_ptr<spdlog::sinks::sink> startup_sink = nullptr;
 	std::shared_ptr<MemoryCappedSink> sliding_sink = nullptr;
 
 	void SetupLog() {
