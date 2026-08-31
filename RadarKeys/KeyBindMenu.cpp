@@ -332,7 +332,6 @@ namespace RadarKeys {
 			// makes the original window size persistent
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
-
 			ImGui::SetNextWindowFocus();
 
 			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -406,11 +405,16 @@ namespace RadarKeys {
 			}
 			ImGui::EndGroup(); ImGui::SameLine(180);
 
-			// new bind functions
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
+				
+				if (capturedLongPressMode) ImGui::BeginDisabled();
 				ImGui::Checkbox("Toggle", &capturedToggleMode);
+				if (capturedLongPressMode) ImGui::EndDisabled();
+
+				if (capturedToggleMode) ImGui::BeginDisabled();
 				ImGui::Checkbox("Long Press", &capturedLongPressMode);
+				if (capturedToggleMode) ImGui::EndDisabled();
 				
 				if (capturedLongPressMode) {
 					ImGui::SetNextItemWidth(75);
@@ -461,7 +465,6 @@ namespace RadarKeys {
 					menuToggleVKey = capturedVKey; menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
 					SaveBindings(); DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
 				} else {
-					
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 					AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
 				}
