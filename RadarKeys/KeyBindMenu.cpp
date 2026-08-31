@@ -332,6 +332,7 @@ namespace RadarKeys {
 			// makes the original window size persistent
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
+
 			ImGui::SetNextWindowFocus();
 
 			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -403,8 +404,11 @@ namespace RadarKeys {
 				capturedVKey = 0; 
 				capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = false; 
 			}
-			ImGui::EndGroup(); ImGui::SameLine(180);
+			ImGui::EndGroup(); 
+			
+			ImGui::SameLine(205); 
 
+			// bind options: toggle/long press
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
 				
@@ -416,13 +420,15 @@ namespace RadarKeys {
 				ImGui::Checkbox("Long Press", &capturedLongPressMode);
 				if (capturedToggleMode) ImGui::EndDisabled();
 				
+				// display only the Long Press options when the checkbox is ticked
 				if (capturedLongPressMode) {
 					ImGui::SetNextItemWidth(75);
 					ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
 					if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
-					if (ImGui::Button(" - ", ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; }
+					
+					if (ImGui::Button(" - ", ImVec2(35, 22))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; }
 					ImGui::SameLine(40);
-					if (ImGui::Button(" + ", ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
+					if (ImGui::Button(" + ", ImVec2(35, 22))) capturedHoldSeconds += 0.5f;
 				}
 			}
 			
@@ -434,7 +440,7 @@ namespace RadarKeys {
 			ImGui::EndGroup(); ImGui::Separator();
 
 			bool isLuaPathValid = false; int scriptStatus = 0; // 0 = empty, 1 = invalid ext, 2 = missing file, 3 = valid file
-			if (!isAssigningMenuToggleKey && capturedScriptPathBuffer[0] != '\0') {
+			if (!isAssigningMenuToggleKey && capturedScriptPathBuffer != '\0') {
 				std::string txt(capturedScriptPathBuffer);
 				if (txt.size() >= 4) {
 					std::string ext = txt.substr(txt.size() - 4);
@@ -451,7 +457,7 @@ namespace RadarKeys {
 				ImGui::Text("Script Path:"); ImGui::SetNextItemWidth(-1); ImGui::InputText("##captureScriptInput", capturedScriptPathBuffer, IM_ARRAYSIZE(capturedScriptPathBuffer));
 				if (scriptStatus == 3) ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " Found! Ready to assign.");
 				else if (scriptStatus == 2) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), " The script file does not exist.");
-				else if (scriptStatus == 1 || capturedScriptPathBuffer[0] != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
+				else if (scriptStatus == 1 || capturedScriptPathBuffer != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
 				ImGui::Spacing();
 			}
 
@@ -468,14 +474,14 @@ namespace RadarKeys {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 					AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, ResolveScriptPath(capturedScriptPathBuffer));
 				}
-				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathBuffer[0] = '\0';
+				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathBuffer = '\0';
 				capturedToggleMode = capturedLongPressMode = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
-			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
+			if (!canFinalize) ImGui::BeginDisabled(); ImGui::SameLine();
 			
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
-				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathBuffer[0] = '\0';
+				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathBuffer = '\0';
 				capturedToggleMode = capturedLongPressMode = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
