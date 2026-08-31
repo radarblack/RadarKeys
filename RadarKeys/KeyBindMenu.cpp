@@ -330,10 +330,13 @@ namespace RadarKeys {
 			// makes the original window size persistent
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
-
+			
+			if (!ImGui::IsPopupOpen("Assigning key bind...")) {
+				ImGui::OpenPopup("Assigning key bind...");
+			}
+			
 			// makes it resizable
-			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
-				ImGui::End();
+			if (!ImGui::BeginPopupModal("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
 				return;
 			}
 
@@ -462,7 +465,7 @@ namespace RadarKeys {
 				capturedScriptPathBuffer[0] = '\0';
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
-			ImGui::End();
+			ImGui::EndPopup();
 		}
 
 		// draws the ui
