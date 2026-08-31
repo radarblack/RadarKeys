@@ -5,19 +5,96 @@
 #include "HookUtils.h"
 #include "KeyBindMenu.h"
 #include "DebuggerMenu.h"
+#include <MinHook.h>
 
 #include "spdlog/spdlog.h"
+#include "spdlog/sinks/base_sink.h"
 #include "spdlog/sinks/basic_file_sink.h"
-
-#include <MinHook.h>
 
 #include <thread>
 #include <optional>
 #include <string>
 #include <cassert>
 #include <filesystem>
+#include <queue>
+#include <fstream>
 
 namespace RadarKeys {
+	static bool is_initialization_active = true;
+	class StartupFileSink : public spdlog::sinks::base_sink<std::mutex> {
+	private:
+		std::wstring file_path_;
+	public:
+		explicit StartupFileSink(std::wstring path) : file_path_(std::move(path)) {}
+	protected:
+		void sink_it_(const spdlog::details::log_msg& msg) override {
+			if (!is_initialization_active) return;
+
+			spdlog::memory_buf_t formatted;
+			base_sink<std::mutex>::formatter_->format(msg, formatted);
+			
+			FILE* file_handle = nullptr;
+			if (_wfopen_s(&file_handle, file_path_.c_str(), L"ab") == 0 && file_handle) {
+				fwrite(formatted.data(), sizeof(char), formatted.size(), file_handle);
+				fclose(file_handle);
+			}
+		}
+		void flush_() override {}
+	};
+
+	class MemoryCappedSink : public spdlog::sinks::base_sink<std::mutex> {
+	private:
+		std::wstring file_path_;
+		std::queue<std::string> log_lines_;
+		size_t current_bytes_ = 0;
+		size_t max_runtime_bytes_ = 8192; // fallback: set to 8KB 
+
+	public:
+		explicit MemoryCappedSink(std::wstring path) : file_path_(std::move(path)) {}
+
+		void ActivateMemoryBufferTrack() {
+			std::error_code ec;
+			size_t startup_disk_bytes = std::filesystem::file_size(file_path_, ec);
+			if (!ec && startup_disk_bytes < 10240) {
+				max_runtime_bytes_ = 10240 - startup_disk_bytes; // tracks remainder
+			}
+		}
+
+	protected:
+		void sink_it_(const spdlog::details::log_msg& msg) override {
+			if (is_initialization_active) return;
+
+			spdlog::memory_buf_t formatted;
+			base_sink<std::mutex>::formatter_->format(msg, formatted);
+			std::string line_str(formatted.data(), formatted.size());
+
+			// trimmed overheard margin to fit the log text without bleeding parts
+			size_t true_disk_line_weight = line_str.size() + 20;
+
+			log_lines_.push(line_str);
+			current_bytes_ += true_disk_line_weight;
+
+			while (current_bytes_ > max_runtime_bytes_ && !log_lines_.empty()) {
+				current_bytes_ -= (log_lines_.front().size() + 20); // align pop
+				log_lines_.pop();
+			}
+		}
+
+		void flush_() override {
+			FILE* file_handle = nullptr;
+			if (_wfopen_s(&file_handle, file_path_.c_str(), L"ab") != 0 || !file_handle) {
+				return;
+			}
+			while (!log_lines_.empty()) {
+				const std::string& line = log_lines_.front();
+				fwrite(line.c_str(), sizeof(char), line.size(), file_handle);
+				log_lines_.pop();
+			}
+			fflush(file_handle);
+			fclose(file_handle);
+		}
+	};
+
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
 	SetCursorPosFunc SetCursorPos_Orig = NULL;
 
@@ -38,10 +115,13 @@ namespace RadarKeys {
 		}
 	}
 
+	std::shared_ptr<spdlog::sinks::sink> startup_sink = nullptr;
+	std::shared_ptr<MemoryCappedSink> sliding_sink = nullptr;
+
 	void SetupLog() {
 		std::filesystem::path logDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 		std::error_code ec;
-		std::filesystem::create_directories(logDir, ec); // spdlog's file sink won't create missing directories itself
+		std::filesystem::create_directories(logDir, ec);
 
 		std::filesystem::path logPath = logDir / "radarkeys_log.txt";
 		std::filesystem::path logPathPrev = logDir / "radarkeys_log_prev.txt";
@@ -50,10 +130,14 @@ namespace RadarKeys {
 		CopyFileW(logPath.c_str(), logPathPrev.c_str(), FALSE);
 		DeleteFileW(logPath.c_str());
 
-		auto logger = spdlog::basic_logger_mt("radarkeys", logPath.wstring());
+		// Initialize sinks
+		startup_sink = std::make_shared<StartupFileSink>(logPath.wstring());
+		sliding_sink = std::make_shared<MemoryCappedSink>(logPath.wstring());
+
+		auto logger = std::make_shared<spdlog::logger>("radarkeys", spdlog::sinks_init_list{ startup_sink, sliding_sink });
 		spdlog::set_default_logger(logger);
 		spdlog::set_level(spdlog::level::debug);
-		spdlog::flush_on(spdlog::level::warn);
+		
 		spdlog::info("RadarKeys log started");
 	}
 
@@ -74,7 +158,17 @@ namespace RadarKeys {
 		Render::CreateD3DHook();
 		InitCursorHook();
 
-		spdlog::info("RadarKeys InitThread done");
+		spdlog::info("RadarKeys frame initialized");
+
+		// remove the sinks to the disk
+		if (auto logger = spdlog::get("radarkeys")) {
+			logger->flush();
+		}
+			
+		is_initialization_active = false;
+		if (sliding_sink) {
+			sliding_sink->ActivateMemoryBufferTrack();
+		}
 	}
 
 	//--- Lua bindings ---
@@ -105,7 +199,6 @@ namespace RadarKeys {
 		assert(LuaGetTop(L) == 1); //  table still on stack
 		return 1;
 	}
-
 }
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
@@ -127,10 +220,14 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
 	switch (ul_reason_for_call) {
 	case DLL_PROCESS_ATTACH:
-		DisableThreadLibraryCalls(hModule); // we don't need DLL_THREAD_ATTACH/DETACH notifications
+		DisableThreadLibraryCalls(hModule);
 		std::thread(RadarKeys::InitThread).detach();
 		break;
 	case DLL_PROCESS_DETACH:
+		// custom ring buffer. flushes out activities past the success init log
+		if (auto logger = spdlog::get("radarkeys")) {
+			logger->flush();
+		}
 		spdlog::shutdown();
 		break;
 	}

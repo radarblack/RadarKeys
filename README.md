@@ -36,6 +36,9 @@ To use an assigned script:
 [08/27/2026] - Fixing and improving the error logging system. Unifying the debug report to the spdlog reports for uniform reporting.
 [08/28/2026] - First public release in NexusMods.
 [08/30/2026] - Added a "Long Press" function (and fixed a minor debugger argument payload tracking array misalignment)
+[08/31/2028] - Enhancements on the input detection system
+             - Added "Toggle" option
+             - assigned maximum log output size to 9~10KB
 ```
 ## Plans ahead
 - [x] ~~Address some of the immediate UI concerns (misspells, formatting, and spacing, etc.)~~

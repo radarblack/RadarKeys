@@ -255,7 +255,12 @@ namespace RadarKeys {
 			
 			for (const auto& b : bindings) {
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
-				outFile << (b.isToggle ? "1|" : "0|") << b.scriptPathOn << "|" << b.scriptPathOff << "\n";
+				
+				if (b.isToggle) {
+					outFile << "1|" << b.scriptPathOn << "|" << b.scriptPathOff << "\n";
+				} else {
+					outFile << "0|" << b.scriptPathOn << "\n";
+				}
 			}
 			outFile.close();
 			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), GetBindsFileName());
@@ -282,17 +287,21 @@ namespace RadarKeys {
 					
 					float holdSeconds = 0.0f;
 					try { holdSeconds = std::stof(trim(parts[5])); }
-					catch (...) { spdlog::warn("KeyBindMenu::LoadBindings: bad holdSeconds value '{}', defaulting to 0", parts[5]); }
+					catch (...) { holdSeconds = 0.0f; }
 					
 					bool isToggle = false;
-					std::string pathOn = "", pathOff = "";
-					
-					if (parts.size() >= 9) {
-						isToggle = trim(parts[6]) == "1";
+					std::string pathOn = "";
+					std::string pathOff = "";
+
+					// maps the .conf
+					if (trim(parts[6]) == "1" && parts.size() >= 9) {
+						isToggle = true;
 						pathOn = trim(parts[7]);
 						pathOff = trim(parts[8]);
 					} else {
-						pathOn = trim(parts[6]);
+						isToggle = false;
+						pathOn = trim(parts[7]);
+						pathOff = "";
 					}
 					
 					bindings.push_back(KeyBind{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, pathOn, pathOff, false, holdSeconds });
