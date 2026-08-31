@@ -330,15 +330,13 @@ namespace RadarKeys {
 			// makes the original window size persistent
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
-			
-			if (!ImGui::IsPopupOpen("Assigning key bind...")) {
-				ImGui::OpenPopup("Assigning key bind...");
-			}
-			
-			// makes it resizable
-			if (!ImGui::BeginPopupModal("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
+			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
+				ImGui::End();
 				return;
 			}
+
+			// this completely prevents background clicks from stealing mouse context and freezing your UI!
+			ImGui::SetWindowFocus();
 
 			// input detection
 			if (capturedVKey == 0) {
@@ -415,7 +413,6 @@ namespace RadarKeys {
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (88.0f - ImGui::CalcTextSize(comboAvailable ? "[ READY ]" : "[ UNFIT ]").x) * 0.5f);
 			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
-			if (ImGui::IsItemHovered()) ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
 			ImGui::EndGroup(); ImGui::Separator();
 
 			bool isLuaPathValid = false; int scriptStatus = 0; // 0 = empty, 1 = invalid ext, 2 = missing file, 3 = valid file
@@ -465,7 +462,7 @@ namespace RadarKeys {
 				capturedScriptPathBuffer[0] = '\0';
 				showCapturePrompt = isAssigningMenuToggleKey = false;
 			}
-			ImGui::EndPopup();
+			ImGui::End();
 		}
 
 		// draws the ui
