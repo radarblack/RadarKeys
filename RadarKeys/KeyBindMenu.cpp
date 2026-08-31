@@ -256,12 +256,9 @@ namespace RadarKeys {
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
 				
 				if (b.isToggle) {
-					std::string shortOff = std::filesystem::path(b.scriptPathOff).filename().string();
-					std::string shortOn = std::filesystem::path(b.scriptPathOn).filename().string();
-					outFile << "1|" << shortOn << "|" << shortOff << "\n";
+					outFile << "1|" << b.scriptPathOn << "|" << b.scriptPathOff << "\n";
 				} else {
-					std::string shortOn = std::filesystem::path(b.scriptPathOn).filename().string();
-					outFile << "0|" << shortOn << "\n";
+					outFile << "0|" << b.scriptPathOn << "\n";
 				}
 			}
 			outFile.close();
