@@ -256,10 +256,14 @@ namespace RadarKeys {
 			for (const auto& b : bindings) {
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
 				
+				// convert the paths before saving it to .conf
+				std::string cleanOn = GetRelativeOrFilenamePath(b.scriptPathOn);
+				std::string cleanOff = GetRelativeOrFilenamePath(b.scriptPathOff);
+
 				if (b.isToggle) {
-					outFile << "1|" << b.scriptPathOn << "|" << b.scriptPathOff << "\n";
+					outFile << "1|" << cleanOn << "|" << cleanOff << "\n";
 				} else {
-					outFile << "0|" << b.scriptPathOn << "\n";
+					outFile << "0|" << cleanOn << "\n";
 				}
 			}
 			outFile.close();
