@@ -332,6 +332,7 @@ namespace RadarKeys {
 			// makes the original window size persistent
 			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
+
 			ImGui::SetNextWindowFocus();
 
 			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -346,23 +347,30 @@ namespace RadarKeys {
 				capturedShift = ImGui::GetIO().KeyShift;
 				capturedAlt   = ImGui::GetIO().KeyAlt;
 
-				for (int i = 1; i < 256; i++) {
-					// explicit ignore unique window keys
-					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
-						i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
-						continue;
-					}
-					// ignore mouse buttons
-					if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
+				// skip the key detection scan entirely so that left/right clicks don't hijack your state variables!
+				bool isMouseInteracting = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) || ImGui::GetIO().WantCaptureMouse;
 
-					if (ImGui::IsKeyPressed((ImGuiKey)i)) {
-						capturedVKey = (USHORT)i;
-						
-						// ticks the checkboxes if a modifier key is held
-						capturedCtrl  = ImGui::GetIO().KeyCtrl;
-						capturedShift = ImGui::GetIO().KeyShift;
-						capturedAlt   = ImGui::GetIO().KeyAlt;
-						break;
+				if (!isMouseInteracting) {
+					for (int i = 1; i < 256; i++) {
+						// explicit ignore unique window keys
+						if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
+							i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
+							continue;
+						}
+						// ignore mouse buttons
+						if (i == VK_LBUTTON || i == VK_RBUTTON || i == VK_MBUTTON || i == VK_XBUTTON1 || i == VK_XBUTTON2) {
+							continue;
+						}
+
+						if (ImGui::IsKeyPressed((ImGuiKey)i)) {
+							capturedVKey = (USHORT)i;
+							
+							// ticks the checkboxes if a modifier key is held
+							capturedCtrl  = ImGui::GetIO().KeyCtrl;
+							capturedShift = ImGui::GetIO().KeyShift;
+							capturedAlt   = ImGui::GetIO().KeyAlt;
+							break;
+						}
 					}
 				}
 			}
@@ -435,7 +443,7 @@ namespace RadarKeys {
 			ImGui::Spacing();
 			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
-			ImGui::EndGroup(); ImGui::Separator();
+			ImGui::EndGroup(); ImGui::Spacer();
 
 			bool isLuaPathValid = false; int scriptStatus = 0; // 0 = empty, 1 = invalid ext, 2 = missing file, 3 = valid file
 			if (!isAssigningMenuToggleKey && capturedScriptPathBuffer[0] != '\0') {
