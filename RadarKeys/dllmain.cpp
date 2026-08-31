@@ -27,10 +27,19 @@ namespace RadarKeys {
 		std::wstring file_path_;
 		std::queue<std::string> log_lines_;
 		size_t current_bytes_ = 0;
-		const size_t max_bytes_ = 10240;
+		size_t max_runtime_bytes_ = 7168; // fallback default around 7KB
 
 	public:
-		explicit MemoryCappedSink(std::wstring path) : file_path_(std::move(path)) {}
+		explicit MemoryCappedSink(std::wstring path) : file_path_(std::move(path)) {
+			// low_level: be very extra careful here, ken
+			std::error_code ec;
+			size_t startup_disk_bytes = std::filesystem::file_size(file_path_, ec);
+			
+			// partitioning the sinks
+			if (!ec && startup_disk_bytes < 10240) {
+				max_runtime_bytes_ = 10240 - startup_disk_bytes;
+			}
+		}
 
 	protected:
 		void sink_it_(const spdlog::details::log_msg& msg) override {
@@ -41,7 +50,8 @@ namespace RadarKeys {
 			log_lines_.push(line_str);
 			current_bytes_ += line_str.size();
 
-			while (current_bytes_ > max_bytes_ && !log_lines_.empty()) {
+			// slide the sink based on the remaining partition size
+			while (current_bytes_ > max_runtime_bytes_ && !log_lines_.empty()) {
 				current_bytes_ -= log_lines_.front().size();
 				log_lines_.pop();
 			}
@@ -58,6 +68,8 @@ namespace RadarKeys {
 		}
 	};
 
+	std::shared_ptr<spdlog::sinks::basic_file_sink_mt> startup_sink = nullptr;
+
 	void SetupLog() {
 		std::filesystem::path logDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 		std::error_code ec;
@@ -70,7 +82,8 @@ namespace RadarKeys {
 		CopyFileW(logPath.c_str(), logPathPrev.c_str(), FALSE);
 		DeleteFileW(logPath.c_str());
 
-		auto startup_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.wstring(), true);
+		// Initialize sinks
+		startup_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.wstring(), true);
 		auto sliding_sink = std::make_shared<MemoryCappedSink>(logPath.wstring());
 
 		auto logger = std::make_shared<spdlog::logger>("radarkeys", spdlog::sinks_init_list{ startup_sink, sliding_sink });
@@ -117,7 +130,13 @@ namespace RadarKeys {
 		Render::CreateD3DHook();
 		InitCursorHook();
 
-		spdlog::info("RadarKeys InitThread done");
+		spdlog::info("RadarKeys frame initialized");
+
+		// remove the sinks to the disk
+		if (auto logger = spdlog::get("radarkeys")) {
+			auto& sinks = logger->sinks();
+			sinks.erase(std::remove(sinks.begin(), sinks.end(), startup_sink), sinks.end());
+		}
 	}
 
 	//--- Lua bindings ---
