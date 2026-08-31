@@ -415,7 +415,7 @@ namespace RadarKeys {
 				capturedVKey = 0; 
 				capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = false; 
 			}
-			ImGui::EndGroup(); ImGui::SameLine(180);
+			ImGui::EndGroup(); ImGui::SameLine(205);
 
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
@@ -557,10 +557,10 @@ namespace RadarKeys {
 			ImGui::BeginChild("ActiveBindingsOverviewList", ImVec2(0, 200), true);
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
-				if (ImGui::Button("Remove")) removeIndex = i;
+				if (ImGui::Button("Remove", ImVec2(55, 20))) removeIndex = i;
+				
 				ImGui::SameLine(); 
 
-				// FIXED: Convert static text display string layout into interactive selection buttons
 				std::string itemLabel = CombinedDisplayName(bindings[i]);
 				if (ImGui::Button(itemLabel.c_str(), ImVec2(130, 20))) {
 					editingBindingIndex = i;
@@ -572,7 +572,6 @@ namespace RadarKeys {
 					capturedLongPressMode = (bindings[i].holdSeconds > 0.0f);
 					capturedHoldSeconds = bindings[i].holdSeconds;
 					
-					// Pre-populate character array tracking tracks safely
 					snprintf(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), "%s", bindings[i].scriptPathOn.c_str());
 					snprintf(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), "%s", bindings[i].scriptPathOff.c_str());
 					
@@ -600,7 +599,6 @@ namespace RadarKeys {
 
 			// launch the custom prompt
 			if (ImGui::Button("Add New Binding...", ImVec2(-1, 35))) {
-				// FIXED: Clear edit mode variables so fresh bindings start on an empty template pass
 				editingBindingIndex = -1;
 				showCapturePrompt = true;
 			}
