@@ -144,21 +144,23 @@ namespace RadarKeys {
 				return false;
 			}
 			for (const KeyBind& bind : bindings) {
-				if (bind.vKey == vKey && bind.needCtrl == needCtrl && bind.needShift == needShift && bind.needAlt == needAlt) {
-					// If the hold seconds match, they are conflicting duplicates.
-					if (bind.holdSeconds == holdSeconds) {
-						return false;
-					}
-					
-					// chceks if the hold second remains at 0.0
-					if ((holdSeconds <= 0.0f && bind.holdSeconds <= 0.0f) || (holdSeconds > 0.0f && bind.holdSeconds > 0.0f)) {
-						return false;
-					}
-				}
+				if (bind.vKey == vKey && 
+            		bind.needCtrl == needCtrl && 
+            		bind.needShift == needShift && 
+            		bind.needAlt == needAlt) {
+            
+            		if (bind.holdSeconds == holdSeconds) {
+                		return false;
+            		}
+            
+            		if ((holdSeconds <= 0.0f && bind.holdSeconds <= 0.0f) || 
+                		(holdSeconds > 0.0f && bind.holdSeconds > 0.0f)) {
+                			return false;
+            		}
+		        }
 			}
 			return true;
 		}
-
 
 		struct HoldTrack {
 			std::chrono::steady_clock::time_point startTime;
