@@ -106,7 +106,7 @@ namespace RadarKeys {
 		DeleteFileW(logPath.c_str());
 
 		// Initialize sinks
-		auto startup_sink = std::make_shared<StartupFileSink>(logPath.wstring());
+		startup_sink = std::make_shared<StartupFileSink>(logPath.wstring());
 		sliding_sink = std::make_shared<MemoryCappedSink>(logPath.wstring());
 
 		auto logger = std::make_shared<spdlog::logger>("radarkeys", spdlog::sinks_init_list{ startup_sink, sliding_sink });
@@ -142,7 +142,7 @@ namespace RadarKeys {
 			
 		is_initialization_active = false;
 		if (sliding_sink) {
-			sliding_sink->CalculateRemainingPartitionRoom();
+			sliding_sink->ActivateMemoryBufferTrack();
 		}
 	}
 
