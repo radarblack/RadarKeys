@@ -17,6 +17,8 @@ namespace RadarKeys {
 	namespace KeyBindMenu {
 
 		std::vector<KeyBind> bindings;
+		bool showCapturePrompt = false; 
+		static bool isAssigningMenuToggleKey = false; 
 
 		const std::string& GetBindsFileName() {
 			static std::string cached;
@@ -53,32 +55,25 @@ namespace RadarKeys {
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
 		std::string NameForVKey(USHORT vKey) {
-			for (int i = 0; i < vkNameTableCount; i++) {
-				if (vkNameTable[i].vKey == vKey) {
-					return vkNameTable[i].name;
-				}
+			// faster entry scanning
+			for (const auto& entry : vkNameTable) {
+				if (entry.vKey == vKey) return entry.name;
 			}
 			return "Unknown(" + std::to_string(vKey) + ")";
 		}
 
 		// returns -1 if not found in the table
 		int VKeyForName(const std::string& name) {
-			for (int i = 0; i < vkNameTableCount; i++) {
-				if (name == vkNameTable[i].name) {
-					return vkNameTable[i].vKey;
-				}
+			for (const auto& entry : vkNameTable) {
+				if (name == entry.name) return entry.vKey;
 			}
 			return -1;
 		}
 
 		std::string CombinedDisplayName(const KeyBind& bind) {
-			std::string result;
-			if (bind.needCtrl) result += "Ctrl+";
-			if (bind.needShift) result += "Shift+";
-			if (bind.needAlt) result += "Alt+";
-			result += bind.keyName;
+			std::string result = std::string(bind.needCtrl ? "Ctrl+" : "") + (bind.needShift ? "Shift+" : "") + (bind.needAlt ? "Alt+" : "") + bind.keyName;
 			if (bind.holdSeconds > 0.0f) {
-				char buf[32];
+				char buf[32]; // Compact zero-allocation layout format pass
 				snprintf(buf, sizeof(buf), " (hold %.1fs)", bind.holdSeconds);
 				result += buf;
 			}
@@ -86,21 +81,9 @@ namespace RadarKeys {
 		}
 
 		std::string ResolveScriptPath(const std::string& typedPath) {
-			std::filesystem::path typed(typedPath);
-			if (typed.is_absolute()) {
-				return typedPath;
-			}
-
-			std::filesystem::path relativePart;
-			if (typedPath.find('/') != std::string::npos || typedPath.find('\\') != std::string::npos) {
-				relativePart = typedPath;
-			}
-			else {
-				relativePart = std::filesystem::path("mod") / "modules" / typedPath;
-			}
-
-			std::filesystem::path fullPath = std::filesystem::path(GetGameDirectory()) / relativePart;
-			return fullPath.string();
+			if (std::filesystem::path(typedPath).is_absolute()) return typedPath;
+			bool hasSeparators = typedPath.find('/') != std::string::npos || typedPath.find('\\') != std::string::npos;
+			return (std::filesystem::path(GetGameDirectory()) / (hasSeparators ? std::filesystem::path(typedPath) : std::filesystem::path("mod") / "modules" / typedPath)).string();
 		}
 
 		// Menu-toggle key: plain key only (no modifiers) for  access; persisted via LoadBindings/SaveBindings. default F7.
@@ -116,6 +99,12 @@ namespace RadarKeys {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
 			}
+			
+			// safety gate. so that you can't close the menu when the prompt is up.
+			if (showCapturePrompt) {
+				return;
+			}
+
 			menuOpen = !menuOpen;
 		}
 
@@ -132,25 +121,14 @@ namespace RadarKeys {
 		// binding free if exact (vKey,Ctrl,Shift,Alt) tuple unused; modifiers create separate bindings.
 		// updated to allow a Tap and a Hold configuration on the same key combo
 		bool IsComboAvailable(USHORT vKey, bool needCtrl, bool needShift, bool needAlt, float holdSeconds) {
-			if (IsReservedVKey(vKey)) {
-				return false;
-			}
-			for (const KeyBind& bind : bindings) {
+			if (IsReservedVKey(vKey)) return false;
+			for (const auto& bind : bindings) {
 				if (bind.vKey == vKey && bind.needCtrl == needCtrl && bind.needShift == needShift && bind.needAlt == needAlt) {
-					// If the hold seconds match, they are conflicting duplicates.
-					if (bind.holdSeconds == holdSeconds) {
-						return false;
-					}
-					
-					// chceks if the hold second remains at 0.0
-					if ((holdSeconds <= 0.0f && bind.holdSeconds <= 0.0f) || (holdSeconds > 0.0f && bind.holdSeconds > 0.0f)) {
-						return false;
-					}
+					if (bind.holdSeconds == holdSeconds || ((holdSeconds > 0.0f) == (bind.holdSeconds > 0.0f))) return false;
 				}
 			}
 			return true;
 		}
-
 
 		struct HoldTrack {
 			std::chrono::steady_clock::time_point startTime;
@@ -159,130 +137,91 @@ namespace RadarKeys {
 		std::map<USHORT, HoldTrack> holdTracks;
 
 		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld) {
-			const KeyBind* exactMatch = nullptr;
-			const KeyBind* fallbackMatch = nullptr; // the plain/no-modifier binding on this vKey, if any
-			for (const KeyBind& bind : bindings) {
-				if (bind.vKey != vKey) {
-					continue;
-				}
-				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
-					exactMatch = &bind;
-					break;
-				}
-				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) {
-					fallbackMatch = &bind;
-				}
+			const KeyBind* exactMatch = nullptr, *fallbackMatch = nullptr; // fallback if there is no assigned script to the key combo
+			for (const auto& bind : bindings) {
+				if (bind.vKey != vKey) continue;
+				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) { exactMatch = &bind; break; }
+				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) fallbackMatch = &bind;
 			}
-			return exactMatch != nullptr ? exactMatch : fallbackMatch;
+			// return the precise modifier profile if found; otherwise drop down to your plain key bind seamlessly
+			return exactMatch ? exactMatch : fallbackMatch;
 		}
 
 		void FireBinding(const KeyBind& bind) {
-			// Checks if file exists
-			if (DebuggerMenu::LogScriptAttempt(bind.scriptPath)) {
-				LuaBridge::QueueMessageIn("DoScript|dofile([[" + bind.scriptPath + "]])");
+			// evaluates if the toggle is active
+			std::string targetPath = bind.scriptPathOn;
+			if (bind.isToggle) {
+				targetPath = bind.toggleState ? bind.scriptPathOff : bind.scriptPathOn;
+				bind.toggleState = !bind.toggleState; // alternate toggle state assignment
+			}
+
+			// checks if file exists
+			if (DebuggerMenu::LogScriptAttempt(targetPath)) {
+				LuaBridge::QueueMessageIn("DoScript|dofile([[" + targetPath + "]])");
 			}
 		}
 
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
-			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL);
-			bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
-			bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
+			// prevents 'tap' scripts from running when the input detection prompt is up
+			if (showCapturePrompt) return;
+
+			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
+			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
 
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
 				// the key was released. Check if we were tracking a hold for this key.
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
 					// if it hasn't fired the hold script yet, it means it's a short tap!
-					if (!it->second.fired) {
+					if (!it->second.fired && toRun && toRun->holdSeconds <= 0.0f) {
 						// look for a structural 'instant' (holdSeconds == 0) fallback binding on the same key combo
-						const KeyBind* tapBind = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
-						if (tapBind && tapBind->holdSeconds <= 0.0f) {
-							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
-							FireBinding(*tapBind);
-						}
+						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
+						FireBinding(*toRun);
 					}
 					holdTracks.erase(it);
 				}
 				return;
 			}
-
-			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
-				return;
-			}
+			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) return;
 
 			// log raw down event
-			std::string pressedName;
-			if (ctrlHeld) pressedName += "Ctrl+";
-			if (shiftHeld) pressedName += "Shift+";
-			if (altHeld) pressedName += "Alt+";
-			pressedName += NameForVKey(vKey);
-			DebuggerMenu::LogButtonPress(pressedName + " pressed");
+			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
+			if (!toRun) return;
 
-			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
-			if (toRun == nullptr) {
-				return;
-			}
+			if (!toRun->needCtrl && !toRun->needShift && !toRun->needAlt) ctrlHeld = shiftHeld = altHeld = false;
 
 			// look to see if there is ANY binding on this virtual key setup that uses a hold delay
 			bool hasHoldOptionOnKey = false;
-			for (const KeyBind& bind : bindings) {
-				if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) {
-					hasHoldOptionOnKey = true;
-					break;
-				}
+			for (const auto& bind : bindings) {
+				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) { hasHoldOptionOnKey = true; break; }
 			}
 
-			if (toRun->holdSeconds <= 0.0f) {
-				// if there's no hold profile registered anywhere on this key, fire instantly like normal
-				if (!hasHoldOptionOnKey) {
-					FireBinding(*toRun);
-				}
-				else {
-					// if the user lets go early, OnBoundKeyPressed's ONUP section above catches it as a tap.
-					HoldTrack track;
-					track.startTime = std::chrono::steady_clock::now();
-					track.fired = false;
-					holdTracks[vKey] = track;
-				}
-			}
-			else {
-				// this is explicitly a hold binding. Start the clock timer ticker.
-				HoldTrack track;
-				track.startTime = std::chrono::steady_clock::now();
-				track.fired = false;
-				holdTracks[vKey] = track;
+			if (toRun->holdSeconds <= 0.0f && !hasHoldOptionOnKey) {
+				FireBinding(*toRun);
+			} else {
+				// long press interval tracker
+				holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false };
 			}
 		}
 
 		void Update() {
+			if (showCapturePrompt) return;
 			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
-				USHORT vKey = it->first;
-				HoldTrack& track = it->second;
+				USHORT vKey = it->first; HoldTrack& track = it->second;
+				if (track.fired || !RawInput::IsKeyHeldReal(vKey)) { it = holdTracks.erase(it); continue; }
 
-				if (track.fired || !RawInput::IsKeyHeldReal(vKey)) {
-					it = holdTracks.erase(it);
-					continue;
-				}
-
-				bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL);
-				bool shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT);
-				bool altHeld = RawInput::IsKeyHeldReal(VK_MENU);
+				bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
 				
 				// look specifically for the binding configured with a hold delay
 				const KeyBind* holdBind = nullptr;
-				for (const KeyBind& bind : bindings) {
-					if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) {
-						holdBind = &bind;
-						break;
-					}
+				for (const auto& bind : bindings) {
+					if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) { holdBind = &bind; break; }
 				}
 
-				if (holdBind != nullptr) {
-					float elapsedSeconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count();
-					if (elapsedSeconds >= holdBind->holdSeconds) {
+				if (holdBind) {
+					if (std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count() >= holdBind->holdSeconds) {
 						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
-						FireBinding(*holdBind);
-						track.fired = true;
+						FireBinding(*holdBind); track.fired = true;
 					}
 				}
 				++it;
@@ -291,31 +230,20 @@ namespace RadarKeys {
 
 		// registers shared vKey dispatcher; safe to call repeatedly per binding.
 		void EnsureDispatcherRegistered(USHORT vKey) {
-			if (vKeyDispatchers.find(vKey) != vKeyDispatchers.end()) {
-				return;
-			}
-			RawInput::ActionHandle handle = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT buttonEvent) {
-				OnBoundKeyPressed(vKey, buttonEvent);
-			});
-			vKeyDispatchers[vKey] = handle;
+			if (vKeyDispatchers.find(vKey) != vKeyDispatchers.end()) return;
+			vKeyDispatchers[vKey] = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnBoundKeyPressed(vKey, ev); });
 		}
 
 		// unregisters vKey dispatcher only when no bindings remain; other modifier combos may still need it.
 		void RemoveDispatcherIfUnused(USHORT vKey) {
-			for (const KeyBind& bind : bindings) {
-				if (bind.vKey == vKey) {
-					return; // still in use by another binding
-				}
-			}
+			for (const auto& bind : bindings) if (bind.vKey == vKey) return; // still in use by another binding
 			auto it = vKeyDispatchers.find(vKey);
-			if (it != vKeyDispatchers.end()) {
-				RawInput::UnRegisterAction(vKey, it->second);
-				vKeyDispatchers.erase(it);
-			}
+			if (it != vKeyDispatchers.end()) { RawInput::UnRegisterAction(vKey, it->second); vKeyDispatchers.erase(it); }
 		}
 
 		void SaveBindings() {
 			// ensure mod/radarKeys/ directory exists before writing bindings file (ofstream won't create it).
+			std::error_code ec;
 			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 			std::filesystem::create_directories(bindsDir, ec);
 			if (ec) spdlog::warn("KeyBindMenu::SaveBindings: couldn't create {} directory: {}", bindsDir.string(), ec.message());
@@ -329,12 +257,9 @@ namespace RadarKeys {
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
 				
 				if (b.isToggle) {
-					std::string shortOff = std::filesystem::path(b.scriptPathOff).filename().string();
-					std::string shortOn = std::filesystem::path(b.scriptPathOn).filename().string();
-					outFile << "1|" << shortOn << "|" << shortOff << "\n";
+					outFile << "1|" << b.scriptPathOn << "|" << b.scriptPathOff << "\n";
 				} else {
-					std::string shortOn = std::filesystem::path(b.scriptPathOn).filename().string();
-					outFile << "0|" << shortOn << "\n";
+					outFile << "0|" << b.scriptPathOn << "\n";
 				}
 			}
 			outFile.close();
@@ -343,73 +268,61 @@ namespace RadarKeys {
 
 		void LoadBindings() {
 			std::ifstream inFile(GetBindsFileName());
-			if (!inFile) {
-				spdlog::debug("KeyBindMenu::LoadBindings: no {} yet (fine on first run)", GetBindsFileName());
-				return;
-			}
+			if (!inFile) { spdlog::debug("KeyBindMenu::LoadBindings: no {} yet (fine on first run)", GetBindsFileName()); return; }
 
 			std::string line;
 			while (std::getline(inFile, line)) {
-				line = trim(line);
-				if (line.size() == 0) {
-					continue;
-				}
+				if ((line = trim(line)).empty()) continue;
 				std::vector<std::string> parts = split(line, "|");
-				if (parts.size() < 2) {
-					spdlog::warn("KeyBindMenu::LoadBindings: skipping malformed line: {}", line);
-					continue;
-				}
+				if (parts.size() < 2) { spdlog::warn("KeyBindMenu::LoadBindings: skipping malformed line: {}", line); continue; }
 
 				if (parts[0] == "MENUKEY") {
 					int vKey = VKeyForName(trim(parts[1]));
-					if (vKey != -1) {
-						menuToggleVKey = (USHORT)vKey;
-					}
-					else {
-						spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
-					}
+					if (vKey != -1) menuToggleVKey = (USHORT)vKey;
+					else spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
 				}
 				else if (parts[0] == "BIND" && parts.size() >= 7) {
-					std::string keyName = trim(parts[1]);
-					bool needCtrl = trim(parts[2]) == "1";
-					bool needShift = trim(parts[3]) == "1";
-					bool needAlt = trim(parts[4]) == "1";
+					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
+					if (vKey == -1) { spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName); continue; }
+					
 					float holdSeconds = 0.0f;
-					try {
-						holdSeconds = std::stof(trim(parts[5]));
+					try { holdSeconds = std::stof(trim(parts[5])); }
+					catch (...) { holdSeconds = 0.0f; }
+					
+					bool isToggle = false;
+					std::string pathOn = "";
+					std::string pathOff = "";
+
+					// maps the .conf
+					if (trim(parts[6]) == "1" && parts.size() >= 9) {
+						isToggle = true;
+						pathOn = trim(parts[7]);
+						pathOff = trim(parts[8]);
+					} else {
+						isToggle = false;
+						pathOn = trim(parts[7]);
+						pathOff = "";
 					}
-					catch (...) {
-						spdlog::warn("KeyBindMenu::LoadBindings: bad holdSeconds value '{}', defaulting to 0", parts[5]);
-					}
-					std::string scriptPath = trim(parts[6]);
-					int vKey = VKeyForName(keyName);
-					if (vKey == -1) {
-						spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName);
-						continue;
-					}
-					bindings.push_back(KeyBind{ (USHORT)vKey, needCtrl, needShift, needAlt, keyName, scriptPath, holdSeconds });
+					
+					bindings.push_back(KeyBind{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, pathOn, pathOff, false, holdSeconds });
 				}
 				else if (parts[0] == "BIND") {
-					// handles old config formats safely by skipping invalid entries.
 					spdlog::warn("KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}", line);
 				}
 			}
 			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), GetBindsFileName());
 		}
 
-		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, const std::string& scriptPath) {
-			KeyBind bind{ vKey, needCtrl, needShift, needAlt, keyName, scriptPath, holdSeconds };
-			bindings.push_back(bind);
+		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, bool isToggle, const std::string& pathOn, const std::string& pathOff) {
+			bindings.push_back(KeyBind{ vKey, needCtrl, needShift, needAlt, keyName, isToggle, pathOn, pathOff, false, holdSeconds });
 			EnsureDispatcherRegistered(vKey);
 			SaveBindings();
-			DebuggerMenu::LogBindEvent("bound " + CombinedDisplayName(bind) + " -> " + scriptPath);
+			DebuggerMenu::LogBindEvent("bound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
 		}
 
 		void RemoveBinding(int index) {
-			if (index < 0 || index >= (int)bindings.size()) {
-				return;
-			}
-			std::string removedDesc = CombinedDisplayName(bindings[index]) + " -> " + bindings[index].scriptPath;
+			if (index < 0 || index >= (int)bindings.size()) return;
+			std::string removedDesc = CombinedDisplayName(bindings[index]) + " -> " + bindings[index].scriptPathOn;
 			USHORT vKey = bindings[index].vKey;
 			bindings.erase(bindings.begin() + index);
 			RemoveDispatcherIfUnused(vKey);
@@ -419,9 +332,7 @@ namespace RadarKeys {
 
 		void RemoveAllBindings() {
 			size_t count = bindings.size();
-			for (const auto& entry : vKeyDispatchers) {
-				RawInput::UnRegisterAction(entry.first, entry.second);
-			}
+			for (const auto& entry : vKeyDispatchers) RawInput::UnRegisterAction(entry.first, entry.second);
 			vKeyDispatchers.clear();
 			bindings.clear();
 			SaveBindings();
@@ -430,171 +341,280 @@ namespace RadarKeys {
 
 		void Init(const std::string& defaultMenuKeyName) {
 			int defaultVKey = VKeyForName(defaultMenuKeyName);
-			if (defaultVKey != -1) {
-				menuToggleVKey = (USHORT)defaultVKey;
-			}
-			else if (!defaultMenuKeyName.empty()) {
-				spdlog::warn("KeyBindMenu::Init: unknown keyBindMenuToggleKey '{}' in ihhook_config.lua, using F4", defaultMenuKeyName);
-			}
+			if (defaultVKey != -1) menuToggleVKey = (USHORT)defaultVKey;
+			else if (!defaultMenuKeyName.empty()) spdlog::warn("KeyBindMenu::Init: unknown keyBindMenuToggleKey '{}' in ihhook_config.lua, using F4", defaultMenuKeyName);
 
 			LoadBindings(); // may override menuToggleVKey again if radar_keybinds.conf has a persisted MENUKEY
-			for (const KeyBind& bind : bindings) {
-				EnsureDispatcherRegistered(bind.vKey);
-			}
+			for (const auto& bind : bindings) EnsureDispatcherRegistered(bind.vKey);
 			RegisterMenuToggleKey(menuToggleVKey);
 		}
 
-		void Draw(bool* p_open) {
-			ImGui::SetNextWindowSize(ImVec2(460, 460), ImGuiCond_::ImGuiCond_FirstUseEver);
-			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) {
+		static USHORT capturedVKey = 0;
+		static bool capturedCtrl = false;
+		static bool capturedShift = false;
+		static bool capturedAlt = false;
+		static float capturedHoldSeconds = 0.0f;
+		static char capturedScriptPathOnBuffer[512] = "";
+		static char capturedScriptPathOffBuffer[512] = "";
+		static bool capturedToggleMode = false;
+		static bool capturedLongPressMode = false;
+		static int editingBindingIndex = -1;
+
+		void DrawKeyCapturePrompt() {
+			ImGui::SetNextWindowSize(ImVec2(320, 255), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 160, ImGui::GetIO().DisplaySize.y * 0.5f - 127), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowFocus();
+
+			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
 				ImGui::End();
 				return;
 			}
 
-			if (ImGui::Button("Debugger")) {
-				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
-			}
-			ImGui::Separator();
+			if (capturedVKey == 0) {
+				capturedCtrl  = ImGui::GetIO().KeyCtrl;
+				capturedShift = ImGui::GetIO().KeyShift;
+				capturedAlt   = ImGui::GetIO().KeyAlt;
 
-			// trmap the menu's own toggle key (no modifier support here - see IsReservedVKey comment)
-			ImGui::Text("Menu opens with: %s", NameForVKey(menuToggleVKey).c_str());
-			ImGui::SameLine();
-			static int menuKeyComboIndex = -1;
-			if (menuKeyComboIndex == -1) {
-				for (int i = 0; i < vkNameTableCount; i++) {
-					if (vkNameTable[i].vKey == menuToggleVKey) {
-						menuKeyComboIndex = i;
+				for (int i = 1; i < 256; i++) {
+					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
+						i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
+						continue;
+					}
+					if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
+
+					if (ImGui::IsKeyPressed((ImGuiKey)i)) {
+						capturedVKey = (USHORT)i;
+						capturedCtrl  = ImGui::GetIO().KeyCtrl;
+						capturedShift = ImGui::GetIO().KeyShift;
+						capturedAlt   = ImGui::GetIO().KeyAlt;
 						break;
 					}
 				}
-				if (menuKeyComboIndex == -1) menuKeyComboIndex = 0;
 			}
-			ImGui::SetNextItemWidth(100);
-			if (ImGui::BeginCombo("##menuKeyCombo", vkNameTable[menuKeyComboIndex].name)) {
-				for (int i = 0; i < vkNameTableCount; i++) {
-					bool selected = (i == menuKeyComboIndex);
-					if (ImGui::Selectable(vkNameTable[i].name, selected)) {
-						menuKeyComboIndex = i;
+
+			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
+			auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
+			
+			ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Key").x) * 0.5f);
+			ImGui::Text(" Key");
+			ImGui::Separator();
+
+			float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
+
+			if (capturedVKey == 0) {
+				float startVerticalY = lowerBoxTopY + ((lowerBoxRemainingHeight - (ImGui::GetTextLineHeightWithSpacing() * 2.0f)) * 0.5f);
+				ImGui::SetNextItemOpen(true); 
+				ImGui::SetCursorPosY(startVerticalY);
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("PRESS").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), " PRESS");
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("KEY...").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "  KEY..");
+			} else {
+				std::string keyName = NameForVKey(capturedVKey);
+				ImGui::SetCursorPosY(lowerBoxTopY + ((lowerBoxRemainingHeight - ImGui::GetTextLineHeight()) * 0.5f));
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(keyName.c_str()).x) * 0.5f); ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), " %s", keyName.c_str());
+			}
+			ImGui::EndChild(); ImGui::SameLine();
+
+			ImGui::BeginGroup();
+			if (!isAssigningMenuToggleKey) {
+				ImGui::Checkbox("Ctrl", &capturedCtrl); 
+				ImGui::Checkbox("Shift", &capturedShift); 
+				ImGui::Checkbox("Alt", &capturedAlt); 
+			}
+			if (ImGui::Button("Reset", ImVec2(55, 22))) { 
+				capturedVKey = 0; 
+				capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = false; 
+			}
+			ImGui::EndGroup(); ImGui::SameLine(205);
+
+			ImGui::BeginGroup();
+			if (!isAssigningMenuToggleKey) {
+				if (capturedLongPressMode) ImGui::BeginDisabled();
+				ImGui::Checkbox("Toggle", &capturedToggleMode);
+				if (capturedLongPressMode) ImGui::EndDisabled();
+
+				if (capturedToggleMode) ImGui::BeginDisabled();
+				ImGui::Checkbox("Long Press", &capturedLongPressMode);
+				if (capturedToggleMode) ImGui::EndDisabled();
+				
+				if (capturedLongPressMode) {
+					ImGui::SetNextItemWidth(75);
+					ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
+					if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
+					if (ImGui::Button(" - ", ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; }
+					ImGui::SameLine(40);
+					if (ImGui::Button(" + ", ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
+				}
+			}
+			
+			bool comboAvailable = true;
+			if (capturedVKey != 0) {
+				if (editingBindingIndex != -1) {
+					if (IsReservedVKey(capturedVKey)) comboAvailable = false;
+					for (int i = 0; i < (int)bindings.size(); i++) {
+						if (i == editingBindingIndex) continue;
+						const auto& b = bindings[i];
+						if (b.vKey == capturedVKey && b.needCtrl == capturedCtrl && b.needShift == capturedShift && b.needAlt == capturedAlt) {
+							if (b.holdSeconds == capturedHoldSeconds || ((capturedHoldSeconds > 0.0f) == (b.holdSeconds > 0.0f))) comboAvailable = false;
+						}
+					}
+				} else {
+					comboAvailable = IsComboAvailable(capturedVKey, capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds);
+				}
+			}
+			ImGui::Spacing();
+			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
+			ImGui::EndGroup(); ImGui::Separator();
+
+			bool isUpperPathValid = false, isLowerPathValid = false;
+			int scriptStatus = 0, lowerStatus = 0;
+
+			if (!isAssigningMenuToggleKey) {
+				if (capturedScriptPathOnBuffer[0] != '\0') {
+					std::string txt(capturedScriptPathOnBuffer);
+					if (txt.size() >= 4 && txt.substr(txt.size() - 4) == ".lua") {
+						scriptStatus = std::filesystem::exists(ResolveScriptPath(capturedScriptPathOnBuffer)) ? 3 : 2;
+						isUpperPathValid = (scriptStatus == 3);
+					} else scriptStatus = 1;
+				}
+				if (capturedToggleMode && capturedScriptPathOffBuffer[0] != '\0') {
+					std::string txt(capturedScriptPathOffBuffer);
+					if (txt.size() >= 4 && txt.substr(txt.size() - 4) == ".lua") {
+						lowerStatus = std::filesystem::exists(ResolveScriptPath(capturedScriptPathOffBuffer)) ? 3 : 2;
+						isLowerPathValid = (lowerStatus == 3);
+					} else lowerStatus = 1;
+				}
+			}
+
+			if (!isAssigningMenuToggleKey) {
+				if (capturedToggleMode) {
+					ImGui::Text("Enable Script Path:"); ImGui::SetNextItemWidth(-1);
+					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
+					if (scriptStatus == 3) ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " Found! Ready to assign.");
+					else if (scriptStatus == 2) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), " The script file does not exist.");
+					else if (scriptStatus == 1 || capturedScriptPathOnBuffer[0] != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
+
+					ImGui::Text("Disable Script Path:"); ImGui::SetNextItemWidth(-1);
+					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
+					if (lowerStatus == 3) ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " Found! Ready to assign.");
+					else if (lowerStatus == 2) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), " The script file does not exist.");
+					else if (lowerStatus == 1 || capturedScriptPathOffBuffer[0] != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
+				} else {
+					ImGui::Text("Script Path:"); ImGui::SetNextItemWidth(-1); 
+					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
+					if (scriptStatus == 3) ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), " Found! Ready to assign.");
+					else if (scriptStatus == 2) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), " The script file does not exist.");
+					else if (scriptStatus == 1 || capturedScriptPathOnBuffer[0] != '\0') ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), " Script path not assigned yet...");
+				}
+				ImGui::Spacing();
+			}
+
+			bool pathsValid = capturedToggleMode ? (isUpperPathValid && isLowerPathValid) : isUpperPathValid;
+			bool canFinalize = capturedVKey != 0 && comboAvailable && (isAssigningMenuToggleKey || pathsValid);
+			
+			if (!canFinalize) ImGui::BeginDisabled();
+			if (ImGui::Button("Finalize", ImVec2(145, 30))) {
+				if (isAssigningMenuToggleKey) {
+					if (menuToggleHandle != 0) RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
+					menuToggleVKey = capturedVKey; menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
+					SaveBindings(); DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
+				} else {
+					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
+					std::string finalPathOn = ResolveScriptPath(capturedScriptPathOnBuffer);
+					std::string finalPathOff = capturedToggleMode ? ResolveScriptPath(capturedScriptPathOffBuffer) : "";
+
+					if (editingBindingIndex != -1) {
+						USHORT oldVKey = bindings[editingBindingIndex].vKey;
+						bindings[editingBindingIndex] = KeyBind{ capturedVKey, capturedCtrl, capturedShift, capturedAlt, NameForVKey(capturedVKey), capturedToggleMode, finalPathOn, finalPathOff, false, finalHoldSeconds };
+						RemoveDispatcherIfUnused(oldVKey);
+						EnsureDispatcherRegistered(capturedVKey);
+						SaveBindings();
+						DebuggerMenu::LogBindEvent("re-assigned slot index [" + std::to_string(editingBindingIndex) + "] cleanly");
+					} else {
+						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff);
 					}
 				}
-				ImGui::EndCombo();
+				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
+				capturedToggleMode = capturedLongPressMode = false;
+				showCapturePrompt = isAssigningMenuToggleKey = false;
+				editingBindingIndex = -1;
 			}
-			ImGui::SameLine();
-			if (ImGui::Button("Apply##menuKey")) {
-				USHORT newVKey = vkNameTable[menuKeyComboIndex].vKey;
-				if (newVKey == menuToggleVKey || IsComboAvailable(newVKey, false, false, false, 0.0f)) {
-					RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
-					RegisterMenuToggleKey(newVKey);
-					SaveBindings();
-				}
-				else {
-					spdlog::warn("KeyBindMenu: can't remap menu-toggle key to {} - already in use", vkNameTable[menuKeyComboIndex].name);
-				}
+			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
+			
+			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
+				capturedVKey = 0; capturedHoldSeconds = 0.0f; capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
+				capturedToggleMode = capturedLongPressMode = false;
+				showCapturePrompt = isAssigningMenuToggleKey = false;
+				editingBindingIndex = -1;
 			}
+			ImGui::End();
+		}
 
+		// draws the ui
+		void Draw(bool* p_open) {
+			ImGui::SetNextWindowSize(ImVec2(480, 360), ImGuiCond_FirstUseEver);
+			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
+
+			if (ImGui::Button("Debugger Overlay")) DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 			ImGui::Separator();
-			ImGui::TextWrapped("Scripts assigned on keys trigger even while holding a modifier key, except if there is an assigned script to that keys combination.");
-			ImGui::Spacing();
 
-			// existing bindings list, each with its own remove button, plus a bulk "Remove All"
+			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
+			if (ImGui::Button(buttonLabel.c_str(), ImVec2(-1, 28))) { isAssigningMenuToggleKey = showCapturePrompt = true; }
+			ImGui::Separator();
+
 			int removeIndex = -1;
-			ImGui::BeginChild("BindingsList", ImVec2(0, 180), true);
+			ImGui::BeginChild("ActiveBindingsOverviewList", ImVec2(0, 200), true);
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
-				if (ImGui::Button("Remove")) {
-					removeIndex = i;
+				if (ImGui::Button("Remove", ImVec2(55, 20))) removeIndex = i;
+				
+				ImGui::SameLine(); 
+
+				std::string itemLabel = CombinedDisplayName(bindings[i]);
+				if (ImGui::Button(itemLabel.c_str(), ImVec2(130, 20))) {
+					editingBindingIndex = i;
+					capturedVKey = bindings[i].vKey;
+					capturedCtrl = bindings[i].needCtrl;
+					capturedShift = bindings[i].needShift;
+					capturedAlt = bindings[i].needAlt;
+					capturedToggleMode = bindings[i].isToggle;
+					capturedLongPressMode = (bindings[i].holdSeconds > 0.0f);
+					capturedHoldSeconds = bindings[i].holdSeconds;
+					
+					snprintf(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), "%s", bindings[i].scriptPathOn.c_str());
+					snprintf(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), "%s", bindings[i].scriptPathOff.c_str());
+					
+					showCapturePrompt = true;
 				}
-				ImGui::SameLine();
-				ImGui::Text("%s", CombinedDisplayName(bindings[i]).c_str());
-				ImGui::SameLine(160);
-				std::string scriptName = std::filesystem::path(bindings[i].scriptPath).filename().string();
-				ImGui::TextWrapped("%s", scriptName.c_str());
-				ImGui::PopID();
-				ImGui::Separator();
+
+				ImGui::SameLine(250);
+				if (bindings[i].isToggle) {
+					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
+					std::string fileOff = std::filesystem::path(bindings[i].scriptPathOff).filename().string();
+					ImGui::TextWrapped("Toggle: %s <-> %s", fileOn.c_str(), fileOff.c_str());
+				} else {
+					ImGui::TextWrapped("-> %s", std::filesystem::path(bindings[i].scriptPathOn).filename().string().c_str());
+				}
+				ImGui::PopID(); ImGui::Separator();
 			}
 			ImGui::EndChild();
-			if (removeIndex != -1) {
-				RemoveBinding(removeIndex);
-			}
 
-			if (bindings.empty()) {
-				ImGui::BeginDisabled();
-			}
-			if (ImGui::Button("Remove All Bindings")) {
-				RemoveAllBindings();
-			}
-			if (bindings.empty()) {
-				ImGui::EndDisabled();
-			}
+			if (removeIndex != -1) RemoveBinding(removeIndex);
 
-			ImGui::Spacing();
-			ImGui::Text("Add new binding");
+			if (bindings.empty()) ImGui::BeginDisabled();
+			if (ImGui::Button("Clear All Hotkeys")) RemoveAllBindings();
+			if (bindings.empty()) ImGui::EndDisabled();
+			ImGui::Separator(); ImGui::Spacing();
 
-			static int addComboIndex = 0;
-			ImGui::SetNextItemWidth(100);
-			if (ImGui::BeginCombo("Key##addCombo", vkNameTable[addComboIndex].name)) {
-				for (int i = 0; i < vkNameTableCount; i++) {
-					bool selected = (i == addComboIndex);
-					if (ImGui::Selectable(vkNameTable[i].name, selected)) {
-						addComboIndex = i;
-					}
-				}
-				ImGui::EndCombo();
+			// launch the custom prompt
+			if (ImGui::Button("Add New Binding...", ImVec2(-1, 35))) {
+				editingBindingIndex = -1;
+				showCapturePrompt = true;
 			}
-			ImGui::SameLine();
-			static bool addCtrl = false;
-			static bool addShift = false;
-			static bool addAlt = false;
-			ImGui::Checkbox("Ctrl", &addCtrl);
-			ImGui::SameLine();
-			ImGui::Checkbox("Shift", &addShift);
-			ImGui::SameLine();
-			ImGui::Checkbox("Alt", &addAlt);
-
-			static float addHoldSeconds = 0.0f;
-			ImGui::SetNextItemWidth(120);
-			ImGui::InputFloat("Hold seconds (0 = instant)", &addHoldSeconds, 0.5f, 1.0f, "%.1f");
-			if (addHoldSeconds < 0.0f) {
-				addHoldSeconds = 0.0f;
-			}
-
-			// plain text file path input (abs/rel to game root); no Win32 dialog deps.
-			static char scriptPathBuffer[512] = "";
-			ImGui::SetNextItemWidth(-1);
-			ImGui::InputText("##scriptPathInput", scriptPathBuffer, IM_ARRAYSIZE(scriptPathBuffer));
-			ImGui::TextDisabled("Just a filename assumes mod/modules/ - or type a path (with / or \\) to use elsewhere");
-
-			USHORT selectedVKey = vkNameTable[addComboIndex].vKey;
-			bool comboAvailable = IsComboAvailable(selectedVKey, addCtrl, addShift, addAlt, addHoldSeconds);
-			bool canAdd = scriptPathBuffer[0] != '\0' && comboAvailable;
-			if (!canAdd) {
-				ImGui::BeginDisabled();
-			}
-			if (ImGui::Button("Add Binding")) {
-				AddBinding(selectedVKey, vkNameTable[addComboIndex].name, addCtrl, addShift, addAlt, addHoldSeconds, ResolveScriptPath(scriptPathBuffer));
-				scriptPathBuffer[0] = '\0';
-				addHoldSeconds = 0.0f;
-			}
-			if (!canAdd) {
-				ImGui::EndDisabled();
-			}
-			if (scriptPathBuffer[0] != '\0' && !comboAvailable) {
-				// Check if the key combo exists at all
-				bool baseComboExists = false;
-				for (const KeyBind& bind : bindings) {
-					if (bind.vKey == selectedVKey && bind.needCtrl == addCtrl && bind.needShift == addShift && bind.needAlt == addAlt) {
-						baseComboExists = true;
-						break;
-					}
-				}
-				if (baseComboExists) {
-					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Key in use! Adjust 'Hold seconds' to map a unique secondary script.");
-				} else {
-					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "The key setting is already in use. Check the assigned scripts above.");
-				}
-			}
-
 			ImGui::End();
+
+			// draw if hte user interacts
+			if (showCapturePrompt) DrawKeyCapturePrompt();
 		}
 	}
 }
