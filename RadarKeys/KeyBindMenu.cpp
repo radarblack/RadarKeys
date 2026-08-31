@@ -443,7 +443,7 @@ namespace RadarKeys {
 			ImGui::Spacing();
 			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
 			if (ImGui::IsItemHovered()) ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
-			ImGui::EndGroup(); ImGui::Spacer();
+			ImGui::EndGroup(); ImGui::Spacing();
 
 			bool isLuaPathValid = false; int scriptStatus = 0; // 0 = empty, 1 = invalid ext, 2 = missing file, 3 = valid file
 			if (!isAssigningMenuToggleKey && capturedScriptPathBuffer[0] != '\0') {
