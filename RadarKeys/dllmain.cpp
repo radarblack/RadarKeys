@@ -16,32 +16,52 @@
 #include <string>
 #include <cassert>
 #include <filesystem>
+#include "spdlog/sinks/base_sink.h"
+#include <queue>
+#include <fstream>
 
 namespace RadarKeys {
-	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
-	SetCursorPosFunc SetCursorPos_Orig = NULL;
 
-	BOOL WINAPI SetCursorPos_Hook(int X, int Y) {
-		if (Render::IsUnlockCursor()) {
-			return FALSE;
-		}
-		return SetCursorPos_Orig(X, Y);
-	}
+	class MemoryCappedSink : public spdlog::sinks::base_sink<std::mutex> {
+	private:
+		std::wstring file_path_;
+		std::queue<std::string> log_lines_;
+		size_t current_bytes_ = 0;
+		const size_t max_bytes_ = 10240;
 
-	void InitCursorHook() {
-		if (MH_CreateHook(&SetCursorPos, &SetCursorPos_Hook, reinterpret_cast<LPVOID*>(&SetCursorPos_Orig)) != MH_OK) {
-			spdlog::error("InitCursorHook: MH_CreateHook failed for SetCursorPos");
-			return;
+	public:
+		explicit MemoryCappedSink(std::wstring path) : file_path_(std::move(path)) {}
+
+	protected:
+		void sink_it_(const spdlog::details::log_msg& msg) override {
+			spdlog::memory_buf_t formatted;
+			base_sink<std::mutex>::formatter_->format(msg, formatted);
+			std::string line_str(formatted.data(), formatted.size());
+
+			log_lines_.push(line_str);
+			current_bytes_ += line_str.size();
+
+			while (current_bytes_ > max_bytes_ && !log_lines_.empty()) {
+				current_bytes_ -= log_lines_.front().size();
+				log_lines_.pop();
+			}
 		}
-		if (MH_EnableHook(&SetCursorPos) != MH_OK) {
-			spdlog::error("InitCursorHook: MH_EnableHook failed for SetCursorPos");
+
+		void flush_() override {
+			std::ofstream out(file_path_, std::ios::app);
+			if (!out) return;
+			while (!log_lines_.empty()) {
+				out << log_lines_.front();
+				log_lines_.pop();
+			}
+			out.close();
 		}
-	}
+	};
 
 	void SetupLog() {
 		std::filesystem::path logDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 		std::error_code ec;
-		std::filesystem::create_directories(logDir, ec); // spdlog's file sink won't create missing directories itself
+		std::filesystem::create_directories(logDir, ec);
 
 		std::filesystem::path logPath = logDir / "radarkeys_log.txt";
 		std::filesystem::path logPathPrev = logDir / "radarkeys_log_prev.txt";
@@ -50,10 +70,14 @@ namespace RadarKeys {
 		CopyFileW(logPath.c_str(), logPathPrev.c_str(), FALSE);
 		DeleteFileW(logPath.c_str());
 
-		auto logger = spdlog::basic_logger_mt("radarkeys", logPath.wstring());
+		// dual sink. retains the dll init, then tracks activities after success
+		auto startup_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
+		auto sliding_sink = std::make_shared<MemoryCappedSink>(logPath.wstring());
+
+		auto logger = std::make_shared<spdlog::logger>("radarkeys", spdlog::sinks_init_list{ startup_sink, sliding_sink });
 		spdlog::set_default_logger(logger);
 		spdlog::set_level(spdlog::level::debug);
-		spdlog::flush_on(spdlog::level::warn);
+		
 		spdlog::info("RadarKeys log started");
 	}
 
@@ -105,7 +129,6 @@ namespace RadarKeys {
 		assert(LuaGetTop(L) == 1); //  table still on stack
 		return 1;
 	}
-
 }
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
@@ -127,10 +150,14 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
 	switch (ul_reason_for_call) {
 	case DLL_PROCESS_ATTACH:
-		DisableThreadLibraryCalls(hModule); // we don't need DLL_THREAD_ATTACH/DETACH notifications
+		DisableThreadLibraryCalls(hModule);
 		std::thread(RadarKeys::InitThread).detach();
 		break;
 	case DLL_PROCESS_DETACH:
+		// custom ring buffer. flushes out activities past the success init log
+		if (auto logger = spdlog::get("radarkeys")) {
+			logger->flush();
+		}
 		spdlog::shutdown();
 		break;
 	}
