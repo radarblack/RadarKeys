@@ -70,8 +70,7 @@ namespace RadarKeys {
 		CopyFileW(logPath.c_str(), logPathPrev.c_str(), FALSE);
 		DeleteFileW(logPath.c_str());
 
-		// dual sink. retains the dll init, then tracks activities after success
-		auto startup_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
+		auto startup_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.wstring(), true);
 		auto sliding_sink = std::make_shared<MemoryCappedSink>(logPath.wstring());
 
 		auto logger = std::make_shared<spdlog::logger>("radarkeys", spdlog::sinks_init_list{ startup_sink, sliding_sink });
