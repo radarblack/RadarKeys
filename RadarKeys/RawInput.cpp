@@ -442,7 +442,7 @@ namespace RadarKeys {
 
 		LRESULT CALLBACK WndProc_Hook(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 			if (!OnMessage(hwnd, uMsg, wParam, lParam)) {
-				return -1L;
+				return 0L;
 			}
 
 			return CallWindowProc(WndProc_Orig, hwnd, uMsg, wParam, lParam);
