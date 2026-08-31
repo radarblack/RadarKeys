@@ -20,12 +20,13 @@ namespace RadarKeys {
 			std::string keyName;     // base key display name, e.g. "F6", "A", "," - see vkNameTable
 
 			BindMode mode = BindMode::STANDARD;
+
 			std::string scriptPath;  // fire script for standard mode
 			float holdSeconds = 0.0f; // 0 = Instant tap, >0 = Long press trigger
 
-			std::string scriptPath;  // passed to dofile() via the DoScript IPC command (see RegisterBindingAction/OnBoundKeyPressed)
-			float holdSeconds = 0.0f; // 0 = fires instantly on press (default/original behavior); >0 = fires once after being held this long, see Update()
-			bool currentToggleState = false; // runtime tracker
+			std::string toggleOnScriptPath;
+			std::string toggleOffScriptPath;
+			bool currentToggleState = false;  // runtime tracker
 		};
 
 		// loads bindings and menu key at startup from mod/radarKeys/radar_keybinds.conf; uses hardcoded F7 as fallback if nopersisted menu key.
