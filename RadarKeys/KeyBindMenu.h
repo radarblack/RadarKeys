@@ -8,10 +8,10 @@ namespace RadarKeys {
 	namespace KeyBindMenu {
 
 		enum class BindMode {
-			STANDARD, // normal press
-			TOGGLE    // on/off switch
+			STANDARD = 0, // normal press
+			TOGGLE = 1    // on/off switch
 		};
-		// Binding: key(+mods)→Lua file; shared dispatcher per vKey enables fallback (e.g., Shift+X→plain X).
+		
 		struct KeyBind {
 			USHORT vKey;
 			bool needCtrl;
