@@ -136,15 +136,18 @@ namespace RadarKeys {
 		};
 		std::map<USHORT, HoldTrack> holdTracks;
 
-		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld) {
-			const KeyBind* exactMatch = nullptr, *fallbackMatch = nullptr; // fallback if there is no assigned script to the key combo
+		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld, bool preferHold) {
+			const KeyBind* bestMatch = nullptr;
 			for (const auto& bind : bindings) {
 				if (bind.vKey != vKey) continue;
-				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) { exactMatch = &bind; break; }
-				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) fallbackMatch = &bind;
+				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
+					// check if the key requires hold or tap
+					if (preferHold && bind.holdSeconds > 0.0f) return &bind;
+					if (!preferHold && bind.holdSeconds <= 0.0f) return &bind;
+					bestMatch = &bind; // fallback options if an exact mode match is not found
+				}
 			}
-			// return the precise modifier profile if found; otherwise drop down to your plain key bind seamlessly
-			return exactMatch ? exactMatch : fallbackMatch;
+			return bestMatch;
 		}
 
 		void FireBinding(const KeyBind& bind) {
@@ -162,44 +165,41 @@ namespace RadarKeys {
 		}
 
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
-			// prevents 'tap' scripts from running when the input detection prompt is up
 			if (showCapturePrompt) return;
-
 			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
-			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
-
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
-				// the key was released. Check if we were tracking a hold for this key.
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
-					// if it hasn't fired the hold script yet, it means it's a short tap!
-					if (!it->second.fired && toRun && toRun->holdSeconds <= 0.0f) {
-						// look for a structural 'instant' (holdSeconds == 0) fallback binding on the same key combo
-						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
-						FireBinding(*toRun);
+					// check if the hold track activates
+					if (!it->second.fired) {
+						const KeyBind* tapBind = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
+						if (tapBind && tapBind->holdSeconds <= 0.0f) {
+							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
+							FireBinding(*tapBind);
+						}
 					}
 					holdTracks.erase(it);
 				}
 				return;
 			}
+			
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) return;
-
-			// log raw down event
 			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
-			if (!toRun) return;
 
-			if (!toRun->needCtrl && !toRun->needShift && !toRun->needAlt) ctrlHeld = shiftHeld = altHeld = false;
-
-			// look to see if there is ANY binding on this virtual key setup that uses a hold delay
+			// for long press
 			bool hasHoldOptionOnKey = false;
 			for (const auto& bind : bindings) {
-				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) { hasHoldOptionOnKey = true; break; }
+				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) { 
+					hasHoldOptionOnKey = true; 
+					break; 
+				}
 			}
 
-			if (toRun->holdSeconds <= 0.0f && !hasHoldOptionOnKey) {
+			// for tap
+			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
+			if (toRun && !hasHoldOptionOnKey) {
 				FireBinding(*toRun);
-			} else {
-				// long press interval tracker
+			} else if (hasHoldOptionOnKey) {
 				holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false };
 			}
 		}
@@ -212,16 +212,14 @@ namespace RadarKeys {
 
 				bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
 				
-				// look specifically for the binding configured with a hold delay
-				const KeyBind* holdBind = nullptr;
-				for (const auto& bind : bindings) {
-					if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) { holdBind = &bind; break; }
-				}
+				// isolate long-press
+				const KeyBind* holdBind = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, true);
 
-				if (holdBind) {
+				if (holdBind && holdBind->holdSeconds > 0.0f) {
 					if (std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count() >= holdBind->holdSeconds) {
 						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
-						FireBinding(*holdBind); track.fired = true;
+						FireBinding(*holdBind); 
+						track.fired = true;
 					}
 				}
 				++it;
