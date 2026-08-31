@@ -133,6 +133,10 @@ namespace RadarKeys {
 		struct HoldTrack {
 			std::chrono::steady_clock::time_point startTime;
 			bool fired = false;
+			// stops tracking modifier keys
+			bool ctrlOnPressed = false;
+			bool shiftOnPressed = false;
+			bool altOnPressed = false;
 		};
 		std::map<USHORT, HoldTrack> holdTracks;
 
@@ -167,12 +171,12 @@ namespace RadarKeys {
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
 			if (showCapturePrompt) return;
 			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
+
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
-					// check if the hold track activates
 					if (!it->second.fired) {
-						const KeyBind* tapBind = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
+						const KeyBind* tapBind = FindMatchingBinding(vKey, it->second.ctrlOnPressed, it->second.shiftOnPressed, it->second.altOnPressed, false);
 						if (tapBind && tapBind->holdSeconds <= 0.0f) {
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
 							FireBinding(*tapBind);
@@ -189,7 +193,7 @@ namespace RadarKeys {
 			// for long press
 			bool hasHoldOptionOnKey = false;
 			for (const auto& bind : bindings) {
-				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) { 
+				if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) { 
 					hasHoldOptionOnKey = true; 
 					break; 
 				}
@@ -199,8 +203,8 @@ namespace RadarKeys {
 			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
 			if (toRun && !hasHoldOptionOnKey) {
 				FireBinding(*toRun);
-			} else if (hasHoldOptionOnKey) {
-				holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false };
+			} else {
+				holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false, ctrlHeld, shiftHeld, altHeld };
 			}
 		}
 
@@ -210,10 +214,7 @@ namespace RadarKeys {
 				USHORT vKey = it->first; HoldTrack& track = it->second;
 				if (track.fired || !RawInput::IsKeyHeldReal(vKey)) { it = holdTracks.erase(it); continue; }
 
-				bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
-				
-				// isolate long-press
-				const KeyBind* holdBind = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, true);
+				const KeyBind* holdBind = FindMatchingBinding(vKey, track.ctrlOnPressed, track.shiftOnPressed, track.altOnPressed, true);
 
 				if (holdBind && holdBind->holdSeconds > 0.0f) {
 					if (std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count() >= holdBind->holdSeconds) {
