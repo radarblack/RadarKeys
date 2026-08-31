@@ -20,7 +20,6 @@
 #include <fstream>
 
 namespace RadarKeys {
-
 	class MemoryCappedSink : public spdlog::sinks::base_sink<std::mutex> {
 	private:
 		std::wstring file_path_;
@@ -57,13 +56,17 @@ namespace RadarKeys {
 		}
 
 		void flush_() override {
-			std::ofstream out(file_path_, std::ios::app);
-			if (!out) return;
+			FILE* file_handle = nullptr;
+			if (_wfopen_s(&file_handle, file_path_.c_str(), L"ab") != 0 || !file_handle) {
+				return;
+			}
 			while (!log_lines_.empty()) {
-				out << log_lines_.front();
+				const std::string& line = log_lines_.front();
+				fwrite(line.c_str(), sizeof(char), line.size(), file_handle);
 				log_lines_.pop();
 			}
-			out.close();
+			fflush(file_handle);
+			fclose(file_handle);
 		}
 	};
 
