@@ -251,14 +251,25 @@ namespace RadarKeys {
 			if (!outFile) { spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", GetBindsFileName()); return; }
 			
 			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
-			
-			for (const auto& b : bindings) {
+			std::string gameDirStr = std::filesystem::path(GetGameDirectory()).generic_string() + "/";
+
+			for (auto b : bindings) {
+				std::string genericOn = std::filesystem::path(b.scriptPathOn).generic_string();
+				std::string genericOff = std::filesystem::path(b.scriptPathOff).generic_string();
+
+				if (genericOn.find(gameDirStr) == 0) {
+					genericOn.erase(0, gameDirStr.length());
+				}
+				if (genericOff.find(gameDirStr) == 0) {
+					genericOff.erase(0, gameDirStr.length());
+				}
+
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
 				
 				if (b.isToggle) {
-					outFile << "1|" << b.scriptPathOn << "|" << b.scriptPathOff << "\n";
+					outFile << "1|" << genericOn << "|" << genericOff << "\n";
 				} else {
-					outFile << "0|" << b.scriptPathOn << "\n";
+					outFile << "0|" << genericOn << "\n";
 				}
 			}
 			outFile.close();
