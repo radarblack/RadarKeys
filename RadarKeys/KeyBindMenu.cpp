@@ -701,7 +701,11 @@ namespace RadarKeys {
 					std::string funcOnStr = bind.functionOn.empty() ? "" : " [" + bind.functionOn + "]";
 					std::string funcOffStr = bind.functionOff.empty() ? "" : " [" + bind.functionOff + "]";
 					
-					fullLineText += " Toggle: " + fileOn + funcOnStr + " <-> " + fileOff + funcOffStr;
+					if (bind.scriptPathOn == bind.scriptPathOff) {
+						fullLineText += " Toggle: " + fileOn + funcOnStr + " <-> " + funcOffStr;
+					} else {
+						fullLineText += " Toggle: " + fileOn + funcOnStr + " <-> " + fileOff + funcOffStr;
+					}
 				} else {
 					std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
 					std::string funcTapStr = bind.functionTap.empty() ? "" : " [" + bind.functionTap + "]";
@@ -778,7 +782,11 @@ namespace RadarKeys {
 					std::string funcOnStr = bindings[i].functionOn.empty() ? "" : " [" + bindings[i].functionOn + "]";
 					std::string funcOffStr = bindings[i].functionOff.empty() ? "" : " [" + bindings[i].functionOff + "]";
 					
-					ImGui::TextWrapped("Toggle: %s%s <-> %s%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
+					if (bindings[i].scriptPathOn == bindings[i].scriptPathOff) {
+						ImGui::TextWrapped("Toggle: %s%s <->%s", fileOn.c_str(), funcOnStr.c_str(), funcOffStr.c_str());
+					} else {
+						ImGui::TextWrapped("Toggle: %s%s <-> %s%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
+					}
 				} else {
 					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
 					std::string funcTapStr = bindings[i].functionTap.empty() ? "" : " [" + bindings[i].functionTap + "]";
