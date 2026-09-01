@@ -653,8 +653,13 @@ namespace RadarKeys {
 			bool functionsValid = true;
 			if (!isAssigningMenuToggleKey) {
 				if (capturedToggleMode) {
-					if (capturedHasFuncOn && capturedFuncOnBuffer[0] == '\0') functionsValid = false;
-					if (capturedHasFuncOff && capturedFuncOffBuffer[0] == '\0') functionsValid = false;
+					if (capturedToggleType == 0) {
+						if (capturedHasFuncOn && capturedFuncOnBuffer[0] == '\0') functionsValid = false;
+						if (capturedHasFuncOn && capturedFuncOffBuffer[0] == '\0') functionsValid = false;
+					} else {
+						if (capturedHasFuncOn && capturedFuncOnBuffer[0] == '\0') functionsValid = false;
+						if (capturedHasFuncOff && capturedFuncOffBuffer[0] == '\0') functionsValid = false;
+					}
 				} else {
 					if (capturedHasFuncOn && capturedFuncTapBuffer[0] == '\0') functionsValid = false;
 				}
