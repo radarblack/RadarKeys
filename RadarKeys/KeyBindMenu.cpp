@@ -428,6 +428,7 @@ namespace RadarKeys {
 		static bool capturedLongPressMode = false;
 		static bool capturedHasFuncOn = false;
 		static bool capturedHasFuncOff = false;
+		static int capturedToggleType = 0; 
 		static int editingBindingIndex = -1;
 
 		void DrawKeyCapturePrompt() {
@@ -542,7 +543,7 @@ namespace RadarKeys {
 			
 			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
 			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
+				ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can set it to be a Long Press by adding duration.");
 			}
 			ImGui::EndGroup(); ImGui::Separator();
 		
@@ -572,40 +573,66 @@ namespace RadarKeys {
 				float rightEdgeX = totalWidth - paddingX;
 				
 				float elementWidth = 145.0f;
-				float targetCursorPosX = rightEdgeX - elementWidth - 8.0f; 
+				float targetCursorPosX = rightEdgeX - elementWidth - 8.0f;
 
 				if (capturedToggleMode) {
-					ImGui::Text("Enable Script Path:"); 
-					ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Enable script.");
-					
-					ImGui::SetNextItemWidth(-1); 
-					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
-					
-					if (capturedHasFuncOn) {
-						ImGui::SetCursorPosX(targetCursorPosX);
-						ImGui::SetNextItemWidth(elementWidth); 
-						ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
-					}
+					ImGui::Text("Toggle Type:"); ImGui::SameLine();
+					ImGui::RadioButton("Single Script", &capturedToggleType, 0); ImGui::SameLine();
+					ImGui::RadioButton("Separate Scripts", &capturedToggleType, 1);
+					ImGui::Separator(); ImGui::Spacing();
 
-					ImGui::Spacing(); 
-					ImGui::Text("Disable Script Path:"); 
-					ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff); ImGui::SameLine();
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Disable script.");
-					
-					ImGui::SetNextItemWidth(-1);
-					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
-					
-					if (capturedHasFuncOff) {
-						ImGui::SetCursorPosX(targetCursorPosX);
-						ImGui::SetNextItemWidth(elementWidth);
-						ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
+					if (capturedToggleType == 0) {
+						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
+						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target specific global functions inside the file.");
+						ImGui::SameLine(); ImGui::Text("Script Path:");
+						
+						ImGui::SetNextItemWidth(-1);
+						ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
+						
+						if (capturedHasFuncOn) {
+							ImGui::Text("Enable Function:"); ImGui::SameLine(targetCursorPosX);
+							ImGui::SetNextItemWidth(elementWidth);
+							ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
+							
+							ImGui::Text("Disable Function:"); ImGui::SameLine(targetCursorPosX);
+							ImGui::SetNextItemWidth(elementWidth);
+							ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
+						}
+					} 
+					else {
+						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
+						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Enable script.");
+						ImGui::SameLine(); ImGui::Text("Enable Script Path:");
+						
+						ImGui::SetNextItemWidth(-1);
+						ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
+						
+						if (capturedHasFuncOn) {
+							ImGui::SetCursorPosX(targetCursorPosX);
+							ImGui::SetNextItemWidth(elementWidth);
+							ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
+						}
+
+						ImGui::Spacing();
+						ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff); ImGui::SameLine();
+						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Disable script.");
+						ImGui::SameLine(); ImGui::Text("Disable Script Path:");
+						
+						ImGui::SetNextItemWidth(-1);
+						ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
+						
+						if (capturedHasFuncOff) {
+							ImGui::SetCursorPosX(targetCursorPosX);
+							ImGui::SetNextItemWidth(elementWidth);
+							ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
+						}
 					}
 				} 
 				else {
-					ImGui::Text("Script Path:"); 
+					// Standard Instant / Long Press Layout
 					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn); ImGui::SameLine();
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside this script file.");
+					ImGui::SameLine(); ImGui::Text("Script Path:");
 					
 					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
@@ -641,11 +668,14 @@ namespace RadarKeys {
 			if (!canFinalize) ImGui::BeginDisabled();
 			if (ImGui::Button("Finalize", ImVec2(145, buttonHeight))) {
 				if (isAssigningMenuToggleKey) {
-					if (menuToggleHandle != 0) RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
-					menuToggleVKey = capturedVKey; menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
-					SaveBindings(); DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
 				} else {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
+					
+					if (capturedToggleMode && capturedToggleType == 0) {
+						snprintf(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), "%s", capturedScriptPathOnBuffer);
+						capturedHasFuncOff = capturedHasFuncOn;
+					}
+
 					std::string finalPathOn = ResolveScriptPath(capturedScriptPathOnBuffer);
 					std::string finalPathOff = capturedToggleMode ? ResolveScriptPath(capturedScriptPathOffBuffer) : "";
 
@@ -770,6 +800,12 @@ namespace RadarKeys {
 					
 					capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 					capturedHasFuncOff = !bindings[i].functionOff.empty();
+					
+					if (bindings[i].isToggle) {
+						capturedToggleType = (bindings[i].scriptPathOn == bindings[i].scriptPathOff) ? 0 : 1;
+					} else {
+						capturedToggleType = 0;
+					}
 					
 					showCapturePrompt = true;
 				}
