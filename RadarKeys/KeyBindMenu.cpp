@@ -567,11 +567,11 @@ namespace RadarKeys {
 		
 			if (!isAssigningMenuToggleKey) {
 				if (capturedToggleMode) {
-					ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn);
+					ImGui::Text("Enable Script Path:"); 
+					ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Enable script.");
-					ImGui::SameLine(); ImGui::Text("Enable Script Path:"); 
 					
-					ImGui::SetNextItemWidth(-1); 
+					ImGui::SetNextItemWidth(295); 
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 					
 					if (capturedHasFuncOn) {
@@ -581,11 +581,11 @@ namespace RadarKeys {
 					}
 
 					ImGui::Spacing(); 
-					ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff);
+					ImGui::Text("Disable Script Path:"); 
+					ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff); ImGui::SameLine();
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Disable script.");
-					ImGui::SameLine(); ImGui::Text("Disable Script Path:"); 
 					
-					ImGui::SetNextItemWidth(-1);
+					ImGui::SetNextItemWidth(295);
 					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
 					
 					if (capturedHasFuncOff) {
@@ -595,11 +595,11 @@ namespace RadarKeys {
 					}
 				} 
 				else {
-					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn);
+					ImGui::Text("Script Path:"); 
+					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn); ImGui::SameLine();
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside this script file.");
-					ImGui::SameLine(); ImGui::Text("Script Path:"); 
 					
-					ImGui::SetNextItemWidth(-1);
+					ImGui::SetNextItemWidth(295);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 					
 					if (capturedHasFuncOn) {
