@@ -436,15 +436,6 @@ namespace RadarKeys {
 			static bool capturedHasFuncOn = false;
 			static bool capturedHasFuncOff = false;
 		
-			if (editingBindingIndex != -1 && capturedVKey != 0) {
-				static int lastCheckedIndex = -1;
-				if (lastCheckedIndex != editingBindingIndex) {
-					capturedHasFuncOn = !bindings[editingBindingIndex].functionOn.empty() || !bindings[editingBindingIndex].functionTap.empty();
-					capturedHasFuncOff = !bindings[editingBindingIndex].functionOff.empty();
-					lastCheckedIndex = editingBindingIndex;
-				}
-			}
-		
 			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
 				ImGui::End();
 				return;
@@ -525,7 +516,15 @@ namespace RadarKeys {
 			
 			bool comboAvailable = true;
 			if (capturedVKey != 0) {
+				// FIXED: Moved the edit-state checklist tracker directly into the validation scope
 				if (editingBindingIndex != -1) {
+					static int lastCheckedIndex = -1;
+					if (lastCheckedIndex != editingBindingIndex) {
+						capturedHasFuncOn = !bindings[editingBindingIndex].functionOn.empty() || !bindings[editingBindingIndex].functionTap.empty();
+						capturedHasFuncOff = !bindings[editingBindingIndex].functionOff.empty();
+						lastCheckedIndex = editingBindingIndex;
+					}
+
 					if (IsReservedVKey(capturedVKey)) comboAvailable = false;
 					for (int i = 0; i < (int)bindings.size(); i++) {
 						if (i == editingBindingIndex) continue;
@@ -538,7 +537,12 @@ namespace RadarKeys {
 					comboAvailable = IsComboAvailable(capturedVKey, capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds);
 				}
 			}
-			ImGui::Spacing(); ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
+			ImGui::Spacing();
+			
+			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
+			}
 			ImGui::EndGroup(); ImGui::Separator();
 		
 			bool isUpperPathValid = false, isLowerPathValid = false;
@@ -563,40 +567,57 @@ namespace RadarKeys {
 		
 			if (!isAssigningMenuToggleKey) {
 				if (capturedToggleMode) {
-					ImGui::Checkbox("Target Function (Enable Slot)", &capturedHasFuncOn);
-					ImGui::Text("Enable Script Path:"); 
-					if (capturedHasFuncOn) { ImGui::SetNextItemWidth(180); } else { ImGui::SetNextItemWidth(-1); }
-					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
-					
+					ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
 					if (capturedHasFuncOn) {
-						ImGui::SameLine(); ImGui::SetNextItemWidth(120);
+						ImGui::SetNextItemWidth(140);
 						ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
+					} else {
+						ImGui::Text("Target Function (Enable Slot)");
 					}
-		
-					ImGui::Spacing(); ImGui::Checkbox("Target Function (Disable Slot)", &capturedHasFuncOff);
-					ImGui::Text("Disable Script Path:"); 
-					if (capturedHasFuncOff) { ImGui::SetNextItemWidth(180); } else { ImGui::SetNextItemWidth(-1); }
-					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
-					
-					if (capturedHasFuncOff) {
-						ImGui::SameLine(); ImGui::SetNextItemWidth(120);
-						ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
-					}
-				} else {
-					ImGui::Checkbox("Target Specific Function Inside File", &capturedHasFuncOn);
-					ImGui::Text("Script Path:"); 
-					if (capturedHasFuncOn) { ImGui::SetNextItemWidth(180); } else { ImGui::SetNextItemWidth(-1); }
+
+					ImGui::Text("Enable Script Path:"); ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 					
-					if (capturedHasFuncOn) {
-						ImGui::SameLine(); ImGui::SetNextItemWidth(120);
-						ImGui::InputText("##captureFuncTap", capturedFuncTapBuffer, IM_ARRAYSIZE(capturedFuncTapBuffer));
+					ImGui::Spacing();
+					ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff); ImGui::SameLine();
+					if (capturedHasFuncOff) {
+						ImGui::SetNextItemWidth(140);
+						ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
+					} else {
+						ImGui::Text("Target Function (Disable Slot)");
 					}
+
+					ImGui::Text("Disable Script Path:"); ImGui::SetNextItemWidth(-1);
+					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
+				} 
+				else {
+					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn); ImGui::SameLine();
+					if (capturedHasFuncOn) {
+						ImGui::SetNextItemWidth(140);
+						ImGui::InputText("##captureFuncTap", capturedFuncTapBuffer, IM_ARRAYSIZE(capturedFuncTapBuffer));
+					} else {
+						ImGui::Text("Target Specific Function Inside File");
+					}
+
+					ImGui::Text("Script Path:"); ImGui::SetNextItemWidth(-1);
+					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 				}
 				ImGui::Spacing();
 			}
 		
 			bool pathsValid = capturedToggleMode ? (isUpperPathValid && isLowerPathValid) : isUpperPathValid;
+
+			//checks if the function checkbox was ticked
+			bool functionsValid = true;
+			if (!isAssigningMenuToggleKey) {
+				if (capturedToggleMode) {
+					if (capturedHasFuncOn && capturedFuncOnBuffer[0] == '\0') functionsValid = false;
+					if (capturedHasFuncOff && capturedFuncOffBuffer[0] == '\0') functionsValid = false;
+				} else {
+					if (capturedHasFuncOn && capturedFuncTapBuffer[0] == '\0') functionsValid = false;
+				}
+			}
+			
 			bool canFinalize = capturedVKey != 0 && comboAvailable && (isAssigningMenuToggleKey || pathsValid);
 			
 			if (!canFinalize) ImGui::BeginDisabled();
