@@ -14,10 +14,9 @@
 #include <cstdio>
 
 namespace RadarKeys {
+	bool showCapturePrompt = false; 
 	namespace KeyBindMenu {
-
 		std::vector<KeyBind> bindings;
-		bool showCapturePrompt = false; 
 		static bool isAssigningMenuToggleKey = false; 
 
 		const std::string& GetBindsFileName() {
