@@ -697,9 +697,16 @@ namespace RadarKeys {
 				if (bind.isToggle) {
 					std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
 					std::string fileOff = std::filesystem::path(bind.scriptPathOff).filename().string();
-					fullLineText += " Toggle: " + fileOn + " <-> " + fileOff;
+					
+					std::string funcOnStr = bind.functionOn.empty() ? "" : " [" + bind.functionOn + "]";
+					std::string funcOffStr = bind.functionOff.empty() ? "" : " [" + bind.functionOff + "]";
+					
+					fullLineText += " Toggle: " + fileOn + funcOnStr + " <-> " + fileOff + funcOffStr;
 				} else {
-					fullLineText += " -> " + std::filesystem::path(bind.scriptPathOn).filename().string();
+					std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
+					std::string funcTapStr = bind.functionTap.empty() ? "" : " [" + bind.functionTap + "]";
+					
+					fullLineText += " -> " + fileOn + funcTapStr;
 				}
 
 				float stringPixelWidth = ImGui::CalcTextSize(fullLineText.c_str()).x;
@@ -720,14 +727,19 @@ namespace RadarKeys {
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
 
 			if (ImGui::Button("Debugger Overlay")) DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
+			ImGui::SameLine();
+			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
+			if (ImGui::Button(buttonLabel.c_str(), ImVec2(-1, 0))) { isAssigningMenuToggleKey = showCapturePrompt = true; }
 			ImGui::Separator();
 
-			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
-			if (ImGui::Button(buttonLabel.c_str(), ImVec2(-1, 28))) { isAssigningMenuToggleKey = showCapturePrompt = true; }
-			ImGui::Separator();
+			float paddingX = ImGui::GetStyle().WindowPadding.x;
+			float paddingY = ImGui::GetStyle().WindowPadding.y;
+			float footerHeight = 85.0f; 
+			float listRemainingHeight = ImGui::GetWindowHeight() - ImGui::GetCursorPosY() - footerHeight - paddingY;
+			if (listRemainingHeight < 100.0f) listRemainingHeight = 100.0f; 
 
 			int removeIndex = -1;
-			ImGui::BeginChild("ActiveBindingsOverviewList", ImVec2(0, 200), true);
+			ImGui::BeginChild("ActiveBindingsOverviewList", ImVec2(0, listRemainingHeight), true);
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
 				if (ImGui::Button("Remove", ImVec2(55, 20))) removeIndex = i;
@@ -762,9 +774,16 @@ namespace RadarKeys {
 				if (bindings[i].isToggle) {
 					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
 					std::string fileOff = std::filesystem::path(bindings[i].scriptPathOff).filename().string();
-					ImGui::TextWrapped("Toggle: %s <-> %s", fileOn.c_str(), fileOff.c_str());
+					
+					std::string funcOnStr = bindings[i].functionOn.empty() ? "" : " [" + bindings[i].functionOn + "]";
+					std::string funcOffStr = bindings[i].functionOff.empty() ? "" : " [" + bindings[i].functionOff + "]";
+					
+					ImGui::TextWrapped("Toggle: %s%s <-> %s%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
 				} else {
-					ImGui::TextWrapped("-> %s", std::filesystem::path(bindings[i].scriptPathOn).filename().string().c_str());
+					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
+					std::string funcTapStr = bindings[i].functionTap.empty() ? "" : " [" + bindings[i].functionTap + "]";
+					
+					ImGui::TextWrapped("-> %s%s", fileOn.c_str(), funcTapStr.c_str());
 				}
 				ImGui::PopID(); ImGui::Separator();
 			}
@@ -772,19 +791,22 @@ namespace RadarKeys {
 
 			if (removeIndex != -1) RemoveBinding(removeIndex);
 
-			if (bindings.empty()) ImGui::BeginDisabled();
-			if (ImGui::Button("Clear All Hotkeys")) RemoveAllBindings();
-			if (bindings.empty()) ImGui::EndDisabled();
+			float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 55.0f; 
+			ImGui::SetCursorPosY(bottomControlPanelY);
 			ImGui::Separator(); ImGui::Spacing();
 
-			// launch the custom prompt
-			if (ImGui::Button("Add New Binding...", ImVec2(-1, 35))) {
+			if (bindings.empty()) ImGui::BeginDisabled();
+			if (ImGui::Button("Clear All Hotkeys", ImVec2(145, 24))) RemoveAllBindings();
+			if (bindings.empty()) ImGui::EndDisabled();
+			
+			ImGui::SameLine(ImGui::GetWindowWidth() - paddingX - 165.0f);
+
+			if (ImGui::Button("Add New Binding...", ImVec2(165, 35))) {
 				editingBindingIndex = -1;
 				showCapturePrompt = true;
 			}
 			ImGui::End();
 
-			// draw if the user interacts
 			if (showCapturePrompt) DrawKeyCapturePrompt();
 		}
 	}
