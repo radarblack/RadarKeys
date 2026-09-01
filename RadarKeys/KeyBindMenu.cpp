@@ -12,12 +12,24 @@
 #include <map>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 
 namespace RadarKeys {
 	bool showCapturePrompt = false; 
 	namespace KeyBindMenu {
 		std::vector<KeyBind> bindings;
 		static bool isAssigningMenuToggleKey = false; 
+
+		// display string cache for the Draw()
+		struct BindingDisplayCache {
+			std::string itemLabel;
+			std::string detailText;
+			std::string fullLine;
+		};
+		static std::vector<BindingDisplayCache> displayCache;
+		static bool displayCacheDirty = true;
+
+		void MarkDisplayCacheDirty() { displayCacheDirty = true; }
 
 		const std::string& GetBindsFileName() {
 			static std::string cached;
@@ -59,7 +71,6 @@ namespace RadarKeys {
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
 		std::string NameForVKey(USHORT vKey) {
-			// faster entry scanning
 			for (const auto& entry : vkNameTable) {
 				if (entry.vKey == vKey) return entry.name;
 			}
@@ -369,6 +380,7 @@ namespace RadarKeys {
 				}
 			}
 			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), GetBindsFileName());
+			MarkDisplayCacheDirty();
 		}
 
 		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, bool isToggle, const std::string& pathOn, const std::string& pathOff, const std::string& funcOn, const std::string& funcOff, const std::string& funcTap) {
@@ -380,6 +392,7 @@ namespace RadarKeys {
 			bindings.push_back(b);
 			EnsureDispatcherRegistered(vKey);
 			SaveBindings();
+			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("bound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
 		}
 
@@ -390,6 +403,7 @@ namespace RadarKeys {
 			bindings.erase(bindings.begin() + index);
 			RemoveDispatcherIfUnused(vKey);
 			SaveBindings();
+			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("unbound " + removedDesc);
 		}
 
@@ -399,6 +413,7 @@ namespace RadarKeys {
 			vKeyDispatchers.clear();
 			bindings.clear();
 			SaveBindings();
+			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("unbound all (" + std::to_string(count) + " binding(s))");
 		}
 
@@ -551,22 +566,36 @@ namespace RadarKeys {
 		
 			bool isUpperPathValid = false, isLowerPathValid = false;
 			int scriptStatus = 0, lowerStatus = 0;
+
+			static char lastStatCheckedOnBuffer[512] = "";
+			static int cachedOnStatus = 0;
+			static char lastStatCheckedOffBuffer[512] = "";
+			static int cachedOffStatus = 0;
 		
 			if (!isAssigningMenuToggleKey) {
 				if (capturedScriptPathOnBuffer[0] != '\0') {
 					std::string txt(capturedScriptPathOnBuffer);
 					if (txt.size() >= 4 && txt.substr(txt.size() - 4) == ".lua") {
-						scriptStatus = std::filesystem::exists(ResolveScriptPath(capturedScriptPathOnBuffer)) ? 3 : 2;
+						if (strcmp(capturedScriptPathOnBuffer, lastStatCheckedOnBuffer) != 0) {
+							cachedOnStatus = std::filesystem::exists(ResolveScriptPath(capturedScriptPathOnBuffer)) ? 3 : 2;
+							snprintf(lastStatCheckedOnBuffer, sizeof(lastStatCheckedOnBuffer), "%s", capturedScriptPathOnBuffer);
+						}
+						scriptStatus = cachedOnStatus;
 						isUpperPathValid = (scriptStatus == 3);
-					} else scriptStatus = 1;
-				}
+					} else { scriptStatus = 1; lastStatCheckedOnBuffer[0] = '\0'; }
+				} else lastStatCheckedOnBuffer[0] = '\0';
+
 				if (capturedToggleMode && capturedScriptPathOffBuffer[0] != '\0') {
 					std::string txt(capturedScriptPathOffBuffer);
 					if (txt.size() >= 4 && txt.substr(txt.size() - 4) == ".lua") {
-						lowerStatus = std::filesystem::exists(ResolveScriptPath(capturedScriptPathOffBuffer)) ? 3 : 2;
+						if (strcmp(capturedScriptPathOffBuffer, lastStatCheckedOffBuffer) != 0) {
+							cachedOffStatus = std::filesystem::exists(ResolveScriptPath(capturedScriptPathOffBuffer)) ? 3 : 2;
+							snprintf(lastStatCheckedOffBuffer, sizeof(lastStatCheckedOffBuffer), "%s", capturedScriptPathOffBuffer);
+						}
+						lowerStatus = cachedOffStatus;
 						isLowerPathValid = (lowerStatus == 3);
-					} else lowerStatus = 1;
-				}
+					} else { lowerStatus = 1; lastStatCheckedOffBuffer[0] = '\0'; }
+				} else lastStatCheckedOffBuffer[0] = '\0';
 			}
 		
 			if (!isAssigningMenuToggleKey) {
@@ -705,6 +734,7 @@ namespace RadarKeys {
 						
 						bindings[editingBindingIndex] = editedBind;
 						RemoveDispatcherIfUnused(oldVKey); EnsureDispatcherRegistered(capturedVKey); SaveBindings();
+						MarkDisplayCacheDirty();
 					} else {
 						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap);
 					}
@@ -733,32 +763,49 @@ namespace RadarKeys {
 			ImGui::End();
 		}
 
-		// draws the ui
-		void Draw(bool* p_open) {
-			float longestItemWidth = 0.0f;
+		void RebuildDisplayCacheIfNeeded() {
+			if (!displayCacheDirty) return;
+
+			displayCache.clear();
+			displayCache.reserve(bindings.size());
+
 			for (const auto& bind : bindings) {
-				std::string fullLineText = CombinedDisplayName(bind);
-				
+				BindingDisplayCache entry;
+				entry.itemLabel = CombinedDisplayName(bind);
+
 				if (bind.isToggle) {
 					std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
 					std::string fileOff = std::filesystem::path(bind.scriptPathOff).filename().string();
-					
+
 					std::string funcOnStr = bind.functionOn.empty() ? "" : " [" + bind.functionOn + "]";
 					std::string funcOffStr = bind.functionOff.empty() ? "" : " [" + bind.functionOff + "]";
-					
+
 					if (bind.scriptPathOn == bind.scriptPathOff) {
-						fullLineText += " Toggle: " + fileOn + funcOnStr + " <-> " + funcOffStr;
+						entry.detailText = "Toggle: " + fileOn + funcOnStr + " <-> " + funcOffStr;
 					} else {
-						fullLineText += " Toggle: " + fileOn + funcOnStr + " <-> " + fileOff + funcOffStr;
+						entry.detailText = "Toggle: " + fileOn + funcOnStr + " <-> " + fileOff + funcOffStr;
 					}
 				} else {
 					std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
 					std::string funcTapStr = bind.functionTap.empty() ? "" : " [" + bind.functionTap + "]";
-					
-					fullLineText += " -> " + fileOn + funcTapStr;
+
+					entry.detailText = "-> " + fileOn + funcTapStr;
 				}
 
-				float stringPixelWidth = ImGui::CalcTextSize(fullLineText.c_str()).x;
+				entry.fullLine = entry.itemLabel + " " + entry.detailText;
+				displayCache.push_back(std::move(entry));
+			}
+
+			displayCacheDirty = false;
+		}
+
+		// draws the ui
+		void Draw(bool* p_open) {
+			RebuildDisplayCacheIfNeeded();
+
+			float longestItemWidth = 0.0f;
+			for (const auto& entry : displayCache) {
+				float stringPixelWidth = ImGui::CalcTextSize(entry.fullLine.c_str()).x;
 				if (stringPixelWidth > longestItemWidth) {
 					longestItemWidth = stringPixelWidth;
 				}
@@ -804,7 +851,7 @@ namespace RadarKeys {
 				
 				ImGui::SameLine(); 
 
-				std::string itemLabel = CombinedDisplayName(bindings[i]);
+				const std::string& itemLabel = displayCache[i].itemLabel;
 				if (ImGui::Button(itemLabel.c_str(), ImVec2(130, buttonHeight))) {
 					editingBindingIndex = i;
 					capturedVKey = bindings[i].vKey;
@@ -837,24 +884,7 @@ namespace RadarKeys {
 				ImGui::AlignTextToFramePadding(); 
 				
 				ImGui::BeginGroup();
-				if (bindings[i].isToggle) {
-					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
-					std::string fileOff = std::filesystem::path(bindings[i].scriptPathOff).filename().string();
-					
-					std::string funcOnStr = bindings[i].functionOn.empty() ? "" : " [" + bindings[i].functionOn + "]";
-					std::string funcOffStr = bindings[i].functionOff.empty() ? "" : " [" + bindings[i].functionOff + "]";
-					
-					if (bindings[i].scriptPathOn == bindings[i].scriptPathOff) {
-						ImGui::TextWrapped("Toggle: %s%s <->%s", fileOn.c_str(), funcOnStr.c_str(), funcOffStr.c_str());
-					} else {
-						ImGui::TextWrapped("Toggle: %s%s <-> %s%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
-					}
-				} else {
-					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
-					std::string funcTapStr = bindings[i].functionTap.empty() ? "" : " [" + bindings[i].functionTap + "]";
-					
-					ImGui::TextWrapped("-> %s%s", fileOn.c_str(), funcTapStr.c_str());
-				}
+				ImGui::TextWrapped("%s", displayCache[i].detailText.c_str());
 				ImGui::EndGroup();
 
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
