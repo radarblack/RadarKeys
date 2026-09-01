@@ -40,6 +40,8 @@ To use an assigned script:
              - Assigned maximum log output size to 9~10KB
              - Cleaned and refactored some of the scripts for bug squashing
              - Enhancements on the input detection system
+             - Isolated mofifier keys when held
+[09/01/2026] - Added mouse extra keys to the valid keybinds
 ```
 ## Plans ahead
 - [x] ~~Address some of the immediate UI concerns (misspells, formatting, and spacing, etc.)~~
@@ -50,7 +52,7 @@ To use an assigned script:
 - [ ] Make some template scripts for a simple and complex script mods
 - [ ] Final clean up (review, reassessment, function refactoring to shorten runtime execution if needed)
 - [ ] Find a way to read and run certain function within the script without passing through every functions on the script
-- [ ] Add in mouse and gamepad support
+- [ ] Add in ~~mouse~~ and gamepad support
 - [x] ~~Enhance key assignment feature (eliminating the dropdown box selection and instead a direct input detection through RawInput)~~
 - [x] ~~Add in "Hold" functionality to the key assignment~~
 - [ ] Add in auto detection for RadarKeys mod
