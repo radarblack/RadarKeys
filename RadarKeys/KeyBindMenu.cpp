@@ -672,6 +672,12 @@ namespace RadarKeys {
 			if (!canFinalize) ImGui::BeginDisabled();
 			if (ImGui::Button("Finalize", ImVec2(145, buttonHeight))) {
 				if (isAssigningMenuToggleKey) {
+					if (menuToggleHandle != 0) RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
+					menuToggleVKey = capturedVKey; 
+					menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
+					SaveBindings(); 
+					DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
+					capturedToggleMode = capturedLongPressMode = false;
 				} else {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 					
@@ -699,11 +705,13 @@ namespace RadarKeys {
 					} else {
 						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap);
 					}
+
+					capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
+					capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
+					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 				}
+				
 				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
-				capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
-				capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
-				capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
 			}
 			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
