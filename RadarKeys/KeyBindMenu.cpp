@@ -69,7 +69,20 @@ namespace RadarKeys {
 			// opened across all calls
 			static std::ofstream logStream;
 			if (!logStream.is_open()) {
-				logStream.open(GetLogFileName(), std::ios::app);
+				std::string currentLog = GetLogFileName();
+				std::string prevLog = currentLog;
+				size_t replacePos = prevLog.find("radarkeys_logs.txt");
+				if (replacePos != std::string::npos) {
+					prevLog.replace(replacePos, 18, "radarkeys_log_prev.txt");
+				}
+
+				std::error_code ec;
+				if (std::filesystem::exists(currentLog, ec)) {
+					std::filesystem::copy_file(currentLog, prevLog, std::filesystem::copy_options::overwrite_existing, ec);
+					std::ofstream clearStream(currentLog, std::ios::trunc);
+				}
+
+				logStream.open(currentLog, std::ios::app);
 				if (!logStream) {
 					spdlog::warn("KeyBindMenu::LogActivity: couldn't open {} for writing", GetLogFileName());
 					return;
