@@ -723,6 +723,14 @@ namespace RadarKeys {
 					snprintf(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), "%s", bindings[i].scriptPathOn.c_str());
 					snprintf(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), "%s", bindings[i].scriptPathOff.c_str());
 					
+					snprintf(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), "%s", bindings[i].functionOn.c_str());
+					snprintf(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), "%s", bindings[i].functionOff.c_str());
+					snprintf(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), "%s", bindings[i].functionTap.c_str());
+					
+					// FIXED: Force the UI prompt state checkboxes to open if an assigned function string already exists!
+					capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
+					capturedHasFuncOff = !bindings[i].functionOff.empty();
+					
 					showCapturePrompt = true;
 				}
 
