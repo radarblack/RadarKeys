@@ -429,8 +429,10 @@ namespace RadarKeys {
 		static int editingBindingIndex = -1;
 
 		void DrawKeyCapturePrompt() {
-			ImGui::SetNextWindowSize(ImVec2(340, 360), ImGuiCond_FirstUseEver); 
-			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 180), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(340, 330), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 165), ImGuiCond_FirstUseEver);
+			
+			ImGui::SetNextWindowSizeConstraints(ImVec2(340, 330), ImVec2(FLT_MAX, FLT_MAX));
 			ImGui::SetNextWindowFocus();
 		
 			static bool capturedHasFuncOn = false;
@@ -571,7 +573,7 @@ namespace RadarKeys {
 				float rightEdgeX = totalWidth - paddingX;
 				
 				float elementWidth = 145.0f;
-				float targetCursorPosX = rightEdgeX - elementWidth - 8.0f;
+				float targetCursorPosX = rightEdgeX - elementWidth - 8.0f; 
 
 				if (capturedToggleMode) {
 					ImGui::Text("Enable Script Path:"); 
@@ -615,7 +617,6 @@ namespace RadarKeys {
 						ImGui::InputText("##captureFuncTap", capturedFuncTapBuffer, IM_ARRAYSIZE(capturedFuncTapBuffer));
 					}
 				}
-				ImGui::Spacing();
 			}
 		
 			bool pathsValid = capturedToggleMode ? (isUpperPathValid && isLowerPathValid) : isUpperPathValid;
@@ -633,8 +634,13 @@ namespace RadarKeys {
 			
 			bool canFinalize = capturedVKey != 0 && comboAvailable && (isAssigningMenuToggleKey || pathsValid);
 			
+			float paddingY = ImGui::GetStyle().WindowPadding.y;
+			float buttonHeight = 30.0f;
+			float bottomAnchorY = ImGui::GetWindowHeight() - paddingY - buttonHeight;
+			ImGui::SetCursorPosY(bottomAnchorY);
+
 			if (!canFinalize) ImGui::BeginDisabled();
-			if (ImGui::Button("Finalize", ImVec2(145, 30))) {
+			if (ImGui::Button("Finalize", ImVec2(145, buttonHeight))) {
 				if (isAssigningMenuToggleKey) {
 					if (menuToggleHandle != 0) RawInput::UnRegisterAction(menuToggleVKey, menuToggleHandle);
 					menuToggleVKey = capturedVKey; menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
@@ -643,11 +649,11 @@ namespace RadarKeys {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 					std::string finalPathOn = ResolveScriptPath(capturedScriptPathOnBuffer);
 					std::string finalPathOff = capturedToggleMode ? ResolveScriptPath(capturedScriptPathOffBuffer) : "";
-		
+
 					std::string finalFuncOn  = (capturedToggleMode && capturedHasFuncOn) ? capturedFuncOnBuffer : "";
 					std::string finalFuncOff = (capturedToggleMode && capturedHasFuncOff) ? capturedFuncOffBuffer : "";
 					std::string finalFuncTap = (!capturedToggleMode && capturedHasFuncOn) ? capturedFuncTapBuffer : "";
-		
+
 					if (editingBindingIndex != -1) {
 						USHORT oldVKey = bindings[editingBindingIndex].vKey;
 						KeyBind editedBind{ capturedVKey, capturedCtrl, capturedShift, capturedAlt, NameForVKey(capturedVKey), capturedToggleMode, finalPathOn, finalPathOff, false, finalHoldSeconds };
@@ -673,11 +679,12 @@ namespace RadarKeys {
 			float targetCancelX = ImGui::GetWindowWidth() - paddingX - 145.0f - 8.0f;
 			ImGui::SameLine(targetCancelX);
 			
-			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
+			if (ImGui::Button("Cancel", ImVec2(145, buttonHeight))) {
 				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
 				capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 				capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
-				capturedToggleMode = capturedLongPressMode = false; showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
+				capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
+				showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
 			}
 			ImGui::End();
 		}
