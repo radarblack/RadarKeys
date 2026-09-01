@@ -650,7 +650,6 @@ namespace RadarKeys {
 		
 			bool pathsValid = (capturedToggleMode && capturedToggleType != 0) ? (isUpperPathValid && isLowerPathValid) : isUpperPathValid;
 
-			//checks if the function checkbox was ticked
 			bool functionsValid = true;
 			if (!isAssigningMenuToggleKey) {
 				if (capturedToggleMode) {
