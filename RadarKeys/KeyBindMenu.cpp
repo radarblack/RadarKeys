@@ -756,20 +756,24 @@ namespace RadarKeys {
 				finalMinWidthFloor = 480.0f;
 			}
 
-			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, 360), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 360), ImVec2(FLT_MAX, FLT_MAX));
+			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, 300), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 300), ImVec2(FLT_MAX, FLT_MAX));
 
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
 
 			if (ImGui::Button("Debugger Overlay")) DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 			ImGui::SameLine();
+			
 			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
-			if (ImGui::Button(buttonLabel.c_str(), ImVec2(-1, 0))) { isAssigningMenuToggleKey = showCapturePrompt = true; }
+			if (ImGui::Button(buttonLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) { 
+				isAssigningMenuToggleKey = showCapturePrompt = true; 
+			}
 			ImGui::Separator();
 
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
-			float footerHeight = 85.0f; 
+			
+			float footerHeight = 45.0f; 
 			float listRemainingHeight = ImGui::GetWindowHeight() - ImGui::GetCursorPosY() - footerHeight - paddingY;
 			if (listRemainingHeight < 100.0f) listRemainingHeight = 100.0f; 
 
@@ -777,12 +781,43 @@ namespace RadarKeys {
 			ImGui::BeginChild("ActiveBindingsOverviewList", ImVec2(0, listRemainingHeight), true);
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
-				if (ImGui::Button("Remove", ImVec2(55, 20))) removeIndex = i;
+				
+				float rowStartY = ImGui::GetCursorPosY();
+
+				ImGui::BeginGroup();
+				ImGui::SetCursorPosX(250.0f); 
+				if (bindings[i].isToggle) {
+					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
+					std::string fileOff = std::filesystem::path(bindings[i].scriptPathOff).filename().string();
+					
+					std::string funcOnStr = bindings[i].functionOn.empty() ? "" : " [" + bindings[i].functionOn + "]";
+					std::string funcOffStr = bindings[i].functionOff.empty() ? "" : " [" + bindings[i].functionOff + "]";
+					
+					if (bindings[i].scriptPathOn == bindings[i].scriptPathOff) {
+						ImGui::TextWrapped("Toggle: %s%s <->%s", fileOn.c_str(), funcOnStr.c_str(), funcOffStr.c_str());
+					} else {
+						ImGui::TextWrapped("Toggle: %s%s <-> %s%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
+					}
+				} else {
+					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
+					std::string funcTapStr = bindings[i].functionTap.empty() ? "" : " [" + bindings[i].functionTap + "]";
+					
+					ImGui::TextWrapped("-> %s%s", fileOn.c_str(), funcTapStr.c_str());
+				}
+				ImGui::EndGroup();
+
+				float textBlockHeight = ImGui::GetCursorPosY() - rowStartY;
+				float buttonHeight = 20.0f;
+				float centerOffsetButtonY = rowStartY + ((textBlockHeight - buttonHeight) * 0.5f);
+
+				ImGui::SetCursorPosY(centerOffsetButtonY);
+				ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
+				if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = i;
 				
 				ImGui::SameLine(); 
 
 				std::string itemLabel = CombinedDisplayName(bindings[i]);
-				if (ImGui::Button(itemLabel.c_str(), ImVec2(130, 20))) {
+				if (ImGui::Button(itemLabel.c_str(), ImVec2(130, buttonHeight))) {
 					editingBindingIndex = i;
 					capturedVKey = bindings[i].vKey;
 					capturedCtrl = bindings[i].needCtrl;
@@ -811,34 +846,15 @@ namespace RadarKeys {
 					showCapturePrompt = true;
 				}
 
-				ImGui::SameLine(250);
-				if (bindings[i].isToggle) {
-					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
-					std::string fileOff = std::filesystem::path(bindings[i].scriptPathOff).filename().string();
-					
-					std::string funcOnStr = bindings[i].functionOn.empty() ? "" : " [" + bindings[i].functionOn + "]";
-					std::string funcOffStr = bindings[i].functionOff.empty() ? "" : " [" + bindings[i].functionOff + "]";
-					
-					if (bindings[i].scriptPathOn == bindings[i].scriptPathOff) {
-						ImGui::TextWrapped("Toggle: %s%s <->%s", fileOn.c_str(), funcOnStr.c_str(), funcOffStr.c_str());
-					} else {
-						ImGui::TextWrapped("Toggle: %s%s <-> %s%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
-					}
-				} else {
-					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
-					std::string funcTapStr = bindings[i].functionTap.empty() ? "" : " [" + bindings[i].functionTap + "]";
-					
-					ImGui::TextWrapped("-> %s%s", fileOn.c_str(), funcTapStr.c_str());
-				}
+				ImGui::SetCursorPosY(rowStartY + textBlockHeight);
 				ImGui::PopID(); ImGui::Separator();
 			}
 			ImGui::EndChild();
 
 			if (removeIndex != -1) RemoveBinding(removeIndex);
 
-			float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 55.0f; 
+			float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 35.0f; 
 			ImGui::SetCursorPosY(bottomControlPanelY);
-			ImGui::Separator(); ImGui::Spacing();
 
 			if (bindings.empty()) ImGui::BeginDisabled();
 			if (ImGui::Button("Clear All Hotkeys", ImVec2(145, 24))) RemoveAllBindings();
@@ -846,7 +862,7 @@ namespace RadarKeys {
 			
 			ImGui::SameLine(ImGui::GetWindowWidth() - paddingX - 165.0f);
 
-			if (ImGui::Button("Add New Binding...", ImVec2(165, 35))) {
+			if (ImGui::Button("Add New Binding...", ImVec2(165, 24))) {
 				editingBindingIndex = -1;
 				showCapturePrompt = true;
 			}
