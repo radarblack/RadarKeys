@@ -67,8 +67,8 @@ namespace RadarKeys {
 			}
 
 			if (message == WM_INPUT) {
-				if (IsUnlockCursor() || showCapturePrompt) {
-					return false; // swallows the packet completely
+				if (IsUnlockCursor() || KeyBindMenu::showCapturePrompt) {
+					return false; // swallows packet completely
 				}
 			}
 
