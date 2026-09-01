@@ -690,7 +690,33 @@ namespace RadarKeys {
 
 		// draws the ui
 		void Draw(bool* p_open) {
-			ImGui::SetNextWindowSize(ImVec2(480, 360), ImGuiCond_FirstUseEver);
+			float longestItemWidth = 0.0f;
+			for (const auto& bind : bindings) {
+				std::string fullLineText = CombinedDisplayName(bind);
+				
+				if (bind.isToggle) {
+					std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
+					std::string fileOff = std::filesystem::path(bind.scriptPathOff).filename().string();
+					fullLineText += " Toggle: " + fileOn + " <-> " + fileOff;
+				} else {
+					fullLineText += " -> " + std::filesystem::path(bind.scriptPathOn).filename().string();
+				}
+
+				float stringPixelWidth = ImGui::CalcTextSize(fullLineText.c_str()).x;
+				if (stringPixelWidth > longestItemWidth) {
+					longestItemWidth = stringPixelWidth;
+				}
+			}
+
+			float finalMinWidthFloor = longestItemWidth + 111.0f;
+
+			if (finalMinWidthFloor < 480.0f) {
+				finalMinWidthFloor = 480.0f;
+			}
+
+			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, 360), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 360), ImVec2(FLT_MAX, FLT_MAX));
+
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
 
 			if (ImGui::Button("Debugger Overlay")) DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
@@ -726,7 +752,6 @@ namespace RadarKeys {
 					snprintf(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), "%s", bindings[i].functionOff.c_str());
 					snprintf(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), "%s", bindings[i].functionTap.c_str());
 					
-					// FIXED: Force the UI prompt state checkboxes to open if an assigned function string already exists!
 					capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 					capturedHasFuncOff = !bindings[i].functionOff.empty();
 					
@@ -759,7 +784,7 @@ namespace RadarKeys {
 			}
 			ImGui::End();
 
-			// draw if hte user interacts
+			// draw if the user interacts
 			if (showCapturePrompt) DrawKeyCapturePrompt();
 		}
 	}
