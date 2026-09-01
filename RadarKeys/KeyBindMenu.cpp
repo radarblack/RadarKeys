@@ -51,6 +51,11 @@ namespace RadarKeys {
 			{"Numpad6", VK_NUMPAD6}, {"Numpad7", VK_NUMPAD7}, {"Numpad8", VK_NUMPAD8},
 			{"Numpad9", VK_NUMPAD9},
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
+			
+			// added extra mouse keys, excluding left and right click
+			{"MouseWheel", VK_MBUTTON},
+			{"Mouse4", VK_XBUTTON1},
+			{"Mouse5", VK_XBUTTON2}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
@@ -402,19 +407,26 @@ namespace RadarKeys {
 				capturedShift = ImGui::GetIO().KeyShift;
 				capturedAlt   = ImGui::GetIO().KeyAlt;
 
-				for (int i = 1; i < 256; i++) {
-					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
-						i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
-						continue;
-					}
-					if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
+				// mouse input detection
+				if (ImGui::IsMouseClicked(2)) { capturedVKey = VK_MBUTTON; }
+				else if (ImGui::IsMouseClicked(3)) { capturedVKey = VK_XBUTTON1; }
+				else if (ImGui::IsMouseClicked(4)) { capturedVKey = VK_XBUTTON2; }
+				else {
+					// default key detection
+					for (int i = 1; i < 256; i++) {
+						if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
+							i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
+							continue;
+						}
+						if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
 
-					if (ImGui::IsKeyPressed((ImGuiKey)i)) {
-						capturedVKey = (USHORT)i;
-						capturedCtrl  = ImGui::GetIO().KeyCtrl;
-						capturedShift = ImGui::GetIO().KeyShift;
-						capturedAlt   = ImGui::GetIO().KeyAlt;
-						break;
+						if (ImGui::IsKeyPressed((ImGuiKey)i)) {
+							capturedVKey = (USHORT)i;
+							capturedCtrl  = ImGui::GetIO().KeyCtrl;
+							capturedShift = ImGui::GetIO().KeyShift;
+							capturedAlt   = ImGui::GetIO().KeyAlt;
+							break;
+						}
 					}
 				}
 			}
