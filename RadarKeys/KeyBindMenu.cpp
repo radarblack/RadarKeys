@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 namespace RadarKeys {
 	bool showCapturePrompt = false; 
@@ -20,7 +21,6 @@ namespace RadarKeys {
 		std::vector<KeyBind> bindings;
 		static bool isAssigningMenuToggleKey = false; 
 
-		// display string cache for the Draw()
 		struct BindingDisplayCache {
 			std::string itemLabel;
 			std::string detailText;
@@ -39,6 +39,57 @@ namespace RadarKeys {
 			return cached;
 		}
 
+		const std::string& GetLogFileName() {
+			static std::string cached;
+			if (cached.empty()) {
+				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radarkeys_logs.txt").string();
+			}
+			return cached;
+		}
+
+		bool EnsureBindsDirectory() {
+			static bool ensured = false;
+			if (ensured) return true;
+
+			std::error_code ec;
+			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
+			std::filesystem::create_directories(bindsDir, ec);
+			if (ec) {
+				spdlog::warn("KeyBindMenu: couldn't create {} directory: {}", bindsDir.string(), ec.message());
+				return false;
+			}
+			ensured = true;
+			return true;
+		}
+
+		// improved activity tracker and logging
+		void LogActivity(const std::string& message, bool success = true) {
+			EnsureBindsDirectory();
+
+			// opened across all calls
+			static std::ofstream logStream;
+			if (!logStream.is_open()) {
+				logStream.open(GetLogFileName(), std::ios::app);
+				if (!logStream) {
+					spdlog::warn("KeyBindMenu::LogActivity: couldn't open {} for writing", GetLogFileName());
+					return;
+				}
+			}
+
+			std::time_t nowTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+			std::tm localTm{};
+#ifdef _WIN32
+			localtime_s(&localTm, &nowTime);
+#else
+			localtime_r(&nowTime, &localTm);
+#endif
+			char timeBuf[32];
+			std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &localTm);
+
+			logStream << "[" << timeBuf << "] [" << (success ? "OK" : "FAIL") << "] " << message << "\n";
+			logStream.flush();
+		}
+
 		// Modifiers as checkboxes; dropdown shows persistable base keys only.
 		struct VkNameEntry { const char* name; USHORT vKey; };
 		const VkNameEntry vkNameTable[] = {
@@ -55,26 +106,27 @@ namespace RadarKeys {
 			{"Space", VK_SPACE}, {"Tab", VK_TAB}, {"Enter", VK_RETURN},
 			{"Insert", VK_INSERT}, {"Delete", VK_DELETE},
 			{"Home", VK_HOME}, {"End", VK_END},
-			{"Page Up", VK_PRIOR}, {"Page Down", VK_NEXT},
+			{"PageUp", VK_PRIOR}, {"PageDown", VK_NEXT},
 			{"Up", VK_UP}, {"Down", VK_DOWN}, {"Left", VK_LEFT}, {"Right", VK_RIGHT},
-			{"Numpad 0", VK_NUMPAD0}, {"Numpad 1", VK_NUMPAD1}, {"Numpad 2", VK_NUMPAD2},
-			{"Numpad 3", VK_NUMPAD3}, {"Numpad 4", VK_NUMPAD4}, {"Numpad 5", VK_NUMPAD5},
-			{"Numpad 6", VK_NUMPAD6}, {"Numpad 7", VK_NUMPAD7}, {"Numpad 8", VK_NUMPAD8},
-			{"Numpad 9", VK_NUMPAD9},
+			{"Numpad0", VK_NUMPAD0}, {"Numpad1", VK_NUMPAD1}, {"Numpad2", VK_NUMPAD2},
+			{"Numpad3", VK_NUMPAD3}, {"Numpad4", VK_NUMPAD4}, {"Numpad5", VK_NUMPAD5},
+			{"Numpad6", VK_NUMPAD6}, {"Numpad7", VK_NUMPAD7}, {"Numpad8", VK_NUMPAD8},
+			{"Numpad9", VK_NUMPAD9},
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
 			
 			// added extra mouse keys, excluding left and right click
-			{"Mouse Wheel", VK_MBUTTON},
-			{"Mouse 4", VK_XBUTTON1},
-			{"Mouse 5", VK_XBUTTON2}
+			{"MouseWheel", VK_MBUTTON},
+			{"Mouse4", VK_XBUTTON1},
+			{"Mouse5", VK_XBUTTON2}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
 		std::string NameForVKey(USHORT vKey) {
+			// faster entry scanning
 			for (const auto& entry : vkNameTable) {
 				if (entry.vKey == vKey) return entry.name;
 			}
-			return "Unknown (" + std::to_string(vKey) + ")";
+			return "Unknown(" + std::to_string(vKey) + ")";
 		}
 
 		// returns -1 if not found in the table
@@ -88,7 +140,7 @@ namespace RadarKeys {
 		std::string CombinedDisplayName(const KeyBind& bind) {
 			std::string result = std::string(bind.needCtrl ? "Ctrl+" : "") + (bind.needShift ? "Shift+" : "") + (bind.needAlt ? "Alt+" : "") + bind.keyName;
 			if (bind.holdSeconds > 0.0f) {
-				char buf[32]; // Compact zero-allocation layout format pass
+				char buf[32];
 				snprintf(buf, sizeof(buf), " (hold %.1fs)", bind.holdSeconds);
 				result += buf;
 			}
@@ -101,7 +153,7 @@ namespace RadarKeys {
 			return (std::filesystem::path(GetGameDirectory()) / (hasSeparators ? std::filesystem::path(typedPath) : std::filesystem::path("mod") / "modules" / typedPath)).string();
 		}
 
-		// Menu-toggle key: plain key only (no modifiers) for  access; persisted via LoadBindings/SaveBindings. default F7.
+		// menu key. default F7
 		USHORT menuToggleVKey = VK_F7;
 		RawInput::ActionHandle menuToggleHandle = 0;
 		bool menuOpen = false;
@@ -121,6 +173,7 @@ namespace RadarKeys {
 			}
 
 			menuOpen = !menuOpen;
+			LogActivity(menuOpen ? "Menu opened" : "Menu closed");
 		}
 
 		void RegisterMenuToggleKey(USHORT vKey) {
@@ -196,10 +249,14 @@ namespace RadarKeys {
 				if (!targetFunc.empty()) {
 					std::string luaPayload = "DoScript|local f = loadfile([[" + targetPath + "]]); if f then f(); if " + targetFunc + " then " + targetFunc + "(); end end";
 					LuaBridge::QueueMessageIn(luaPayload);
+					LogActivity("Fired script " + targetPath + " [" + targetFunc + "]");
 				} else {
 					// fallback if all checks fail
 					LuaBridge::QueueMessageIn("DoScript|dofile([[" + targetPath + "]])");
+					LogActivity("Fired script " + targetPath);
 				}
+			} else {
+				LogActivity("Script not found: " + targetPath, false);
 			}
 		}
 
@@ -216,6 +273,7 @@ namespace RadarKeys {
 						const KeyBind* tapBind = FindMatchingBinding(vKey, it->second.ctrlOnPressed, it->second.shiftOnPressed, it->second.altOnPressed, false);
 						if (tapBind && tapBind->holdSeconds <= 0.0f) {
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
+							LogActivity(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
 							FireBinding(*tapBind);
 						}
 					}
@@ -227,6 +285,7 @@ namespace RadarKeys {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) return;
 
 			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
+			LogActivity(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 
 			// for long press
 			bool hasHoldOptionOnKey = false;
@@ -260,6 +319,7 @@ namespace RadarKeys {
 				if (holdBind && holdBind->holdSeconds > 0.0f) {
 					if (std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count() >= holdBind->holdSeconds) {
 						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
+						LogActivity(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
 						FireBinding(*holdBind); 
 						track.fired = true;
 					}
@@ -282,13 +342,14 @@ namespace RadarKeys {
 		}
 
 		void SaveBindings() {
-			std::error_code ec;
-			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
-			std::filesystem::create_directories(bindsDir, ec);
-			if (ec) spdlog::warn("KeyBindMenu::SaveBindings: couldn't create {} directory: {}", bindsDir.string(), ec.message());
+			EnsureBindsDirectory();
 
 			std::ofstream outFile(GetBindsFileName());
-			if (!outFile) { spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", GetBindsFileName()); return; }
+			if (!outFile) {
+				spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", GetBindsFileName());
+				LogActivity("Save bindings failed: couldn't open " + GetBindsFileName() + " for writing", false);
+				return;
+			}
 			
 			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
 			std::string gameDirStr = std::filesystem::path(GetGameDirectory()).generic_string() + "/";
@@ -314,26 +375,42 @@ namespace RadarKeys {
 			}
 			outFile.close();
 			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), GetBindsFileName());
+			LogActivity("Saved " + std::to_string(bindings.size()) + " binding(s) to " + GetBindsFileName());
 		}
 
 		void LoadBindings() {
 			std::ifstream inFile(GetBindsFileName());
-			if (!inFile) { spdlog::debug("KeyBindMenu::LoadBindings: no {} yet (fine on first run)", GetBindsFileName()); return; }
+			if (!inFile) {
+				spdlog::debug("KeyBindMenu::LoadBindings: no {} yet (fine on first run)", GetBindsFileName());
+				LogActivity("No existing bindings file yet at " + GetBindsFileName() + " (fine on first run)");
+				return;
+			}
 
 			std::string line;
 			while (std::getline(inFile, line)) {
 				if ((line = trim(line)).empty()) continue;
 				std::vector<std::string> parts = split(line, "|");
-				if (parts.size() < 2) { spdlog::warn("KeyBindMenu::LoadBindings: skipping malformed line: {}", line); continue; }
+				if (parts.size() < 2) {
+					spdlog::warn("KeyBindMenu::LoadBindings: skipping malformed line: {}", line);
+					LogActivity("Skipped malformed line while loading bindings: " + line, false);
+					continue;
+				}
 
 				if (parts[0] == "MENUKEY") {
 					int vKey = VKeyForName(trim(parts[1]));
 					if (vKey != -1) menuToggleVKey = (USHORT)vKey;
-					else spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
+					else {
+						spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
+						LogActivity("Unknown MENUKEY name '" + parts[1] + "', keeping default", false);
+					}
 				}
 				else if (parts[0] == "BIND" && parts.size() >= 7) {
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
-					if (vKey == -1) { spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName); continue; }
+					if (vKey == -1) {
+						spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName);
+						LogActivity("Unknown key name '" + keyName + "', skipping binding", false);
+						continue;
+					}
 					
 					float holdSeconds = 0.0f;
 					try { holdSeconds = std::stof(trim(parts[5])); }
@@ -377,9 +454,11 @@ namespace RadarKeys {
 				}
 				else if (parts[0] == "BIND") {
 					spdlog::warn("KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}", line);
+					LogActivity("Skipped old-format/malformed BIND line: " + line, false);
 				}
 			}
 			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), GetBindsFileName());
+			LogActivity("Loaded " + std::to_string(bindings.size()) + " binding(s) from " + GetBindsFileName());
 			MarkDisplayCacheDirty();
 		}
 
@@ -394,10 +473,14 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("bound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
+			LogActivity("Bound " + CombinedDisplayName(bindings.back()) + " (toggle: " + (isToggle ? "YES" : "NO") + ")");
 		}
 
 		void RemoveBinding(int index) {
-			if (index < 0 || index >= (int)bindings.size()) return;
+			if (index < 0 || index >= (int)bindings.size()) {
+				LogActivity("Attempted to remove binding at invalid index " + std::to_string(index), false);
+				return;
+			}
 			std::string removedDesc = CombinedDisplayName(bindings[index]) + " -> " + bindings[index].scriptPathOn;
 			USHORT vKey = bindings[index].vKey;
 			bindings.erase(bindings.begin() + index);
@@ -405,6 +488,7 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("unbound " + removedDesc);
+			LogActivity("Unbound " + removedDesc);
 		}
 
 		void RemoveAllBindings() {
@@ -415,12 +499,18 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("unbound all (" + std::to_string(count) + " binding(s))");
+			LogActivity("Cleared all bindings (" + std::to_string(count) + " binding(s))");
 		}
 
 		void Init(const std::string& defaultMenuKeyName) {
+			LogActivity("RadarKeys KeyBindMenu initializing");
+
 			int defaultVKey = VKeyForName(defaultMenuKeyName);
 			if (defaultVKey != -1) menuToggleVKey = (USHORT)defaultVKey;
-			else if (!defaultMenuKeyName.empty()) spdlog::warn("KeyBindMenu::Init: unknown keyBindMenuToggleKey '{}' in ihhook_config.lua, using F4", defaultMenuKeyName);
+			else if (!defaultMenuKeyName.empty()) {
+				spdlog::warn("KeyBindMenu::Init: unknown keyBindMenuToggleKey '{}' in ihhook_config.lua, using F4", defaultMenuKeyName);
+				LogActivity("Unknown keyBindMenuToggleKey '" + defaultMenuKeyName + "' in ihhook_config.lua, using default", false);
+			}
 
 			LoadBindings(); // may override menuToggleVKey again if radar_keybinds.conf has a persisted MENUKEY
 			for (const auto& bind : bindings) EnsureDispatcherRegistered(bind.vKey);
@@ -567,6 +657,7 @@ namespace RadarKeys {
 			bool isUpperPathValid = false, isLowerPathValid = false;
 			int scriptStatus = 0, lowerStatus = 0;
 
+			// gets rid of the repeating disk check for the file
 			static char lastStatCheckedOnBuffer[512] = "";
 			static int cachedOnStatus = 0;
 			static char lastStatCheckedOffBuffer[512] = "";
@@ -661,7 +752,6 @@ namespace RadarKeys {
 					}
 				} 
 				else {
-					// Standard Instant / Long Press Layout
 					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn); ImGui::SameLine();
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside this script file.");
 					ImGui::SameLine(); ImGui::Text("Script Path:");
@@ -709,6 +799,7 @@ namespace RadarKeys {
 					menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
 					SaveBindings(); 
 					DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
+					LogActivity("Menu hotkey reassigned to " + NameForVKey(capturedVKey));
 					capturedToggleMode = capturedLongPressMode = false;
 				} else {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
@@ -735,6 +826,7 @@ namespace RadarKeys {
 						bindings[editingBindingIndex] = editedBind;
 						RemoveDispatcherIfUnused(oldVKey); EnsureDispatcherRegistered(capturedVKey); SaveBindings();
 						MarkDisplayCacheDirty();
+						LogActivity("Edited binding -> " + CombinedDisplayName(editedBind));
 					} else {
 						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap);
 					}
@@ -759,10 +851,12 @@ namespace RadarKeys {
 				capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
 				capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
+				LogActivity("Key capture prompt cancelled");
 			}
 			ImGui::End();
 		}
 
+		// halfway through, I realized like wth am I doing around here, and how the heck did I think of this stuff. lol
 		void RebuildDisplayCacheIfNeeded() {
 			if (!displayCacheDirty) return;
 
@@ -801,123 +895,124 @@ namespace RadarKeys {
 
 		// draws the ui
 		void Draw(bool* p_open) {
-		    RebuildDisplayCacheIfNeeded();
-		
-		    float longestItemWidth = 0.0f;
-		    for (const auto& entry : displayCache) {
-		        float stringPixelWidth = ImGui::CalcTextSize(entry.fullLine.c_str()).x;
-		        if (stringPixelWidth > longestItemWidth) {
-		            longestItemWidth = stringPixelWidth;
-		        }
-		    }
-		
-		    float finalMinWidthFloor = longestItemWidth + 111.0f;
-		
-		    if (finalMinWidthFloor < 480.0f) {
-		        finalMinWidthFloor = 480.0f;
-		    }
-		
-		    ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, 220), ImGuiCond_FirstUseEver);
-		    ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 220), ImVec2(FLT_MAX, FLT_MAX));
-		
-		    if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
-		
-		    if (ImGui::Button("Debugger Overlay")) DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
-		    ImGui::SameLine();
-		    
-		    std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
-		    if (ImGui::Button(buttonLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) { 
-		        isAssigningMenuToggleKey = showCapturePrompt = true; 
-		    }
-		    ImGui::Separator();
-		
-		    float paddingX = ImGui::GetStyle().WindowPadding.x;
-		    float paddingY = ImGui::GetStyle().WindowPadding.y;
-		    float footerHeight = 45.0f; 
-		    float listRemainingHeight = ImGui::GetWindowHeight() - ImGui::GetCursorPosY() - footerHeight - paddingY;
-		    if (listRemainingHeight < 100.0f) listRemainingHeight = 100.0f; 
-		
-		    int removeIndex = -1;
-		    ImGui::BeginChild("ActiveBindingsOverviewList", ImVec2(0, listRemainingHeight), true);
-		    for (int i = 0; i < (int)bindings.size(); i++) {
-		        ImGui::PushID(i);
-		        
-		        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
-		        float rowTopY = ImGui::GetCursorPosY();
-		
-		        float buttonHeight = 20.0f;
-		        const float keyColumnX = 250.0f;
-		
-		        float wrapWidth = ImGui::GetContentRegionAvail().x - keyColumnX - ImGui::GetStyle().ItemSpacing.x;
-		        if (wrapWidth < 10.0f) wrapWidth = 10.0f;
-		        float detailTextHeight = ImGui::CalcTextSize(displayCache[i].detailText.c_str(), nullptr, false, wrapWidth).y;
-		        float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
-		        float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
-		
-		        ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
-		        ImGui::AlignTextToFramePadding();
-		        ImGui::BeginGroup();
-		        ImGui::TextWrapped("%s", displayCache[i].detailText.c_str());
-		        ImGui::EndGroup();
-		
-		        ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
-		        if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = i;
-		        
-		        ImGui::SameLine(); 
-		
-		        const std::string& itemLabel = displayCache[i].itemLabel;
-		        if (ImGui::Button(itemLabel.c_str(), ImVec2(130, buttonHeight))) {
-		            editingBindingIndex = i;
-		            capturedVKey = bindings[i].vKey;
-		            capturedCtrl = bindings[i].needCtrl;
-		            capturedShift = bindings[i].needShift;
-		            capturedAlt = bindings[i].needAlt;
-		            capturedToggleMode = bindings[i].isToggle;
-		            capturedLongPressMode = (bindings[i].holdSeconds > 0.0f);
-		            capturedHoldSeconds = bindings[i].holdSeconds;
-		            
-		            snprintf(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), "%s", bindings[i].scriptPathOn.c_str());
-		            snprintf(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), "%s", bindings[i].scriptPathOff.c_str());
-		            
-		            snprintf(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), "%s", bindings[i].functionOn.c_str());
-		            snprintf(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), "%s", bindings[i].functionOff.c_str());
-		            snprintf(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), "%s", bindings[i].functionTap.c_str());
-		            
-		            capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
-		            capturedHasFuncOff = !bindings[i].functionOff.empty();
-		            
-		            if (bindings[i].isToggle) {
-		                capturedToggleType = (bindings[i].scriptPathOn == bindings[i].scriptPathOff) ? 0 : 1;
-		            } else {
-		                capturedToggleType = 0;
-		            }
-		            
-		            showCapturePrompt = true;
-		        }
-		
-		        ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
-		        ImGui::PopID(); ImGui::Separator();
-		    }
-		    ImGui::EndChild();
-		
-		    if (removeIndex != -1) RemoveBinding(removeIndex);
-		
-		    float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 35.0f; 
-		    ImGui::SetCursorPosY(bottomControlPanelY);
-		    
-		    if (bindings.empty()) ImGui::BeginDisabled();
-		    if (ImGui::Button("Clear All Hotkeys", ImVec2(145, 24))) RemoveAllBindings();
-		    if (bindings.empty()) ImGui::EndDisabled();
-		    
-		    ImGui::SameLine(ImGui::GetWindowWidth() - paddingX - 165.0f);
-		
-		    if (ImGui::Button("Add New Binding...", ImVec2(165, 24))) {
-		        editingBindingIndex = -1;
-		        showCapturePrompt = true;
-		    }
-		    ImGui::End();
-		
-		    if (showCapturePrompt) DrawKeyCapturePrompt();
+			RebuildDisplayCacheIfNeeded();
+
+			float longestItemWidth = 0.0f;
+			for (const auto& entry : displayCache) {
+				float stringPixelWidth = ImGui::CalcTextSize(entry.fullLine.c_str()).x;
+				if (stringPixelWidth > longestItemWidth) {
+					longestItemWidth = stringPixelWidth;
+				}
+			}
+
+			float finalMinWidthFloor = longestItemWidth + 111.0f;
+
+			if (finalMinWidthFloor < 480.0f) {
+				finalMinWidthFloor = 480.0f;
+			}
+
+			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, 220), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 220), ImVec2(FLT_MAX, FLT_MAX));
+
+			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
+
+			if (ImGui::Button("Debugger Overlay")) DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
+			ImGui::SameLine();
+			
+			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
+			if (ImGui::Button(buttonLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) { 
+				isAssigningMenuToggleKey = showCapturePrompt = true; 
+			}
+			ImGui::Separator();
+
+			float paddingX = ImGui::GetStyle().WindowPadding.x;
+			float paddingY = ImGui::GetStyle().WindowPadding.y;
+			
+			float footerHeight = 45.0f; 
+			float listRemainingHeight = ImGui::GetWindowHeight() - ImGui::GetCursorPosY() - footerHeight - paddingY;
+			if (listRemainingHeight < 100.0f) listRemainingHeight = 100.0f; 
+
+			int removeIndex = -1;
+			ImGui::BeginChild("ActiveBindingsOverviewList", ImVec2(0, listRemainingHeight), true);
+			for (int i = 0; i < (int)bindings.size(); i++) {
+				ImGui::PushID(i);
+				
+				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
+				float rowTopY = ImGui::GetCursorPosY();
+
+				float buttonHeight = 20.0f;
+				const float keyColumnX = 250.0f;
+
+				float wrapWidth = ImGui::GetContentRegionAvail().x - keyColumnX - ImGui::GetStyle().ItemSpacing.x;
+				if (wrapWidth < 10.0f) wrapWidth = 10.0f;
+				float detailTextHeight = ImGui::CalcTextSize(displayCache[i].detailText.c_str(), nullptr, false, wrapWidth).y;
+				float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
+				float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
+
+				ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
+				ImGui::AlignTextToFramePadding();
+				ImGui::BeginGroup();
+				ImGui::TextWrapped("%s", displayCache[i].detailText.c_str());
+				ImGui::EndGroup();
+
+				ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
+				if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = i;
+				
+				ImGui::SameLine(); 
+
+				const std::string& itemLabel = displayCache[i].itemLabel;
+				if (ImGui::Button(itemLabel.c_str(), ImVec2(130, buttonHeight))) {
+					editingBindingIndex = i;
+					capturedVKey = bindings[i].vKey;
+					capturedCtrl = bindings[i].needCtrl;
+					capturedShift = bindings[i].needShift;
+					capturedAlt = bindings[i].needAlt;
+					capturedToggleMode = bindings[i].isToggle;
+					capturedLongPressMode = (bindings[i].holdSeconds > 0.0f);
+					capturedHoldSeconds = bindings[i].holdSeconds;
+					
+					snprintf(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), "%s", bindings[i].scriptPathOn.c_str());
+					snprintf(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), "%s", bindings[i].scriptPathOff.c_str());
+					
+					snprintf(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), "%s", bindings[i].functionOn.c_str());
+					snprintf(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), "%s", bindings[i].functionOff.c_str());
+					snprintf(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), "%s", bindings[i].functionTap.c_str());
+					
+					capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
+					capturedHasFuncOff = !bindings[i].functionOff.empty();
+					
+					if (bindings[i].isToggle) {
+						capturedToggleType = (bindings[i].scriptPathOn == bindings[i].scriptPathOff) ? 0 : 1;
+					} else {
+						capturedToggleType = 0;
+					}
+					
+					showCapturePrompt = true;
+				}
+
+				ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
+				ImGui::PopID(); ImGui::Separator();
+			}
+			ImGui::EndChild();
+
+			if (removeIndex != -1) RemoveBinding(removeIndex);
+
+			float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 35.0f; 
+			ImGui::SetCursorPosY(bottomControlPanelY);
+			
+			if (bindings.empty()) ImGui::BeginDisabled();
+			if (ImGui::Button("Clear All Hotkeys", ImVec2(145, 24))) RemoveAllBindings();
+			if (bindings.empty()) ImGui::EndDisabled();
+			
+			ImGui::SameLine(ImGui::GetWindowWidth() - paddingX - 165.0f);
+
+			if (ImGui::Button("Add New Binding...", ImVec2(165, 24))) {
+				editingBindingIndex = -1;
+				showCapturePrompt = true;
+			}
+			ImGui::End();
+
+			if (showCapturePrompt) DrawKeyCapturePrompt();
 		}
 	}
 }
