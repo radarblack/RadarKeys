@@ -567,40 +567,45 @@ namespace RadarKeys {
 		
 			if (!isAssigningMenuToggleKey) {
 				if (capturedToggleMode) {
-					ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
-					if (capturedHasFuncOn) {
-						ImGui::SetNextItemWidth(140);
-						ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
-					} else {
-						ImGui::Text("Target Function (Enable Slot)");
-					}
-
 					ImGui::Text("Enable Script Path:"); ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 					
-					ImGui::Spacing();
-					ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff); ImGui::SameLine();
-					if (capturedHasFuncOff) {
-						ImGui::SetNextItemWidth(140);
-						ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
-					} else {
-						ImGui::Text("Target Function (Disable Slot)");
+					if (capturedHasFuncOn) {
+						ImGui::SetNextItemWidth(180); 
+						ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
+						ImGui::SameLine();
 					}
+					
+					ImGui::BeginChild("##checkFrameOn", ImVec2(capturedHasFuncOn ? 24 : 180, ImGui::GetFrameHeight()), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove);
+					ImGui::Checkbox(capturedHasFuncOn ? "##hasFuncOn" : "Target Function...", &capturedHasFuncOn);
+					ImGui::EndChild();
 
-					ImGui::Text("Disable Script Path:"); ImGui::SetNextItemWidth(-1);
+					ImGui::Spacing(); ImGui::Text("Disable Script Path:"); ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
+					
+					if (capturedHasFuncOff) {
+						ImGui::SetNextItemWidth(180);
+						ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
+						ImGui::SameLine();
+					}
+					
+					ImGui::BeginChild("##checkFrameOff", ImVec2(capturedHasFuncOff ? 24 : 180, ImGui::GetFrameHeight()), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove);
+					ImGui::Checkbox(capturedHasFuncOff ? "##hasFuncOff" : "Target Function...", &capturedHasFuncOff);
+					ImGui::EndChild();
 				} 
 				else {
-					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn); ImGui::SameLine();
-					if (capturedHasFuncOn) {
-						ImGui::SetNextItemWidth(140);
-						ImGui::InputText("##captureFuncTap", capturedFuncTapBuffer, IM_ARRAYSIZE(capturedFuncTapBuffer));
-					} else {
-						ImGui::Text("Target Specific Function Inside File");
-					}
-
 					ImGui::Text("Script Path:"); ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
+					
+					if (capturedHasFuncOn) {
+						ImGui::SetNextItemWidth(180);
+						ImGui::InputText("##captureFuncTap", capturedFuncTapBuffer, IM_ARRAYSIZE(capturedFuncTapBuffer));
+						ImGui::SameLine();
+					}
+					
+					ImGui::BeginChild("##checkFrameTap", ImVec2(capturedHasFuncOn ? 24 : 180, ImGui::GetFrameHeight()), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove);
+					ImGui::Checkbox(capturedHasFuncOn ? "##hasFuncTap" : "Target Function...", &capturedHasFuncOn);
+					ImGui::EndChild();
 				}
 				ImGui::Spacing();
 			}
