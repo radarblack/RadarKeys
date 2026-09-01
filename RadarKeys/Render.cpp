@@ -66,6 +66,12 @@ namespace RadarKeys {
 				return true;
 			}
 
+			if (message == WM_INPUT) {
+				if (IsUnlockCursor() || showCapturePrompt) {
+					return false; // swallows the packet completely
+				}
+			}
+
 			bool handledMessage = !RawInput::OnMessage(wnd, message, w_param, l_param);
 
 			if (IsUnlockCursor() && ImGui_ImplWin32_WndProcHandler(wnd, message, w_param, l_param) != 0) {
