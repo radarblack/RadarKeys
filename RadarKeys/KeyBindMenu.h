@@ -5,6 +5,8 @@
 #include <vector>
 
 namespace RadarKeys {
+	extern bool showCapturePrompt;
+
 	namespace KeyBindMenu {
 		struct KeyBind {
 			USHORT vKey;
