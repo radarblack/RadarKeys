@@ -87,6 +87,17 @@ namespace RadarKeys {
 					spdlog::warn("KeyBindMenu::LogActivity: couldn't open {} for writing", GetLogFileName());
 					return;
 				}
+
+				// --- Hook into the Windows Unhandled Exception Filter using the existing logStream ---
+				#ifdef _WIN32
+				::SetUnhandledExceptionFilter([](struct _EXCEPTION_POINTERS* ep) -> LONG {
+					if (logStream.is_open()) {
+						logStream << "[FATAL] [CRASH] Game encountered an unhandled exception or abrupt shutdown.\n";
+						logStream.flush();
+					}
+					return EXCEPTION_CONTINUE_SEARCH; // crash catcher
+				});
+				#endif
 			}
 
 			std::time_t nowTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
