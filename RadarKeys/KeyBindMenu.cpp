@@ -426,6 +426,8 @@ namespace RadarKeys {
 		static char capturedFuncTapBuffer[128] = "";
 		static bool capturedToggleMode = false;
 		static bool capturedLongPressMode = false;
+		static bool capturedHasFuncOn = false;
+		static bool capturedHasFuncOff = false;
 		static int editingBindingIndex = -1;
 
 		void DrawKeyCapturePrompt() {
@@ -434,9 +436,6 @@ namespace RadarKeys {
 			
 			ImGui::SetNextWindowSizeConstraints(ImVec2(340, 330), ImVec2(FLT_MAX, FLT_MAX));
 			ImGui::SetNextWindowFocus();
-		
-			static bool capturedHasFuncOn = false;
-			static bool capturedHasFuncOff = false;
 		
 			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
 				ImGui::End();
