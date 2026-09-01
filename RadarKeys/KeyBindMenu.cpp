@@ -566,17 +566,24 @@ namespace RadarKeys {
 			}
 		
 			if (!isAssigningMenuToggleKey) {
+				float paddingX = ImGui::GetStyle().WindowPadding.x;
+				float totalWidth = ImGui::GetWindowWidth();
+				float rightEdgeX = totalWidth - paddingX;
+				
+				float elementWidth = 145.0f;
+				float targetCursorPosX = rightEdgeX - elementWidth - 8.0f;
+
 				if (capturedToggleMode) {
 					ImGui::Text("Enable Script Path:"); 
 					ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Enable script.");
 					
-					ImGui::SetNextItemWidth(295); 
+					ImGui::SetNextItemWidth(-1); 
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 					
 					if (capturedHasFuncOn) {
-						ImGui::SetCursorPosX(175);
-						ImGui::SetNextItemWidth(145); 
+						ImGui::SetCursorPosX(targetCursorPosX);
+						ImGui::SetNextItemWidth(elementWidth); 
 						ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
 					}
 
@@ -585,12 +592,12 @@ namespace RadarKeys {
 					ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff); ImGui::SameLine();
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Disable script.");
 					
-					ImGui::SetNextItemWidth(295);
+					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
 					
 					if (capturedHasFuncOff) {
-						ImGui::SetCursorPosX(175);
-						ImGui::SetNextItemWidth(145);
+						ImGui::SetCursorPosX(targetCursorPosX);
+						ImGui::SetNextItemWidth(elementWidth);
 						ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
 					}
 				} 
@@ -599,12 +606,12 @@ namespace RadarKeys {
 					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn); ImGui::SameLine();
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside this script file.");
 					
-					ImGui::SetNextItemWidth(295);
+					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 					
 					if (capturedHasFuncOn) {
-						ImGui::SetCursorPosX(175);
-						ImGui::SetNextItemWidth(145);
+						ImGui::SetCursorPosX(targetCursorPosX);
+						ImGui::SetNextItemWidth(elementWidth);
 						ImGui::InputText("##captureFuncTap", capturedFuncTapBuffer, IM_ARRAYSIZE(capturedFuncTapBuffer));
 					}
 				}
@@ -661,6 +668,10 @@ namespace RadarKeys {
 				showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
 			}
 			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
+			
+			float paddingX = ImGui::GetStyle().WindowPadding.x;
+			float targetCancelX = ImGui::GetWindowWidth() - paddingX - 145.0f - 8.0f;
+			ImGui::SameLine(targetCancelX);
 			
 			if (ImGui::Button("Cancel", ImVec2(145, 30))) {
 				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
