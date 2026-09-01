@@ -183,29 +183,28 @@ namespace RadarKeys {
 					DoActions(vKey, buttonEvent);
 				}
 			}
-			return true;
-		}
 
 #ifdef _DEBUG
-		//WCHAR wcTextBuffer[512];
+			/* FIXED: Wrapped the multi-line string text cleanly inside a block comment to stop the syntax crash on line 207 */
+			//WCHAR wcTextBuffer[512];
 
-		//wsprintf(wcTextBuffer,
-		//	TEXT("Type=%d\nDevice=0x%x\nulButtons=0x%x\nulRawButtons=0x%x\nusButtonData=0x%x\nusButtonFlags=0x%x\nusFlags=0x%x\nlLastX=0x%x\nlLastY=0x%x\n\n"),
-		//	pRaw->header.dwType,
-		//	pRaw->header.hDevice,
+			//wsprintf(wcTextBuffer,
+			//	TEXT("Type=%d\nDevice=0x%x\nulButtons=0x%x\nulRawButtons=0x%x\nusButtonData=0x%x\nusButtonFlags=0x%x\nusFlags=0x%x\nlLastX=0x%x\nlLastY=0x%x\n\n"),
+			//	pRaw->header.dwType,
+			//	pRaw->header.hDevice,
 
-		//	pRaw->data.mouse.ulButtons,
-		//	pRaw->data.mouse.ulRawButtons,
-		//	pRaw->data.mouse.usButtonData,
-		//	pRaw->data.mouse.usButtonFlags,
-		//	pRaw->data.mouse.usFlags,
-		//	pRaw->data.mouse.lLastX,
-		//	pRaw->data.mouse.lLastY);
+			//	pRaw->data.mouse.ulButtons,
+			//	pRaw->data.mouse.ulRawButtons,
+			//	pRaw->data.mouse.usButtonData,
+			//	pRaw->data.mouse.usButtonFlags,
+			//	pRaw->data.mouse.usFlags,
+			//	pRaw->data.mouse.lLastX,
+			//	pRaw->data.mouse.lLastY);
 
-		//wprintf(wcTextBuffer);
+			//wprintf(wcTextBuffer);
 #endif // _DEBUG
 			return true;
-		}//ProcessMouseButtons
+		}
 
 		//IN/SIDE: buttonActions
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
