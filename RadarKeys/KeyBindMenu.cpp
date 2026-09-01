@@ -284,19 +284,18 @@ namespace RadarKeys {
 			std::string gameDirStr = std::filesystem::path(GetGameDirectory()).generic_string() + "/";
 
 			for (auto b : bindings) {
-				std::string genericOn = std::filesystem::path(b.scriptPathOn).generic_string();
-				std::string genericOff = std::filesystem::path(b.scriptPathOff).generic_string();
+				std::string genericOn = b.scriptPathOn.empty() ? "" : std::filesystem::path(b.scriptPathOn).generic_string();
+				std::string genericOff = b.scriptPathOff.empty() ? "" : std::filesystem::path(b.scriptPathOff).generic_string();
 
-				if (genericOn.find(gameDirStr) == 0) {
+				if (!genericOn.empty() && genericOn.find(gameDirStr) == 0) {
 					genericOn.erase(0, gameDirStr.length());
 				}
-				if (genericOff.find(gameDirStr) == 0) {
+				if (!genericOff.empty() && genericOff.find(gameDirStr) == 0) {
 					genericOff.erase(0, gameDirStr.length());
 				}
 
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
 				
-				// appends the function to trigger from the LUA
 				if (b.isToggle) {
 					outFile << "1|" << genericOn << "|" << genericOff << "|" << b.functionOn << "|" << b.functionOff << "\n";
 				} else {
