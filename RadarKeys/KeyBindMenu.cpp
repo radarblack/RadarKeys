@@ -632,7 +632,7 @@ namespace RadarKeys {
 				}
 			}
 			
-			bool canFinalize = capturedVKey != 0 && comboAvailable && (isAssigningMenuToggleKey || pathsValid);
+			bool canFinalize = capturedVKey != 0 && comboAvailable && (isAssigningMenuToggleKey || (pathsValid && functionsValid));
 			
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float buttonHeight = 30.0f;
