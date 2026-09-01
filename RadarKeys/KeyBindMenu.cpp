@@ -42,7 +42,7 @@ namespace RadarKeys {
 		const std::string& GetLogFileName() {
 			static std::string cached;
 			if (cached.empty()) {
-				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radarkeys_logs.txt").string();
+				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radarkeys_log.txt").string();
 			}
 			return cached;
 		}
