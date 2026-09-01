@@ -61,6 +61,7 @@ namespace RadarKeys {
 
 		// called by IHHook message hook on game's window-message thread (same as RawInput WM_INPUT)
 		bool OnMessage(HWND wnd, UINT message, WPARAM w_param, LPARAM l_param) {
+
 			if (!frameInitialized) {
 				return true;
 			}
@@ -157,7 +158,6 @@ namespace RadarKeys {
 
 		void DrawUI() {
 			LuaBridge::ProcessMessages();
-			KeyBindMenu::Update(); // hold-to-trigger poll
 
 			auto& io = ImGui::GetIO();
 			bool unlock = IsUnlockCursor();
@@ -188,6 +188,7 @@ namespace RadarKeys {
 		}
 
 		void OnFrame() {
+			KeyBindMenu::Update();
 			auto frameTimeStart = std::chrono::high_resolution_clock::now();
 
 			// frameInitialized resets on device reset; place session‑once init behind firstFrame in FrameInitialize.

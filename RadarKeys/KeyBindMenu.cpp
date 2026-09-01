@@ -51,6 +51,11 @@ namespace RadarKeys {
 			{"Numpad6", VK_NUMPAD6}, {"Numpad7", VK_NUMPAD7}, {"Numpad8", VK_NUMPAD8},
 			{"Numpad9", VK_NUMPAD9},
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
+			
+			// added extra mouse keys, excluding left and right click
+			{"MouseWheel", VK_MBUTTON},
+			{"Mouse4", VK_XBUTTON1},
+			{"Mouse5", VK_XBUTTON2}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
@@ -133,18 +138,35 @@ namespace RadarKeys {
 		struct HoldTrack {
 			std::chrono::steady_clock::time_point startTime;
 			bool fired = false;
+			// stops tracking modifier keys
+			bool ctrlOnPressed = false;
+			bool shiftOnPressed = false;
+			bool altOnPressed = false;
 		};
 		std::map<USHORT, HoldTrack> holdTracks;
 
-		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld) {
-			const KeyBind* exactMatch = nullptr, *fallbackMatch = nullptr; // fallback if there is no assigned script to the key combo
+		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld, bool preferHold) {
+			const KeyBind* exactMatch = nullptr;
+			const KeyBind* plainFallbackMatch = nullptr;
+
 			for (const auto& bind : bindings) {
 				if (bind.vKey != vKey) continue;
-				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) { exactMatch = &bind; break; }
-				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) fallbackMatch = &bind;
+
+				// look for assigned modifier + key
+				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
+					if (preferHold && bind.holdSeconds > 0.0f) return &bind;
+					if (!preferHold && bind.holdSeconds <= 0.0f) return &bind;
+					exactMatch = &bind;
+				}
+				// fallback to the pressed key if none found
+				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) {
+					if (preferHold && bind.holdSeconds > 0.0f) plainFallbackMatch = &bind;
+					if (!preferHold && bind.holdSeconds <= 0.0f) plainFallbackMatch = &bind;
+				}
 			}
-			// return the precise modifier profile if found; otherwise drop down to your plain key bind seamlessly
-			return exactMatch ? exactMatch : fallbackMatch;
+
+			// If no exact modifier combination was found, fall back to the plain key binding profile cleanly
+			return exactMatch ? exactMatch : plainFallbackMatch;
 		}
 
 		void FireBinding(const KeyBind& bind) {
@@ -162,45 +184,48 @@ namespace RadarKeys {
 		}
 
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
-			// prevents 'tap' scripts from running when the input detection prompt is up
 			if (showCapturePrompt) return;
 
 			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
-			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld);
 
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
-				// the key was released. Check if we were tracking a hold for this key.
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
-					// if it hasn't fired the hold script yet, it means it's a short tap!
-					if (!it->second.fired && toRun && toRun->holdSeconds <= 0.0f) {
-						// look for a structural 'instant' (holdSeconds == 0) fallback binding on the same key combo
-						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
-						FireBinding(*toRun);
+					if (!it->second.fired) {
+						// for tap
+						const KeyBind* tapBind = FindMatchingBinding(vKey, it->second.ctrlOnPressed, it->second.shiftOnPressed, it->second.altOnPressed, false);
+						if (tapBind && tapBind->holdSeconds <= 0.0f) {
+							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
+							FireBinding(*tapBind);
+						}
 					}
 					holdTracks.erase(it);
 				}
 				return;
 			}
+			
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) return;
 
-			// log raw down event
 			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
-			if (!toRun) return;
 
-			if (!toRun->needCtrl && !toRun->needShift && !toRun->needAlt) ctrlHeld = shiftHeld = altHeld = false;
-
-			// look to see if there is ANY binding on this virtual key setup that uses a hold delay
+			// for long press
 			bool hasHoldOptionOnKey = false;
 			for (const auto& bind : bindings) {
-				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) { hasHoldOptionOnKey = true; break; }
+				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
+					// check if modifier key is assigned
+					if ((bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) ||
+						(!bind.needCtrl && !bind.needShift && !bind.needAlt)) {
+						hasHoldOptionOnKey = true;
+						break;
+					}
+				}
 			}
 
-			if (toRun->holdSeconds <= 0.0f && !hasHoldOptionOnKey) {
+			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
+			if (toRun && !hasHoldOptionOnKey) {
 				FireBinding(*toRun);
 			} else {
-				// long press interval tracker
-				holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false };
+				holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false, ctrlHeld, shiftHeld, altHeld };
 			}
 		}
 
@@ -210,18 +235,13 @@ namespace RadarKeys {
 				USHORT vKey = it->first; HoldTrack& track = it->second;
 				if (track.fired || !RawInput::IsKeyHeldReal(vKey)) { it = holdTracks.erase(it); continue; }
 
-				bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
-				
-				// look specifically for the binding configured with a hold delay
-				const KeyBind* holdBind = nullptr;
-				for (const auto& bind : bindings) {
-					if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld && bind.holdSeconds > 0.0f) { holdBind = &bind; break; }
-				}
+				const KeyBind* holdBind = FindMatchingBinding(vKey, track.ctrlOnPressed, track.shiftOnPressed, track.altOnPressed, true);
 
-				if (holdBind) {
+				if (holdBind && holdBind->holdSeconds > 0.0f) {
 					if (std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count() >= holdBind->holdSeconds) {
 						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
-						FireBinding(*holdBind); track.fired = true;
+						FireBinding(*holdBind); 
+						track.fired = true;
 					}
 				}
 				++it;
@@ -242,7 +262,6 @@ namespace RadarKeys {
 		}
 
 		void SaveBindings() {
-			// ensure mod/radarKeys/ directory exists before writing bindings file (ofstream won't create it).
 			std::error_code ec;
 			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 			std::filesystem::create_directories(bindsDir, ec);
@@ -252,14 +271,25 @@ namespace RadarKeys {
 			if (!outFile) { spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", GetBindsFileName()); return; }
 			
 			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
-			
-			for (const auto& b : bindings) {
+			std::string gameDirStr = std::filesystem::path(GetGameDirectory()).generic_string() + "/";
+
+			for (auto b : bindings) {
+				std::string genericOn = std::filesystem::path(b.scriptPathOn).generic_string();
+				std::string genericOff = std::filesystem::path(b.scriptPathOff).generic_string();
+
+				if (genericOn.find(gameDirStr) == 0) {
+					genericOn.erase(0, gameDirStr.length());
+				}
+				if (genericOff.find(gameDirStr) == 0) {
+					genericOff.erase(0, gameDirStr.length());
+				}
+
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
 				
 				if (b.isToggle) {
-					outFile << "1|" << b.scriptPathOn << "|" << b.scriptPathOff << "\n";
+					outFile << "1|" << genericOn << "|" << genericOff << "\n";
 				} else {
-					outFile << "0|" << b.scriptPathOn << "\n";
+					outFile << "0|" << genericOn << "\n";
 				}
 			}
 			outFile.close();
@@ -292,8 +322,7 @@ namespace RadarKeys {
 					bool isToggle = false;
 					std::string pathOn = "";
 					std::string pathOff = "";
-
-					// maps the .conf
+					
 					if (trim(parts[6]) == "1" && parts.size() >= 9) {
 						isToggle = true;
 						pathOn = trim(parts[7]);
@@ -304,7 +333,10 @@ namespace RadarKeys {
 						pathOff = "";
 					}
 					
-					bindings.push_back(KeyBind{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, pathOn, pathOff, false, holdSeconds });
+					std::string resolvedOn = ResolveScriptPath(pathOn);
+					std::string resolvedOff = pathOff.empty() ? "" : ResolveScriptPath(pathOff);
+
+					bindings.push_back(KeyBind{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, resolvedOn, resolvedOff, false, holdSeconds });
 				}
 				else if (parts[0] == "BIND") {
 					spdlog::warn("KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}", line);
@@ -375,19 +407,26 @@ namespace RadarKeys {
 				capturedShift = ImGui::GetIO().KeyShift;
 				capturedAlt   = ImGui::GetIO().KeyAlt;
 
-				for (int i = 1; i < 256; i++) {
-					if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
-						i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
-						continue;
-					}
-					if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
+				// mouse input detection
+				if (ImGui::IsMouseClicked(2)) { capturedVKey = VK_MBUTTON; }
+				else if (ImGui::IsMouseClicked(3)) { capturedVKey = VK_XBUTTON1; }
+				else if (ImGui::IsMouseClicked(4)) { capturedVKey = VK_XBUTTON2; }
+				else {
+					// default key detection
+					for (int i = 1; i < 256; i++) {
+						if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
+							i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
+							continue;
+						}
+						if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
 
-					if (ImGui::IsKeyPressed((ImGuiKey)i)) {
-						capturedVKey = (USHORT)i;
-						capturedCtrl  = ImGui::GetIO().KeyCtrl;
-						capturedShift = ImGui::GetIO().KeyShift;
-						capturedAlt   = ImGui::GetIO().KeyAlt;
-						break;
+						if (ImGui::IsKeyPressed((ImGuiKey)i)) {
+							capturedVKey = (USHORT)i;
+							capturedCtrl  = ImGui::GetIO().KeyCtrl;
+							capturedShift = ImGui::GetIO().KeyShift;
+							capturedAlt   = ImGui::GetIO().KeyAlt;
+							break;
+						}
 					}
 				}
 			}
