@@ -518,8 +518,12 @@ namespace RadarKeys {
 			
 			bool comboAvailable = true;
 			if (capturedVKey != 0) {
-				// FIXED: Moved the edit-state checklist tracker directly into the validation scope
-				if (editingBindingIndex != -1) {
+				if (isAssigningMenuToggleKey) {
+					if (capturedVKey == VK_F2 || capturedVKey == VK_F3 || capturedVKey == VK_ESCAPE) {
+						comboAvailable = false;
+					}
+				} 
+				else if (editingBindingIndex != -1) {
 					static int lastCheckedIndex = -1;
 					if (lastCheckedIndex != editingBindingIndex) {
 						capturedHasFuncOn = !bindings[editingBindingIndex].functionOn.empty() || !bindings[editingBindingIndex].functionTap.empty();
@@ -543,7 +547,7 @@ namespace RadarKeys {
 			
 			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
 			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can set it to be a Long Press by adding duration.");
+				ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
 			}
 			ImGui::EndGroup(); ImGui::Separator();
 		
@@ -756,11 +760,10 @@ namespace RadarKeys {
 				finalMinWidthFloor = 480.0f;
 			}
 
-			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, 300), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 300), ImVec2(FLT_MAX, FLT_MAX));
+			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, 220), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 220), ImVec2(FLT_MAX, FLT_MAX));
 
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
-
 			if (ImGui::Button("Debugger Overlay")) DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 			ImGui::SameLine();
 			
@@ -782,7 +785,7 @@ namespace RadarKeys {
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
 				
-				float rowStartY = ImGui::GetCursorPosY();
+				float rowStartY = ImGui::GetCursor somePosY();
 
 				ImGui::BeginGroup();
 				ImGui::SetCursorPosX(250.0f); 
@@ -794,7 +797,7 @@ namespace RadarKeys {
 					std::string funcOffStr = bindings[i].functionOff.empty() ? "" : " [" + bindings[i].functionOff + "]";
 					
 					if (bindings[i].scriptPathOn == bindings[i].scriptPathOff) {
-						ImGui::TextWrapped("Toggle: %s%s <->%s", fileOn.c_str(), funcOnStr.c_str(), funcOffStr.c_str());
+						ImGui::TextWrapped("Toggle: %s%s <->%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
 					} else {
 						ImGui::TextWrapped("Toggle: %s%s <-> %s%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
 					}
@@ -806,11 +809,12 @@ namespace RadarKeys {
 				}
 				ImGui::EndGroup();
 
-				float textBlockHeight = ImGui::GetCursorPosY() - rowStartY;
+				float textBlockHeight = ImGui::GetCursor somePosY() - rowStartY;
 				float buttonHeight = 20.0f;
-				float centerOffsetButtonY = rowStartY + ((textBlockHeight - buttonHeight) * 0.5f);
+				float activeRowHeight = (textBlockHeight < 24.0f) ? 24.0f : textBlockHeight;
+				float centerOffsetButtonY = rowStartY + ((activeRowHeight - buttonHeight) * 0.5f);
 
-				ImGui::SetCursorPosY(centerOffsetButtonY);
+				ImGui::SetCursor somePosY(centerOffsetButtonY);
 				ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
 				if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = i;
 				
@@ -845,8 +849,7 @@ namespace RadarKeys {
 					
 					showCapturePrompt = true;
 				}
-
-				ImGui::SetCursorPosY(rowStartY + textBlockHeight);
+				ImGui::SetCursor somePosY(rowStartY + activeRowHeight);
 				ImGui::PopID(); ImGui::Separator();
 			}
 			ImGui::EndChild();
@@ -854,8 +857,8 @@ namespace RadarKeys {
 			if (removeIndex != -1) RemoveBinding(removeIndex);
 
 			float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 35.0f; 
-			ImGui::SetCursorPosY(bottomControlPanelY);
-
+			ImGui::SetCursor somePosY(bottomControlPanelY);
+			
 			if (bindings.empty()) ImGui::BeginDisabled();
 			if (ImGui::Button("Clear All Hotkeys", ImVec2(145, 24))) RemoveAllBindings();
 			if (bindings.empty()) ImGui::EndDisabled();
