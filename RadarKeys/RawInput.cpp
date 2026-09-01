@@ -125,7 +125,7 @@ namespace RadarKeys {
 #endif // _DEBUG
 		}//ProcessRawInput
 
-		// helper to process usButtonFlags
+		// modified to add in mouse keys
 		struct {
 			USHORT vk;		UINT downflag;					UINT upflag;
 		} const k[] = {
@@ -138,10 +138,8 @@ namespace RadarKeys {
 
 		bool ProcessMouseButtons(PRAWINPUT pRaw) {
 			USHORT usButtonFlags = pRaw->data.mouse.usButtonFlags;
-
 			const int numButtons = _countof(k);
 
-			// jump through a few hoops to make it similar to ProcessKey
 			USHORT oldFlagsB[vKeyMax];
 			for (UINT i = 0; i < numButtons; ++i) {
 				USHORT vKey = k[i].vk;
@@ -152,15 +150,13 @@ namespace RadarKeys {
 				USHORT vKey = k[i].vk;
 				if (usButtonFlags & k[i].downflag) {
 					currFlags[vKey] = RI_KEY_MAKE;
-					realStateHeld[vKey] = true; // Safe mouse state catch
+					realStateHeld[vKey] = true;
 				}
-				//DEBUGNOW not hitting for some reason
 				if (usButtonFlags & k[i].upflag) {
 					currFlags[vKey] = RI_KEY_BREAK;
-					realStateHeld[vKey] = false; // Safe mouse state clear
+					realStateHeld[vKey] = false;
 				}
 			}
-			//
 
 			for (UINT i = 0; i < numButtons; ++i) {
 				USHORT vKey = k[i].vk;
@@ -182,10 +178,13 @@ namespace RadarKeys {
 					return false;
 				}
 
-				if (!ignore[vKey]) {
+				// safety filter
+				if (!ignore[vKey] && vKey != VK_LBUTTON && vKey != VK_RBUTTON) {
 					DoActions(vKey, buttonEvent);
 				}
-			}//for numbuttons
+			}
+			return true;
+		}
 
 #ifdef _DEBUG
 		//WCHAR wcTextBuffer[512];
