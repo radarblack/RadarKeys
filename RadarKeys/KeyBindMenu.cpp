@@ -51,6 +51,11 @@ namespace RadarKeys {
 			{"Numpad6", VK_NUMPAD6}, {"Numpad7", VK_NUMPAD7}, {"Numpad8", VK_NUMPAD8},
 			{"Numpad9", VK_NUMPAD9},
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
+			
+			// added extra mouse keys, excluding left and right click
+			{"MouseWheel", VK_MBUTTON},
+			{"Mouse4", VK_XBUTTON1},
+			{"Mouse5", VK_XBUTTON2}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
