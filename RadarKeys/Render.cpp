@@ -66,9 +66,16 @@ namespace RadarKeys {
 				return true;
 			}
 
-			if (message == WM_INPUT) {
-				if (IsUnlockCursor() || showCapturePrompt) {
-					return false;
+			// only swallows input if its from the mouse
+			if (message == WM_INPUT && (IsUnlockCursor() || showCapturePrompt)) {
+				RAWINPUT raw{};
+				UINT size = sizeof(RAWINPUT);
+				
+				// Windows Input API...
+				if (GetRawInputData((HRAWINPUT)l_param, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER)) != (UINT)-1) {
+					if (raw.header.dwType == RIM_TYPEMOUSE) {
+						return false; // should only swallow mouse inputs????
+					}
 				}
 			}
 
