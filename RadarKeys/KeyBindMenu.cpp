@@ -576,6 +576,7 @@ namespace RadarKeys {
 				float targetCursorPosX = rightEdgeX - elementWidth - 8.0f;
 
 				if (capturedToggleMode) {
+					ImGui::AlignTextToFramePadding();
 					ImGui::Text("Toggle Type:"); ImGui::SameLine();
 					ImGui::RadioButton("Single Script", &capturedToggleType, 0); ImGui::SameLine();
 					ImGui::RadioButton("Separate Scripts", &capturedToggleType, 1);
