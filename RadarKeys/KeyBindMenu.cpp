@@ -429,20 +429,32 @@ namespace RadarKeys {
 		static int editingBindingIndex = -1;
 
 		void DrawKeyCapturePrompt() {
-			ImGui::SetNextWindowSize(ImVec2(340, 310), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 155), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(340, 360), ImGuiCond_FirstUseEver); 
+			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 180), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowFocus();
-
+		
+			static bool capturedHasFuncOn = false;
+			static bool capturedHasFuncOff = false;
+		
+			if (editingBindingIndex != -1 && capturedVKey != 0) {
+				static int lastCheckedIndex = -1;
+				if (lastCheckedIndex != editingBindingIndex) {
+					capturedHasFuncOn = !bindings[editingBindingIndex].functionOn.empty() || !bindings[editingBindingIndex].functionTap.empty();
+					capturedHasFuncOff = !bindings[editingBindingIndex].functionOff.empty();
+					lastCheckedIndex = editingBindingIndex;
+				}
+			}
+		
 			if (!ImGui::Begin("Assigning key bind...", nullptr, ImGuiWindowFlags_NoCollapse)) {
 				ImGui::End();
 				return;
 			}
-
+		
 			if (capturedVKey == 0) {
 				capturedCtrl  = ImGui::GetIO().KeyCtrl;
 				capturedShift = ImGui::GetIO().KeyShift;
 				capturedAlt   = ImGui::GetIO().KeyAlt;
-
+		
 				if (ImGui::IsMouseClicked(2)) { capturedVKey = VK_MBUTTON; }
 				else if (ImGui::IsMouseClicked(3)) { capturedVKey = VK_XBUTTON1; }
 				else if (ImGui::IsMouseClicked(4)) { capturedVKey = VK_XBUTTON2; }
@@ -453,7 +465,7 @@ namespace RadarKeys {
 							continue;
 						}
 						if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
-
+		
 						if (ImGui::IsKeyPressed((ImGuiKey)i)) {
 							capturedVKey = (USHORT)i;
 							capturedCtrl  = ImGui::GetIO().KeyCtrl;
@@ -464,14 +476,15 @@ namespace RadarKeys {
 					}
 				}
 			}
-
+		
 			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 			auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
 			ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Key").x) * 0.5f); ImGui::Text(" Key"); ImGui::Separator();
 			float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
-
+		
 			if (capturedVKey == 0) {
 				float startVerticalY = lowerBoxTopY + ((lowerBoxRemainingHeight - (ImGui::GetTextLineHeightWithSpacing() * 2.0f)) * 0.5f);
+				ImGui::SetNextItemOpen(true); 
 				ImGui::SetCursorPosY(startVerticalY);
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("PRESS").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), " PRESS");
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("KEY...").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "  KEY..");
@@ -481,22 +494,22 @@ namespace RadarKeys {
 				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(keyName.c_str()).x) * 0.5f); ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), " %s", keyName.c_str());
 			}
 			ImGui::EndChild(); ImGui::SameLine();
-
+		
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
 				ImGui::Checkbox("Ctrl", &capturedCtrl); ImGui::Checkbox("Shift", &capturedShift); ImGui::Checkbox("Alt", &capturedAlt); 
 			}
 			if (ImGui::Button("Reset", ImVec2(55, 22))) { 
-				capturedVKey = 0; capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = false; 
+				capturedVKey = 0; capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false; 
 			}
 			ImGui::EndGroup(); ImGui::SameLine(205);
-
+		
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
 				if (capturedLongPressMode) ImGui::BeginDisabled();
 				ImGui::Checkbox("Toggle", &capturedToggleMode);
 				if (capturedLongPressMode) ImGui::EndDisabled();
-
+		
 				if (capturedToggleMode) ImGui::BeginDisabled();
 				ImGui::Checkbox("Long Press", &capturedLongPressMode);
 				if (capturedToggleMode) ImGui::EndDisabled();
@@ -527,10 +540,10 @@ namespace RadarKeys {
 			}
 			ImGui::Spacing(); ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
 			ImGui::EndGroup(); ImGui::Separator();
-
+		
 			bool isUpperPathValid = false, isLowerPathValid = false;
 			int scriptStatus = 0, lowerStatus = 0;
-
+		
 			if (!isAssigningMenuToggleKey) {
 				if (capturedScriptPathOnBuffer[0] != '\0') {
 					std::string txt(capturedScriptPathOnBuffer);
@@ -547,7 +560,7 @@ namespace RadarKeys {
 					} else lowerStatus = 1;
 				}
 			}
-
+		
 			if (!isAssigningMenuToggleKey) {
 				if (capturedToggleMode) {
 					ImGui::Checkbox("Target Function (Enable Slot)", &capturedHasFuncOn);
@@ -559,7 +572,7 @@ namespace RadarKeys {
 						ImGui::SameLine(); ImGui::SetNextItemWidth(120);
 						ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
 					}
-
+		
 					ImGui::Spacing(); ImGui::Checkbox("Target Function (Disable Slot)", &capturedHasFuncOff);
 					ImGui::Text("Disable Script Path:"); 
 					if (capturedHasFuncOff) { ImGui::SetNextItemWidth(180); } else { ImGui::SetNextItemWidth(-1); }
@@ -582,7 +595,7 @@ namespace RadarKeys {
 				}
 				ImGui::Spacing();
 			}
-
+		
 			bool pathsValid = capturedToggleMode ? (isUpperPathValid && isLowerPathValid) : isUpperPathValid;
 			bool canFinalize = capturedVKey != 0 && comboAvailable && (isAssigningMenuToggleKey || pathsValid);
 			
@@ -596,28 +609,29 @@ namespace RadarKeys {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 					std::string finalPathOn = ResolveScriptPath(capturedScriptPathOnBuffer);
 					std::string finalPathOff = capturedToggleMode ? ResolveScriptPath(capturedScriptPathOffBuffer) : "";
-
+		
 					std::string finalFuncOn  = (capturedToggleMode && capturedHasFuncOn) ? capturedFuncOnBuffer : "";
 					std::string finalFuncOff = (capturedToggleMode && capturedHasFuncOff) ? capturedFuncOffBuffer : "";
 					std::string finalFuncTap = (!capturedToggleMode && capturedHasFuncOn) ? capturedFuncTapBuffer : "";
-
+		
 					if (editingBindingIndex != -1) {
 						USHORT oldVKey = bindings[editingBindingIndex].vKey;
 						KeyBind editedBind{ capturedVKey, capturedCtrl, capturedShift, capturedAlt, NameForVKey(capturedVKey), capturedToggleMode, finalPathOn, finalPathOff, false, finalHoldSeconds };
-						editedBind.functionOn = capturedToggleMode ? capturedFuncOnBuffer : "";
-						editedBind.functionOff = capturedToggleMode ? capturedFuncOffBuffer : "";
-						editedBind.functionTap = !capturedToggleMode ? capturedFuncTapBuffer : "";
+						editedBind.functionOn = finalFuncOn;
+						editedBind.functionOff = finalFuncOff;
+						editedBind.functionTap = finalFuncTap;
 						
 						bindings[editingBindingIndex] = editedBind;
 						RemoveDispatcherIfUnused(oldVKey); EnsureDispatcherRegistered(capturedVKey); SaveBindings();
 					} else {
-						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, capturedFuncOnBuffer, capturedFuncOffBuffer, capturedFuncTapBuffer);
+						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap);
 					}
 				}
 				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
 				capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 				capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
-				capturedToggleMode = capturedLongPressMode = false; showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
+				capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
+				showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
 			}
 			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
 			
