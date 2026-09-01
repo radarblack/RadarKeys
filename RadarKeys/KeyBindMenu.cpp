@@ -764,6 +764,7 @@ namespace RadarKeys {
 			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 220), ImVec2(FLT_MAX, FLT_MAX));
 
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
+
 			if (ImGui::Button("Debugger Overlay")) DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 			ImGui::SameLine();
 			
@@ -785,7 +786,7 @@ namespace RadarKeys {
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
 				
-				float rowStartY = ImGui::GetCursor somePosY();
+				float rowStartY = ImGui::GetCursorPosY();
 
 				ImGui::BeginGroup();
 				ImGui::SetCursorPosX(250.0f); 
@@ -797,7 +798,7 @@ namespace RadarKeys {
 					std::string funcOffStr = bindings[i].functionOff.empty() ? "" : " [" + bindings[i].functionOff + "]";
 					
 					if (bindings[i].scriptPathOn == bindings[i].scriptPathOff) {
-						ImGui::TextWrapped("Toggle: %s%s <->%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
+						ImGui::TextWrapped("Toggle: %s%s <->%s", fileOn.c_str(), funcOnStr.c_str(), funcOffStr.c_str());
 					} else {
 						ImGui::TextWrapped("Toggle: %s%s <-> %s%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
 					}
@@ -809,12 +810,13 @@ namespace RadarKeys {
 				}
 				ImGui::EndGroup();
 
-				float textBlockHeight = ImGui::GetCursor somePosY() - rowStartY;
+				float textBlockHeight = ImGui::GetCursorPosY() - rowStartY;
 				float buttonHeight = 20.0f;
+				
 				float activeRowHeight = (textBlockHeight < 24.0f) ? 24.0f : textBlockHeight;
 				float centerOffsetButtonY = rowStartY + ((activeRowHeight - buttonHeight) * 0.5f);
 
-				ImGui::SetCursor somePosY(centerOffsetButtonY);
+				ImGui::SetCursorPosY(centerOffsetButtonY);
 				ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
 				if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = i;
 				
@@ -849,7 +851,8 @@ namespace RadarKeys {
 					
 					showCapturePrompt = true;
 				}
-				ImGui::SetCursor somePosY(rowStartY + activeRowHeight);
+
+				ImGui::SetCursorPosY(rowStartY + activeRowHeight);
 				ImGui::PopID(); ImGui::Separator();
 			}
 			ImGui::EndChild();
@@ -857,7 +860,7 @@ namespace RadarKeys {
 			if (removeIndex != -1) RemoveBinding(removeIndex);
 
 			float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 35.0f; 
-			ImGui::SetCursor somePosY(bottomControlPanelY);
+			ImGui::SetCursorPosY(bottomControlPanelY);
 			
 			if (bindings.empty()) ImGui::BeginDisabled();
 			if (ImGui::Button("Clear All Hotkeys", ImVec2(145, 24))) RemoveAllBindings();
