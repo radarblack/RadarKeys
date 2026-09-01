@@ -19,6 +19,11 @@ namespace RadarKeys {
 			mutable bool toggleState = false; // checks toggle state
 			
 			float holdSeconds = 0.0f; // 0 = fires instantly on press (default/original behavior); >0 = fires once after being held this long, see Update()
+
+			// lua script pass
+			std::string functionOn;   // toggle ON slot
+			std::string functionOff;  // toggle OFF slot
+			std::string functionTap;  // instant tap / long press slot
 		};
 
 		// loads bindings and menu key at startup from mod/radarKeys/radar_keybinds.conf; uses hardcoded F7 as fallback if nopersisted menu key.
