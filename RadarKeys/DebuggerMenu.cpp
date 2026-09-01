@@ -58,15 +58,15 @@ namespace RadarKeys {
 		bool LogScriptAttempt(const std::string& scriptPath) {
 			bool exists = std::filesystem::exists(scriptPath);
 			if (!exists) {
-				spdlog::error("[SCR][DLL] NOT FOUND, SKIP: {}", scriptPath);
+				spdlog::error("[SCR][DLL] missing - SKIP: {}", scriptPath);
 				if (logScriptResult) {
-					AddLogEntry("[SCR][DLL] NOT FOUND - SKIP: " + scriptPath);
+					AddLogEntry("[SCR][DLL] missing - SKIP: " + scriptPath);
 				}
 				return false;
 			}
-			spdlog::debug("[SCR][DLL] ATTEMPT: {}", scriptPath);
+			spdlog::debug("[SCR][DLL] attempt: {}", scriptPath);
 			if (logScriptResult) {
-				AddLogEntry("[SCR][DLL] ATTEMPT: " + scriptPath);
+				AddLogEntry("[SCR][DLL] attempt: " + scriptPath);
 			}
 			return true;
 		}
@@ -93,9 +93,9 @@ namespace RadarKeys {
 				}
 
 				std::string errorMsg = args[3];
-				spdlog::error("[SCR][LUA] FAILED: {}", errorMsg);
+				spdlog::error("[SCR][LUA] fail: {}", errorMsg);
 				if (logScriptResult) {
-					AddLogEntry("[SCR][LUA] FAILED: " + errorMsg);
+					AddLogEntry("[SCR][LUA] fail: " + errorMsg);
 				}
 			}
 		}
