@@ -40,11 +40,11 @@ namespace RadarKeys {
 		}
 
 		void LogBindEvent(const std::string& message) {
-			spdlog::info("[bind] {}", message);
+			spdlog::info("[BND] {}", message);
 			if (!logBindUnbind) {
 				return;
 			}
-			AddLogEntry("[bind] " + message);
+			AddLogEntry("[BND] " + message);
 		}
 
 		void LogButtonPress(const std::string& message) {
