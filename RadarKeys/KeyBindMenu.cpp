@@ -786,36 +786,9 @@ namespace RadarKeys {
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
 				
-				float rowStartY = ImGui::GetCursorPosY();
-				float buttonHeight = 20.0f;
+				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
 				
-				ImGui::BeginGroup();
-				ImGui::SetCursorPosX(250.0f);
-				if (bindings[i].isToggle) {
-					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
-					std::string fileOff = std::filesystem::path(bindings[i].scriptPathOff).filename().string();
-					
-					std::string funcOnStr = bindings[i].functionOn.empty() ? "" : " [" + bindings[i].functionOn + "]";
-					std::string funcOffStr = bindings[i].functionOff.empty() ? "" : " [" + bindings[i].functionOff + "]";
-					
-					if (bindings[i].scriptPathOn == bindings[i].scriptPathOff) {
-						ImGui::TextWrapped("Toggle: %s%s <->%s", fileOn.c_str(), funcOnStr.c_str(), funcOffStr.c_str());
-					} else {
-						ImGui::TextWrapped("Toggle: %s%s <-> %s%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
-					}
-				} else {
-					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
-					std::string funcTapStr = bindings[i].functionTap.empty() ? "" : " [" + bindings[i].functionTap + "]";
-					
-					ImGui::TextWrapped("-> %s%s", fileOn.c_str(), funcTapStr.c_str());
-				}
-				ImGui::EndGroup();
-
-				float textBlockHeight = ImGui::GetCursorPosY() - rowStartY;
-				float activeRowHeight = (textBlockHeight < 24.0f) ? 24.0f : textBlockHeight;
-				float centerOffsetButtonY = rowStartY + ((activeRowHeight - buttonHeight) * 0.5f) + 1.0f;
-
-				ImGui::SetCursorPosY(centerOffsetButtonY);
+				float buttonHeight = 20.0f;
 				ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
 				if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = i;
 				
@@ -850,8 +823,31 @@ namespace RadarKeys {
 					
 					showCapturePrompt = true;
 				}
+				ImGui::SameLine(250.0f, ImGui::GetStyle().ItemSpacing.y);
+				ImGui::AlignTextToFramePadding(); 
+				
+				ImGui::BeginGroup();
+				if (bindings[i].isToggle) {
+					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
+					std::string fileOff = std::filesystem::path(bindings[i].scriptPathOff).filename().string();
+					
+					std::string funcOnStr = bindings[i].functionOn.empty() ? "" : " [" + bindings[i].functionOn + "]";
+					std::string funcOffStr = bindings[i].functionOff.empty() ? "" : " [" + bindings[i].functionOff + "]";
+					
+					if (bindings[i].scriptPathOn == bindings[i].scriptPathOff) {
+						ImGui::TextWrapped("Toggle: %s%s <->%s", fileOn.c_str(), funcOnStr.c_str(), funcOffStr.c_str());
+					} else {
+						ImGui::TextWrapped("Toggle: %s%s <-> %s%s", fileOn.c_str(), funcOnStr.c_str(), fileOff.c_str(), funcOffStr.c_str());
+					}
+				} else {
+					std::string fileOn = std::filesystem::path(bindings[i].scriptPathOn).filename().string();
+					std::string funcTapStr = bindings[i].functionTap.empty() ? "" : " [" + bindings[i].functionTap + "]";
+					
+					ImGui::TextWrapped("-> %s%s", fileOn.c_str(), funcTapStr.c_str());
+				}
+				ImGui::EndGroup();
 
-				ImGui::SetCursorPosY(rowStartY + activeRowHeight);
+				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
 				ImGui::PopID(); ImGui::Separator();
 			}
 			ImGui::EndChild();
