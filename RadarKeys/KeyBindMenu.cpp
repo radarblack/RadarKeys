@@ -78,8 +78,22 @@ namespace RadarKeys {
 
 				std::error_code ec;
 				if (std::filesystem::exists(currentLog, ec)) {
+					// check if the last session ended clean
+					std::ifstream checkStream(currentLog);
+					std::string firstLine;
+					std::getline(checkStream, firstLine);
+					checkStream.close();
+
+					// overwrite the prev log
 					std::filesystem::copy_file(currentLog, prevLog, std::filesystem::copy_options::overwrite_existing, ec);
+					
+					// clear the new log
 					std::ofstream clearStream(currentLog, std::ios::trunc);
+					
+					// appends if the check says true
+					if (firstLine == "[STATE] RUNNING_ABRUPT_EXIT_GUARD") {
+						clearStream << "[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).\n";
+					}
 				}
 
 				logStream.open(currentLog, std::ios::app);
@@ -88,16 +102,9 @@ namespace RadarKeys {
 					return;
 				}
 
-				// --- Hook into the Windows Unhandled Exception Filter using the existing logStream ---
-				#ifdef _WIN32
-				::SetUnhandledExceptionFilter([](struct _EXCEPTION_POINTERS* ep) -> LONG {
-					if (logStream.is_open()) {
-						logStream << "[FATAL] [CRASH] Game encountered an unhandled exception or abrupt shutdown.\n";
-						logStream.flush();
-					}
-					return EXCEPTION_CONTINUE_SEARCH; // crash catcher
-				});
-				#endif
+				// abrupt exit marker
+				logStream << "[STATE] RUNNING_ABRUPT_EXIT_GUARD\n";
+				logStream.flush();
 			}
 
 			std::time_t nowTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
