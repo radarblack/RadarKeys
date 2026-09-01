@@ -51,22 +51,22 @@ namespace RadarKeys {
 			if (!logButtonPress) {
 				return;
 			}
-			spdlog::debug("[button] {}", message);
-			AddLogEntry("[button] " + message);
+			spdlog::debug("[BTN] {}", message);
+			AddLogEntry("[BTN] " + message);
 		}
 
 		bool LogScriptAttempt(const std::string& scriptPath) {
 			bool exists = std::filesystem::exists(scriptPath);
 			if (!exists) {
-				spdlog::error("[script][dll] NOT FOUND, skipping: {}", scriptPath);
+				spdlog::error("[SCR][DLL] NOT FOUND, SKIP: {}", scriptPath);
 				if (logScriptResult) {
-					AddLogEntry("[script][dll] NOT FOUND, skipping: " + scriptPath);
+					AddLogEntry("[SCR][DLL] NOT FOUND - SKIP: " + scriptPath);
 				}
 				return false;
 			}
-			spdlog::debug("[script][dll] attempting: {}", scriptPath);
+			spdlog::debug("[SCR][DLL] ATTEMPT: {}", scriptPath);
 			if (logScriptResult) {
-				AddLogEntry("[script][dll] attempting: " + scriptPath);
+				AddLogEntry("[SCR][DLL] ATTEMPT: " + scriptPath);
 			}
 			return true;
 		}
@@ -80,9 +80,9 @@ namespace RadarKeys {
 
 			bool success = args[2] == "1";
 			if (success) {
-				spdlog::debug("[script][lua] success");
+				spdlog::debug("[SCR][LUA] success");
 				if (logScriptResult) {
-					AddLogEntry("[script][lua] success");
+					AddLogEntry("[SCR][LUA] success");
 				}
 			}
 			else {
@@ -93,9 +93,9 @@ namespace RadarKeys {
 				}
 
 				std::string errorMsg = args[3];
-				spdlog::error("[script][lua] FAILED: {}", errorMsg);
+				spdlog::error("[SCR][LUA] FAILED: {}", errorMsg);
 				if (logScriptResult) {
-					AddLogEntry("[script][lua] FAILED: " + errorMsg);
+					AddLogEntry("[SCR][LUA] FAILED: " + errorMsg);
 				}
 			}
 		}
