@@ -550,20 +550,35 @@ namespace RadarKeys {
 
 			if (!isAssigningMenuToggleKey) {
 				if (capturedToggleMode) {
-					ImGui::Text("Enable Script / Targeted Function:"); ImGui::SetNextItemWidth(180);
-					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer)); ImGui::SameLine();
-					ImGui::SetNextItemWidth(120); 
-					ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
+					ImGui::Checkbox("Target Function (Enable Slot)", &capturedHasFuncOn);
+					ImGui::Text("Enable Script Path:"); 
+					if (capturedHasFuncOn) { ImGui::SetNextItemWidth(180); } else { ImGui::SetNextItemWidth(-1); }
+					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
+					
+					if (capturedHasFuncOn) {
+						ImGui::SameLine(); ImGui::SetNextItemWidth(120);
+						ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
+					}
 
-					ImGui::Text("Disable Script / Targeted Function:"); ImGui::SetNextItemWidth(180);
-					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer)); ImGui::SameLine();
-					ImGui::SetNextItemWidth(120); 
-					ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
+					ImGui::Spacing(); ImGui::Checkbox("Target Function (Disable Slot)", &capturedHasFuncOff);
+					ImGui::Text("Disable Script Path:"); 
+					if (capturedHasFuncOff) { ImGui::SetNextItemWidth(180); } else { ImGui::SetNextItemWidth(-1); }
+					ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
+					
+					if (capturedHasFuncOff) {
+						ImGui::SameLine(); ImGui::SetNextItemWidth(120);
+						ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
+					}
 				} else {
-					ImGui::Text("Script Path / Targeted Function (Optional):"); ImGui::SetNextItemWidth(180); 
-					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer)); ImGui::SameLine();
-					ImGui::SetNextItemWidth(120); 
-					ImGui::InputText("##captureFuncTap", capturedFuncTapBuffer, IM_ARRAYSIZE(capturedFuncTapBuffer));
+					ImGui::Checkbox("Target Specific Function Inside File", &capturedHasFuncOn);
+					ImGui::Text("Script Path:"); 
+					if (capturedHasFuncOn) { ImGui::SetNextItemWidth(180); } else { ImGui::SetNextItemWidth(-1); }
+					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
+					
+					if (capturedHasFuncOn) {
+						ImGui::SameLine(); ImGui::SetNextItemWidth(120);
+						ImGui::InputText("##captureFuncTap", capturedFuncTapBuffer, IM_ARRAYSIZE(capturedFuncTapBuffer));
+					}
 				}
 				ImGui::Spacing();
 			}
@@ -581,6 +596,10 @@ namespace RadarKeys {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 					std::string finalPathOn = ResolveScriptPath(capturedScriptPathOnBuffer);
 					std::string finalPathOff = capturedToggleMode ? ResolveScriptPath(capturedScriptPathOffBuffer) : "";
+
+					std::string finalFuncOn  = (capturedToggleMode && capturedHasFuncOn) ? capturedFuncOnBuffer : "";
+					std::string finalFuncOff = (capturedToggleMode && capturedHasFuncOff) ? capturedFuncOffBuffer : "";
+					std::string finalFuncTap = (!capturedToggleMode && capturedHasFuncOn) ? capturedFuncTapBuffer : "";
 
 					if (editingBindingIndex != -1) {
 						USHORT oldVKey = bindings[editingBindingIndex].vKey;
