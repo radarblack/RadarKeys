@@ -42,7 +42,7 @@ namespace RadarKeys {
 		const std::string& GetLogFileName() {
 			static std::string cached;
 			if (cached.empty()) {
-				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radarkeys_logs.txt").string();
+				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radarkeys_log.txt").string();
 			}
 			return cached;
 		}
@@ -82,7 +82,7 @@ namespace RadarKeys {
 			if (!activityLogStream.is_open()) {
 				std::string currentLog = GetLogFileName();
 				std::string prevLog = currentLog;
-				size_t replacePos = prevLog.find("radarkeys_logs.txt");
+				size_t replacePos = prevLog.find("radarkeys_log.txt");
 				if (replacePos != std::string::npos) {
 					prevLog.replace(replacePos, 18, "radarkeys_log_prev.txt");
 				}
