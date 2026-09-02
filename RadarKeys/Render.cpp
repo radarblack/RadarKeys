@@ -38,10 +38,6 @@ namespace RadarKeys {
 
 		void CleanupRenderTarget() {
 			spdlog::trace("CleanupRenderTarget");
-			auto log = spdlog::get("radarkeys");
-			if (log != NULL) {
-				log->flush();
-			}
 
 			if (mainRenderTargetView != nullptr) {
 				mainRenderTargetView->Release();
@@ -236,10 +232,6 @@ namespace RadarKeys {
 
 		void OnReset() {
 			spdlog::info("OnReset");
-			auto log = spdlog::get("radarkeys");
-			if (log != NULL) {
-				log->flush();
-			}
 
 			//RE2FW: crashes if we don't release it at this point
 			CleanupRenderTarget();
