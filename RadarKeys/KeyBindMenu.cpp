@@ -109,15 +109,14 @@ namespace RadarKeys {
 				}
 			}
 
-			std::time_t nowTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-			std::tm localTm{};
-#ifdef _WIN32
-			localtime_s(&localTm, &nowTime);
-#else
-			localtime_r(&nowTime, &localTm);
-#endif
+			auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::duration<double>(ImGui::GetTime()));
+			auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
+			duration -= hours;
+			auto minutes = std::chrono::duration_cast<std::chrono::minutes>(duration);
+			duration -= minutes;
+
 			char timeBuf[32];
-			std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &localTm);
+			snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d", hours.count(), minutes.count(), duration.count());
 
 			activityLogStream << "[" << timeBuf << "] [" << (success ? "OK" : "FAIL") << "] " << message << "\n";
 			activityLogStream.flush();
@@ -686,7 +685,11 @@ namespace RadarKeys {
 			}
 			ImGui::Spacing();
 			
-			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), comboAvailable ? "[ READY ]" : "[ UNFIT ]");
+			const char* comboStatusLabel = comboAvailable ? "[ READY ]" : "[ UNFIT ]";
+			ImVec2 comboStatusSize = ImGui::CalcTextSize(comboStatusLabel);
+			ImGui::BeginChild("ComboStatusBox", ImVec2(comboStatusSize.x + ImGui::GetStyle().WindowPadding.x * 2.0f, comboStatusSize.y + ImGui::GetStyle().WindowPadding.y * 2.0f), true, ImGuiWindowFlags_NoScrollbar);
+			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", comboStatusLabel);
+			ImGui::EndChild();
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
 			}
