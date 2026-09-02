@@ -13,7 +13,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
-#include <ctime>
+#include <deque>
 
 namespace RadarKeys {
 	bool showCapturePrompt = false; 
@@ -62,7 +62,14 @@ namespace RadarKeys {
 			return true;
 		}
 
-		static std::ofstream activityLogStream;
+		static std::deque<std::string> activityLogLines;
+		static size_t activityLogBytes = 0;
+		static size_t activityLogBaselineBytes = 0;
+		static size_t activityLogMaxBytes = 10240; // 10KB cap, same budget as the old trace log
+		static int activityLogWritesSinceFlush = 0;
+		static bool activityLogReady = false;
+		static constexpr int activityLogFlushEveryNWrites = 20;
+
 		bool PreviousSessionEndedCleanly(const std::string& logPath) {
 			std::ifstream in(logPath);
 			if (!in) return true;
@@ -74,40 +81,74 @@ namespace RadarKeys {
 			return lastNonEmptyLine.empty() || lastNonEmptyLine == "[STATE] CLEAN_EXIT";
 		}
 
-		// improved activity tracker and logging
-		void LogActivity(const std::string& message, bool success = true) {
+		// once-per-session setup: rotate prev log, detect a dirty previous exit, and record the baseline byte size we truncate back to on every flush
+		void EnsureActivityLogReady() {
+			if (activityLogReady) return;
 			EnsureBindsDirectory();
 
-			// opened across all calls
-			if (!activityLogStream.is_open()) {
-				std::string currentLog = GetLogFileName();
-				std::string prevLog = currentLog;
-				size_t replacePos = prevLog.find("radarkeys_log.txt");
-				if (replacePos != std::string::npos) {
-					prevLog.replace(replacePos, 18, "radarkeys_log_prev.txt");
-				}
-
-				std::error_code ec;
-				if (std::filesystem::exists(currentLog, ec)) {
-					bool wasClean = PreviousSessionEndedCleanly(currentLog);
-
-					// overwrite the prev log
-					std::filesystem::copy_file(currentLog, prevLog, std::filesystem::copy_options::overwrite_existing, ec);
-					
-					// clear the new log
-					std::ofstream clearStream(currentLog, std::ios::trunc);
-					
-					if (!wasClean) {
-						clearStream << "[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).\n";
-					}
-				}
-
-				activityLogStream.open(currentLog, std::ios::app);
-				if (!activityLogStream) {
-					spdlog::warn("KeyBindMenu::LogActivity: couldn't open {} for writing", GetLogFileName());
-					return;
-				}
+			std::string currentLog = GetLogFileName();
+			std::string prevLog = currentLog;
+			size_t replacePos = prevLog.find("radarkeys_log.txt");
+			if (replacePos != std::string::npos) {
+				prevLog.replace(replacePos, 18, "radarkeys_log_prev.txt");
 			}
+
+			std::error_code ec;
+			bool wasClean = true;
+			if (std::filesystem::exists(currentLog, ec)) {
+				wasClean = PreviousSessionEndedCleanly(currentLog);
+
+				// overwrite the prev log
+				std::filesystem::copy_file(currentLog, prevLog, std::filesystem::copy_options::overwrite_existing, ec);
+			}
+
+			// clear the new log
+			std::ofstream clearStream(currentLog, std::ios::trunc);
+			if (!wasClean) {
+				clearStream << "[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).\n";
+			}
+			clearStream.close();
+
+			activityLogBaselineBytes = std::filesystem::file_size(currentLog, ec);
+			if (ec) activityLogBaselineBytes = 0;
+
+			activityLogReady = true;
+		}
+
+		// rewrites the file as [baseline] + [currently retained window], without dropping the window from memory
+		void FlushActivityLog() {
+			std::string currentLog = GetLogFileName();
+			std::error_code ec;
+			std::filesystem::resize_file(currentLog, activityLogBaselineBytes, ec);
+
+			std::ofstream out(currentLog, std::ios::app);
+			if (!out) {
+				spdlog::warn("KeyBindMenu::FlushActivityLog: couldn't open {} for writing", currentLog);
+				return;
+			}
+			for (const std::string& line : activityLogLines) {
+				out << line;
+			}
+		}
+
+		void AppendActivityLogLine(const std::string& line) {
+			activityLogLines.push_back(line);
+			activityLogBytes += line.size();
+
+			while (activityLogBytes > activityLogMaxBytes && !activityLogLines.empty()) {
+				activityLogBytes -= activityLogLines.front().size();
+				activityLogLines.pop_front();
+			}
+
+			if (++activityLogWritesSinceFlush >= activityLogFlushEveryNWrites) {
+				activityLogWritesSinceFlush = 0;
+				FlushActivityLog();
+			}
+		}
+
+		// improved activity tracker and logging
+		void LogActivity(const std::string& message, bool success = true) {
+			EnsureActivityLogReady();
 
 			auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::duration<double>(ImGui::GetTime()));
 			auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
@@ -118,17 +159,13 @@ namespace RadarKeys {
 			char timeBuf[32];
 			snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d", hours.count(), minutes.count(), duration.count());
 
-			activityLogStream << "[" << timeBuf << "] [" << (success ? "OK" : "FAIL") << "] " << message << "\n";
-			activityLogStream.flush();
+			AppendActivityLogLine(std::string("[") + timeBuf + "] [" + (success ? "OK" : "FAIL") + "] " + message + "\n");
 		}
 
 		void LogCleanShutdown() {
-			if (!activityLogStream.is_open()) {
-				activityLogStream.open(GetLogFileName(), std::ios::app);
-				if (!activityLogStream) return;
-			}
-			activityLogStream << "[STATE] CLEAN_EXIT\n";
-			activityLogStream.flush();
+			EnsureActivityLogReady();
+			AppendActivityLogLine("[STATE] CLEAN_EXIT\n");
+			FlushActivityLog(); // force past the batching cadence so the exit marker always reaches disk
 		}
 
 		// Modifiers as checkboxes; dropdown shows persistable base keys only.
@@ -147,18 +184,18 @@ namespace RadarKeys {
 			{"Space", VK_SPACE}, {"Tab", VK_TAB}, {"Enter", VK_RETURN},
 			{"Insert", VK_INSERT}, {"Delete", VK_DELETE},
 			{"Home", VK_HOME}, {"End", VK_END},
-			{"Page Up", VK_PRIOR}, {"Page Down", VK_NEXT},
+			{"PageUp", VK_PRIOR}, {"PageDown", VK_NEXT},
 			{"Up", VK_UP}, {"Down", VK_DOWN}, {"Left", VK_LEFT}, {"Right", VK_RIGHT},
-			{"Numpad 0", VK_NUMPAD0}, {"Numpad 1", VK_NUMPAD1}, {"Numpad 2", VK_NUMPAD2},
-			{"Numpad 3", VK_NUMPAD3}, {"Numpad 4", VK_NUMPAD4}, {"Numpad 5", VK_NUMPAD5},
-			{"Numpad 6", VK_NUMPAD6}, {"Numpad 7", VK_NUMPAD7}, {"Numpad 8", VK_NUMPAD8},
-			{"Numpad 9", VK_NUMPAD9},
+			{"Numpad0", VK_NUMPAD0}, {"Numpad1", VK_NUMPAD1}, {"Numpad2", VK_NUMPAD2},
+			{"Numpad3", VK_NUMPAD3}, {"Numpad4", VK_NUMPAD4}, {"Numpad5", VK_NUMPAD5},
+			{"Numpad6", VK_NUMPAD6}, {"Numpad7", VK_NUMPAD7}, {"Numpad8", VK_NUMPAD8},
+			{"Numpad9", VK_NUMPAD9},
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
 			
 			// added extra mouse keys, excluding left and right click
-			{"Mouse Wheel", VK_MBUTTON},
-			{"Mouse 4", VK_XBUTTON1},
-			{"Mouse 5", VK_XBUTTON2}
+			{"MouseWheel", VK_MBUTTON},
+			{"Mouse4", VK_XBUTTON1},
+			{"Mouse5", VK_XBUTTON2}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
@@ -1047,7 +1084,7 @@ namespace RadarKeys {
 			if (ImGui::Button("Clear All Hotkeys", ImVec2(145, 24))) RemoveAllBindings();
 			if (bindings.empty()) ImGui::EndDisabled();
 			
-			ImGui::SameLine(ImGui::GetWindowWidth() - paddingX - 165.0f);
+			ImGui::SameLine(ImGui::GetContentRegionMax().x - 165.0f);
 
 			if (ImGui::Button("Add New Binding...", ImVec2(165, 24))) {
 				editingBindingIndex = -1;
