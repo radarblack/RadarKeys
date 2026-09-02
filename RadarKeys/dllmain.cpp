@@ -134,8 +134,8 @@ namespace RadarKeys {
 		std::error_code ec;
 		std::filesystem::create_directories(logDir, ec);
 
-		std::filesystem::path logPath = logDir / "radarkeys_log.txt";
-		std::filesystem::path logPathPrev = logDir / "radarkeys_log_prev.txt";
+		std::filesystem::path logPath = logDir / "radarkeys_trace.txt";
+		std::filesystem::path logPathPrev = logDir / "radarkeys_trace_prev.txt";
 
 		DeleteFileW(logPathPrev.c_str());
 		CopyFileW(logPath.c_str(), logPathPrev.c_str(), FALSE);
