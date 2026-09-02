@@ -29,7 +29,7 @@ namespace RadarKeys {
 			duration -= minutes;
 
 			char timestr[32];
-			snprintf(timestr, sizeof(timestr), "%02lld:%02lld:%02lld", hours.count(), minutes.count(), duration.count());
+			snprintf(timestr, sizeof(timestr), "%02d:%02d:%02d", hours.count(), minutes.count(), duration.count());
 			return std::string(timestr);
 		}
 
