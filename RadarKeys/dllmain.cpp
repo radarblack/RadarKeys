@@ -8,104 +8,13 @@
 #include <MinHook.h>
 
 #include "spdlog/spdlog.h"
-#include "spdlog/sinks/base_sink.h"
-#include "spdlog/sinks/basic_file_sink.h"
 
 #include <thread>
 #include <optional>
 #include <string>
 #include <cassert>
-#include <filesystem>
-#include <queue>
-#include <deque>
-#include <fstream>
-#include <atomic>
 
 namespace RadarKeys {
-	static std::atomic<bool> is_initialization_active{true};
-	class StartupFileSink : public spdlog::sinks::base_sink<std::mutex> {
-	private:
-		std::wstring file_path_;
-	public:
-		explicit StartupFileSink(std::wstring path) : file_path_(std::move(path)) {}
-	protected:
-		void sink_it_(const spdlog::details::log_msg& msg) override {
-			if (!is_initialization_active) return;
-
-			spdlog::memory_buf_t formatted;
-			base_sink<std::mutex>::formatter_->format(msg, formatted);
-			
-			FILE* file_handle = nullptr;
-			if (_wfopen_s(&file_handle, file_path_.c_str(), L"ab") == 0 && file_handle) {
-				fwrite(formatted.data(), sizeof(char), formatted.size(), file_handle);
-				fclose(file_handle);
-			}
-		}
-		void flush_() override {}
-	};
-
-	class MemoryCappedSink : public spdlog::sinks::base_sink<std::mutex> {
-	private:
-		std::wstring file_path_;
-		std::deque<std::string> log_lines_;
-		size_t current_bytes_ = 0;
-		size_t max_runtime_bytes_ = 8192; // fallback: set to 8KB 
-		size_t startup_disk_bytes_ = 0;
-		int writes_since_flush_ = 0;
-		static constexpr int flush_every_n_writes_ = 20;
-
-	public:
-		explicit MemoryCappedSink(std::wstring path) : file_path_(std::move(path)) {}
-
-		void ActivateMemoryBufferTrack() {
-			std::error_code ec;
-			size_t startup_disk_bytes = std::filesystem::file_size(file_path_, ec);
-			if (!ec) {
-				startup_disk_bytes_ = startup_disk_bytes;
-				if (startup_disk_bytes < 10240) {
-					max_runtime_bytes_ = 10240 - startup_disk_bytes; // tracks remainder
-				}
-			}
-		}
-
-	protected:
-		void sink_it_(const spdlog::details::log_msg& msg) override {
-			if (is_initialization_active) return;
-
-			spdlog::memory_buf_t formatted;
-			base_sink<std::mutex>::formatter_->format(msg, formatted);
-			std::string line_str(formatted.data(), formatted.size());
-
-			log_lines_.push_back(line_str);
-			current_bytes_ += line_str.size();
-
-			while (current_bytes_ > max_runtime_bytes_ && !log_lines_.empty()) {
-				current_bytes_ -= log_lines_.front().size();
-				log_lines_.pop_front();
-			}
-
-			if (++writes_since_flush_ >= flush_every_n_writes_) {
-				writes_since_flush_ = 0;
-				flush_();
-			}
-		}
-
-		void flush_() override {
-			std::error_code ec;
-			std::filesystem::resize_file(std::filesystem::path(file_path_), startup_disk_bytes_, ec);
-
-			FILE* file_handle = nullptr;
-			if (_wfopen_s(&file_handle, file_path_.c_str(), L"ab") != 0 || !file_handle) {
-				return;
-			}
-			for (const std::string& line : log_lines_) {
-				fwrite(line.c_str(), sizeof(char), line.size(), file_handle);
-			}
-			fflush(file_handle);
-			fclose(file_handle);
-		}
-	};
-
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
 	SetCursorPosFunc SetCursorPos_Orig = NULL;
 
@@ -126,34 +35,8 @@ namespace RadarKeys {
 		}
 	}
 
-	std::shared_ptr<spdlog::sinks::sink> startup_sink = nullptr;
-	std::shared_ptr<MemoryCappedSink> sliding_sink = nullptr;
-
-	void SetupLog() {
-		std::filesystem::path logDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
-		std::error_code ec;
-		std::filesystem::create_directories(logDir, ec);
-
-		std::filesystem::path logPath = logDir / "radarkeys_trace.txt";
-		std::filesystem::path logPathPrev = logDir / "radarkeys_trace_prev.txt";
-
-		DeleteFileW(logPathPrev.c_str());
-		CopyFileW(logPath.c_str(), logPathPrev.c_str(), FALSE);
-		DeleteFileW(logPath.c_str());
-
-		startup_sink = std::make_shared<StartupFileSink>(logPath.wstring());
-		sliding_sink = std::make_shared<MemoryCappedSink>(logPath.wstring());
-
-		auto logger = std::make_shared<spdlog::logger>("radarkeys", spdlog::sinks_init_list{ startup_sink, sliding_sink });
-		spdlog::set_default_logger(logger);
-		spdlog::set_level(spdlog::level::debug);
-		
-		spdlog::info("RadarKeys log started");
-	}
-
 	// DLL_PROCESS_ATTACH runs under the loader lock - heavy initialization
 	void InitThread() {
-		SetupLog();
 		spdlog::info("RadarKeys InitThread starting");
 
 		if (MH_Initialize() != MH_OK) {
@@ -169,16 +52,6 @@ namespace RadarKeys {
 		InitCursorHook();
 
 		spdlog::info("RadarKeys frame initialized");
-
-		is_initialization_active = false;
-		if (sliding_sink) {
-			sliding_sink->ActivateMemoryBufferTrack();
-		}
-
-		// remove the sinks to the disk
-		if (auto logger = spdlog::get("radarkeys")) {
-			logger->flush();
-		}
 	}
 
 	//--- Lua bindings ---
@@ -235,12 +108,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		break;
 	case DLL_PROCESS_DETACH:
 		RadarKeys::KeyBindMenu::LogCleanShutdown();
-
-		// custom ring buffer. flushes out activities past the success init log
-		if (auto logger = spdlog::get("radarkeys")) {
-			logger->flush();
-		}
-		spdlog::shutdown();
 		break;
 	}
 	return TRUE;
