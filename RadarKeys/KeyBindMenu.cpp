@@ -331,11 +331,18 @@ namespace RadarKeys {
 				}
 			}
 
-			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
-			if (toRun && !hasHoldOptionOnKey) {
-				FireBinding(*toRun);
+			const KeyBind* exactBind = nullptr;
+			for (const auto& bind : bindings) {
+			    if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
+			        exactBind = &bind;
+			        break;
+			    }
+			}
+			
+			if (exactBind && exactBind->holdSeconds <= 0.0f && !hasHoldOptionOnKey) {
+			    FireBinding(*exactBind);
 			} else {
-				holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false, ctrlHeld, shiftHeld, altHeld };
+			    holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false, ctrlHeld, shiftHeld, altHeld };
 			}
 		}
 
@@ -627,26 +634,24 @@ namespace RadarKeys {
 				ImGui::Checkbox("Ctrl", &capturedCtrl); ImGui::Checkbox("Shift", &capturedShift); ImGui::Checkbox("Alt", &capturedAlt); 
 			}
 			if (ImGui::Button("Reset", ImVec2(55, 22))) { 
-				capturedVKey = 0; capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false; 
+			    capturedVKey = 0; 
+			    capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false; 
+			    capturedHoldSeconds = 0.0f;
+			    capturedToggleType = 0;
 			}
 			ImGui::EndGroup(); ImGui::SameLine(205);
 		
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
-				if (capturedLongPressMode) ImGui::BeginDisabled();
 				ImGui::Checkbox("Toggle", &capturedToggleMode);
-				if (capturedLongPressMode) ImGui::EndDisabled();
-		
-				if (capturedToggleMode) ImGui::BeginDisabled();
 				ImGui::Checkbox("Long Press", &capturedLongPressMode);
-				if (capturedToggleMode) ImGui::EndDisabled();
 				
 				if (capturedLongPressMode) {
-					ImGui::SetNextItemWidth(75);
-					ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
-					if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
-					if (ImGui::Button(" - ", ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine(40);
-					if (ImGui::Button(" + ", ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
+				    ImGui::SetNextItemWidth(75);
+				    ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
+				    if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
+				    if (ImGui::Button(" - ", ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine(40);
+				    if (ImGui::Button(" + ", ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
 				}
 			}
 			
@@ -899,17 +904,22 @@ namespace RadarKeys {
 				entry.itemLabel = CombinedDisplayName(bind);
 
 				if (bind.isToggle) {
-					std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
-					std::string fileOff = std::filesystem::path(bind.scriptPathOff).filename().string();
-
-					std::string funcOnStr = bind.functionOn.empty() ? "" : " [" + bind.functionOn + "]";
-					std::string funcOffStr = bind.functionOff.empty() ? "" : " [" + bind.functionOff + "]";
-
-					if (bind.scriptPathOn == bind.scriptPathOff) {
-						entry.detailText = "Toggle: " + fileOn + funcOnStr + " <-> " + funcOffStr;
-					} else {
-						entry.detailText = "Toggle: " + fileOn + funcOnStr + " <-> " + fileOff + funcOffStr;
-					}
+				    std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
+				    std::string fileOff = std::filesystem::path(bind.scriptPathOff).filename().string();
+				    std::string funcOnStr = bind.functionOn.empty() ? "" : " [" + bind.functionOn + "]";
+				    std::string funcOffStr = bind.functionOff.empty() ? "" : " [" + bind.functionOff + "]";
+				    std::string holdPrefix = "";
+				    if (bind.holdSeconds > 0.0f) {
+				        char buf[32];
+				        snprintf(buf, sizeof(buf), "(Hold %.1fs) ", bind.holdSeconds);
+				        holdPrefix = buf;
+				    }
+				
+				    if (bind.scriptPathOn == bind.scriptPathOff) {
+				        entry.detailText = holdPrefix + "Toggle: " + fileOn + funcOnStr + " <-> " + funcOffStr;
+				    } else {
+				        entry.detailText = holdPrefix + "Toggle: " + fileOn + funcOnStr + " <-> " + fileOff + funcOffStr;
+				    }
 				} else {
 					std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
 					std::string funcTapStr = bind.functionTap.empty() ? "" : " [" + bind.functionTap + "]";
