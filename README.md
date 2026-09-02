@@ -42,6 +42,10 @@ To use an assigned script:
              - Enhancements on the input detection system
              - Isolated mofifier keys when held
 [09/01/2026] - Added mouse extra keys to the valid keybinds
+[09/02/2026] = Added LUA function targeting system
+             - Improved log and exception handling systems
+             - Improved UIs for the key assignment and main menu
+             - Refactor codes to improve performance and stability
 ```
 ## Plans ahead
 - [x] ~~Address some of the immediate UI concerns (misspells, formatting, and spacing, etc.)~~
@@ -51,7 +55,7 @@ To use an assigned script:
 - [x] ~~Release the mod on NexusMods (First Official Release)~~
 - [ ] Make some template scripts for a simple and complex script mods
 - [ ] Final clean up (review, reassessment, function refactoring to shorten runtime execution if needed)
-- [ ] Find a way to read and run certain function within the script without passing through every functions on the script
+- [x] ~~Find a way to read and run certain function within the script without passing through every functions on the script~~
 - [ ] Add in ~~mouse~~ and gamepad support
 - [x] ~~Enhance key assignment feature (eliminating the dropdown box selection and instead a direct input detection through RawInput)~~
 - [x] ~~Add in "Hold" functionality to the key assignment~~
