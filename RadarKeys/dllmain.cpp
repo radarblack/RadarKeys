@@ -18,9 +18,10 @@
 #include <filesystem>
 #include <queue>
 #include <fstream>
+#include <atomic>
 
 namespace RadarKeys {
-	static bool is_initialization_active = true;
+	static std::atomic<bool> is_initialization_active{true};
 	class StartupFileSink : public spdlog::sinks::base_sink<std::mutex> {
 	private:
 		std::wstring file_path_;
@@ -48,6 +49,9 @@ namespace RadarKeys {
 		std::queue<std::string> log_lines_;
 		size_t current_bytes_ = 0;
 		size_t max_runtime_bytes_ = 8192; // fallback: set to 8KB 
+		size_t startup_disk_bytes_ = 0;
+		int writes_since_flush_ = 0;
+		static constexpr int flush_every_n_writes_ = 20;
 
 	public:
 		explicit MemoryCappedSink(std::wstring path) : file_path_(std::move(path)) {}
@@ -55,8 +59,11 @@ namespace RadarKeys {
 		void ActivateMemoryBufferTrack() {
 			std::error_code ec;
 			size_t startup_disk_bytes = std::filesystem::file_size(file_path_, ec);
-			if (!ec && startup_disk_bytes < 10240) {
-				max_runtime_bytes_ = 10240 - startup_disk_bytes; // tracks remainder
+			if (!ec) {
+				startup_disk_bytes_ = startup_disk_bytes;
+				if (startup_disk_bytes < 10240) {
+					max_runtime_bytes_ = 10240 - startup_disk_bytes; // tracks remainder
+				}
 			}
 		}
 
@@ -75,9 +82,17 @@ namespace RadarKeys {
 				current_bytes_ -= log_lines_.front().size();
 				log_lines_.pop();
 			}
+
+			if (++writes_since_flush_ >= flush_every_n_writes_) {
+				writes_since_flush_ = 0;
+				flush_();
+			}
 		}
 
 		void flush_() override {
+			std::error_code ec;
+			std::filesystem::resize_file(std::filesystem::path(file_path_), startup_disk_bytes_, ec);
+
 			FILE* file_handle = nullptr;
 			if (_wfopen_s(&file_handle, file_path_.c_str(), L"ab") != 0 || !file_handle) {
 				return;
@@ -89,6 +104,7 @@ namespace RadarKeys {
 			}
 			fflush(file_handle);
 			fclose(file_handle);
+			current_bytes_ = 0;
 		}
 	};
 
@@ -220,6 +236,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		std::thread(RadarKeys::InitThread).detach();
 		break;
 	case DLL_PROCESS_DETACH:
+		RadarKeys::KeyBindMenu::LogCleanShutdown();
+
 		// custom ring buffer. flushes out activities past the success init log
 		if (auto logger = spdlog::get("radarkeys")) {
 			logger->flush();
