@@ -17,6 +17,7 @@
 #include <cassert>
 #include <filesystem>
 #include <queue>
+#include <deque>
 #include <fstream>
 #include <atomic>
 
@@ -46,7 +47,7 @@ namespace RadarKeys {
 	class MemoryCappedSink : public spdlog::sinks::base_sink<std::mutex> {
 	private:
 		std::wstring file_path_;
-		std::queue<std::string> log_lines_;
+		std::deque<std::string> log_lines_;
 		size_t current_bytes_ = 0;
 		size_t max_runtime_bytes_ = 8192; // fallback: set to 8KB 
 		size_t startup_disk_bytes_ = 0;
@@ -75,12 +76,12 @@ namespace RadarKeys {
 			base_sink<std::mutex>::formatter_->format(msg, formatted);
 			std::string line_str(formatted.data(), formatted.size());
 
-			log_lines_.push(line_str);
+			log_lines_.push_back(line_str);
 			current_bytes_ += line_str.size();
 
 			while (current_bytes_ > max_runtime_bytes_ && !log_lines_.empty()) {
 				current_bytes_ -= log_lines_.front().size();
-				log_lines_.pop();
+				log_lines_.pop_front();
 			}
 
 			if (++writes_since_flush_ >= flush_every_n_writes_) {
@@ -97,14 +98,11 @@ namespace RadarKeys {
 			if (_wfopen_s(&file_handle, file_path_.c_str(), L"ab") != 0 || !file_handle) {
 				return;
 			}
-			while (!log_lines_.empty()) {
-				const std::string& line = log_lines_.front();
+			for (const std::string& line : log_lines_) {
 				fwrite(line.c_str(), sizeof(char), line.size(), file_handle);
-				log_lines_.pop();
 			}
 			fflush(file_handle);
 			fclose(file_handle);
-			current_bytes_ = 0;
 		}
 	};
 
@@ -172,14 +170,14 @@ namespace RadarKeys {
 
 		spdlog::info("RadarKeys frame initialized");
 
-		// remove the sinks to the disk
-		if (auto logger = spdlog::get("radarkeys")) {
-			logger->flush();
-		}
-			
 		is_initialization_active = false;
 		if (sliding_sink) {
 			sliding_sink->ActivateMemoryBufferTrack();
+		}
+
+		// remove the sinks to the disk
+		if (auto logger = spdlog::get("radarkeys")) {
+			logger->flush();
 		}
 	}
 
