@@ -66,6 +66,19 @@ namespace RadarKeys {
 				return true;
 			}
 
+			// only swallows input if its from the mouse
+			if (message == WM_INPUT && (IsUnlockCursor() || showCapturePrompt)) {
+				RAWINPUT raw{};
+				UINT size = sizeof(RAWINPUT);
+				
+				// Windows Input API...
+				if (GetRawInputData((HRAWINPUT)l_param, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER)) != (UINT)-1) {
+					if (raw.header.dwType == RIM_TYPEMOUSE) {
+						return false; // should only swallow mouse inputs????
+					}
+				}
+			}
+
 			bool handledMessage = !RawInput::OnMessage(wnd, message, w_param, l_param);
 
 			if (IsUnlockCursor() && ImGui_ImplWin32_WndProcHandler(wnd, message, w_param, l_param) != 0) {
@@ -149,8 +162,8 @@ namespace RadarKeys {
 
 				RawInput::InitializeInput();
 
-				DebuggerMenu::Init();// must come before KeyBindMenu can log anything useful through it
-				KeyBindMenu::Init("F7");// no config file in this build - starting key is just hardcoded here
+				DebuggerMenu::Init();
+				KeyBindMenu::Init("F7");
 			}
 
 			return true;

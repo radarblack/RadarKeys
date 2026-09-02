@@ -68,14 +68,11 @@ namespace RadarKeys {
 			base_sink<std::mutex>::formatter_->format(msg, formatted);
 			std::string line_str(formatted.data(), formatted.size());
 
-			// trimmed overheard margin to fit the log text without bleeding parts
-			size_t true_disk_line_weight = line_str.size() + 20;
-
 			log_lines_.push(line_str);
-			current_bytes_ += true_disk_line_weight;
+			current_bytes_ += line_str.size();
 
 			while (current_bytes_ > max_runtime_bytes_ && !log_lines_.empty()) {
-				current_bytes_ -= (log_lines_.front().size() + 20); // align pop
+				current_bytes_ -= log_lines_.front().size();
 				log_lines_.pop();
 			}
 		}
@@ -130,7 +127,6 @@ namespace RadarKeys {
 		CopyFileW(logPath.c_str(), logPathPrev.c_str(), FALSE);
 		DeleteFileW(logPath.c_str());
 
-		// Initialize sinks
 		startup_sink = std::make_shared<StartupFileSink>(logPath.wstring());
 		sliding_sink = std::make_shared<MemoryCappedSink>(logPath.wstring());
 
