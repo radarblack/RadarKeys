@@ -591,6 +591,7 @@ namespace RadarKeys {
 			LoadBindings(); // may override menuToggleVKey again if radar_keybinds.conf has a persisted MENUKEY
 			for (const auto& bind : bindings) EnsureDispatcherRegistered(bind.vKey);
 			RegisterMenuToggleKey(menuToggleVKey);
+			LogActivity("Menu hotkey set to " + NameForVKey(menuToggleVKey));
 		}
 
 		static USHORT capturedVKey = 0;
@@ -676,6 +677,7 @@ namespace RadarKeys {
 			    capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false; 
 			    capturedHoldSeconds = 0.0f;
 			    capturedToggleType = 0;
+			    LogActivity("Capture prompt reset");
 			}
 			ImGui::EndGroup(); ImGui::SameLine(205);
 		
@@ -998,12 +1000,16 @@ namespace RadarKeys {
 
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
 
-			if (ImGui::Button("Debugger Overlay")) DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
+			if (ImGui::Button("Debugger Overlay")) {
+				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
+				LogActivity(DebuggerMenu::menuOpen ? "Debugger Overlay opened" : "Debugger Overlay closed");
+			}
 			ImGui::SameLine();
 			
 			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
 			if (ImGui::Button(buttonLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) { 
 				isAssigningMenuToggleKey = showCapturePrompt = true; 
+				LogActivity("Opened capture prompt to reassign menu hotkey");
 			}
 			ImGui::Separator();
 
@@ -1068,6 +1074,7 @@ namespace RadarKeys {
 					}
 					
 					showCapturePrompt = true;
+					LogActivity("Opened capture prompt to edit binding " + itemLabel);
 				}
 
 				ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
@@ -1089,6 +1096,7 @@ namespace RadarKeys {
 			if (ImGui::Button("Add New Binding...", ImVec2(165, 24))) {
 				editingBindingIndex = -1;
 				showCapturePrompt = true;
+				LogActivity("Opened capture prompt for new binding");
 			}
 			ImGui::End();
 
