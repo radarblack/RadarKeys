@@ -238,9 +238,6 @@ namespace RadarKeys {
 			frameInitialized = false;
 
 			spdlog::info("OnReset done");
-			if (log != NULL) {
-				log->flush();
-			}
 		}
 
 		void CreateD3DHook() {
