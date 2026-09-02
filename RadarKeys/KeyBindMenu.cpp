@@ -147,18 +147,18 @@ namespace RadarKeys {
 			{"Space", VK_SPACE}, {"Tab", VK_TAB}, {"Enter", VK_RETURN},
 			{"Insert", VK_INSERT}, {"Delete", VK_DELETE},
 			{"Home", VK_HOME}, {"End", VK_END},
-			{"PageUp", VK_PRIOR}, {"PageDown", VK_NEXT},
+			{"Page Up", VK_PRIOR}, {"Page Down", VK_NEXT},
 			{"Up", VK_UP}, {"Down", VK_DOWN}, {"Left", VK_LEFT}, {"Right", VK_RIGHT},
-			{"Numpad0", VK_NUMPAD0}, {"Numpad1", VK_NUMPAD1}, {"Numpad2", VK_NUMPAD2},
-			{"Numpad3", VK_NUMPAD3}, {"Numpad4", VK_NUMPAD4}, {"Numpad5", VK_NUMPAD5},
-			{"Numpad6", VK_NUMPAD6}, {"Numpad7", VK_NUMPAD7}, {"Numpad8", VK_NUMPAD8},
-			{"Numpad9", VK_NUMPAD9},
+			{"Numpad 0", VK_NUMPAD0}, {"Numpad 1", VK_NUMPAD1}, {"Numpad 2", VK_NUMPAD2},
+			{"Numpad 3", VK_NUMPAD3}, {"Numpad 4", VK_NUMPAD4}, {"Numpad 5", VK_NUMPAD5},
+			{"Numpad 6", VK_NUMPAD6}, {"Numpad 7", VK_NUMPAD7}, {"Numpad 8", VK_NUMPAD8},
+			{"Numpad 9", VK_NUMPAD9},
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
 			
 			// added extra mouse keys, excluding left and right click
-			{"MouseWheel", VK_MBUTTON},
-			{"Mouse4", VK_XBUTTON1},
-			{"Mouse5", VK_XBUTTON2}
+			{"Mouse Wheel", VK_MBUTTON},
+			{"Mouse 4", VK_XBUTTON1},
+			{"Mouse 5", VK_XBUTTON2}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
