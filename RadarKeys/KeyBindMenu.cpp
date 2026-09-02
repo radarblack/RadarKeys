@@ -730,9 +730,9 @@ namespace RadarKeys {
 
 				if (capturedToggleMode) {
 					ImGui::AlignTextToFramePadding();
-					ImGui::Text("Toggle Type:"); ImGui::SameLine();
-					ImGui::RadioButton("Single Script", &capturedToggleType, 0); ImGui::SameLine();
-					ImGui::RadioButton("Separate Scripts", &capturedToggleType, 1);
+					ImGui::Text("Script Mode:"); ImGui::SameLine();
+					ImGui::RadioButton("Single", &capturedToggleType, 0); ImGui::SameLine();
+					ImGui::RadioButton("Dual", &capturedToggleType, 1);
 					ImGui::Separator(); ImGui::Spacing();
 
 					if (capturedToggleType == 0) {
