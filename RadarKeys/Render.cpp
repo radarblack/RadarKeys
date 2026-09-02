@@ -264,7 +264,7 @@ namespace RadarKeys {
 				std::wstring title = L"MGSTPP - RadarKeys";
 				std::wstring message =
 					L"ERROR: Could not hook D3D11\n"
-					L"See radarkeys_log.txt in MGS_TPP folder for details.\n";
+					L"See radarkeys_trace.txt in MGS_TPP folder for details.\n";
 				MessageBox(NULL, message.c_str(), title.c_str(), NULL);
 			}
 		}
