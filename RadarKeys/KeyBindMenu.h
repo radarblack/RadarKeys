@@ -37,6 +37,9 @@ namespace RadarKeys {
 		// call once per frame when the key is held (?). Doubt if this works. Hopefully. lol
 		void Update();
 
+		// log tracking for crash errors
+		void LogCleanShutdown();
+
 		extern std::vector<KeyBind> bindings;
 		extern bool menuOpen;
 	}
