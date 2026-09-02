@@ -62,13 +62,24 @@ namespace RadarKeys {
 			return true;
 		}
 
+		static std::ofstream activityLogStream;
+		bool PreviousSessionEndedCleanly(const std::string& logPath) {
+			std::ifstream in(logPath);
+			if (!in) return true;
+
+			std::string line, lastNonEmptyLine;
+			while (std::getline(in, line)) {
+				if (!line.empty()) lastNonEmptyLine = line;
+			}
+			return lastNonEmptyLine.empty() || lastNonEmptyLine == "[STATE] CLEAN_EXIT";
+		}
+
 		// improved activity tracker and logging
 		void LogActivity(const std::string& message, bool success = true) {
 			EnsureBindsDirectory();
 
 			// opened across all calls
-			static std::ofstream logStream;
-			if (!logStream.is_open()) {
+			if (!activityLogStream.is_open()) {
 				std::string currentLog = GetLogFileName();
 				std::string prevLog = currentLog;
 				size_t replacePos = prevLog.find("radarkeys_logs.txt");
@@ -78,11 +89,7 @@ namespace RadarKeys {
 
 				std::error_code ec;
 				if (std::filesystem::exists(currentLog, ec)) {
-					// check if the last session ended clean
-					std::ifstream checkStream(currentLog);
-					std::string firstLine;
-					std::getline(checkStream, firstLine);
-					checkStream.close();
+					bool wasClean = PreviousSessionEndedCleanly(currentLog);
 
 					// overwrite the prev log
 					std::filesystem::copy_file(currentLog, prevLog, std::filesystem::copy_options::overwrite_existing, ec);
@@ -90,21 +97,16 @@ namespace RadarKeys {
 					// clear the new log
 					std::ofstream clearStream(currentLog, std::ios::trunc);
 					
-					// appends if the check says true
-					if (firstLine == "[STATE] RUNNING_ABRUPT_EXIT_GUARD") {
+					if (!wasClean) {
 						clearStream << "[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).\n";
 					}
 				}
 
-				logStream.open(currentLog, std::ios::app);
-				if (!logStream) {
+				activityLogStream.open(currentLog, std::ios::app);
+				if (!activityLogStream) {
 					spdlog::warn("KeyBindMenu::LogActivity: couldn't open {} for writing", GetLogFileName());
 					return;
 				}
-
-				// abrupt exit marker
-				logStream << "[STATE] RUNNING_ABRUPT_EXIT_GUARD\n";
-				logStream.flush();
 			}
 
 			std::time_t nowTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -117,8 +119,17 @@ namespace RadarKeys {
 			char timeBuf[32];
 			std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &localTm);
 
-			logStream << "[" << timeBuf << "] [" << (success ? "OK" : "FAIL") << "] " << message << "\n";
-			logStream.flush();
+			activityLogStream << "[" << timeBuf << "] [" << (success ? "OK" : "FAIL") << "] " << message << "\n";
+			activityLogStream.flush();
+		}
+
+		void LogCleanShutdown() {
+			if (!activityLogStream.is_open()) {
+				activityLogStream.open(GetLogFileName(), std::ios::app);
+				if (!activityLogStream) return;
+			}
+			activityLogStream << "[STATE] CLEAN_EXIT\n";
+			activityLogStream.flush();
 		}
 
 		// Modifiers as checkboxes; dropdown shows persistable base keys only.
@@ -217,8 +228,6 @@ namespace RadarKeys {
 			return vKey == VK_F2 || vKey == VK_F3 || vKey == VK_ESCAPE || vKey == menuToggleVKey;
 		}
 
-		// binding free if exact (vKey,Ctrl,Shift,Alt) tuple unused; modifiers create separate bindings.
-		// updated to allow a Tap and a Hold configuration on the same key combo
 		bool IsComboAvailable(USHORT vKey, bool needCtrl, bool needShift, bool needAlt, float holdSeconds) {
 			if (IsReservedVKey(vKey)) return false;
 			for (const auto& bind : bindings) {
@@ -259,6 +268,7 @@ namespace RadarKeys {
 				}
 			}
 
+			// If no exact modifier combination was found, fall back to the plain key binding profile cleanly
 			return exactMatch ? exactMatch : plainFallbackMatch;
 		}
 
@@ -884,7 +894,6 @@ namespace RadarKeys {
 			ImGui::End();
 		}
 
-		// halfway through, I realized like wth am I doing around here, and how the heck did I think of this stuff. lol
 		void RebuildDisplayCacheIfNeeded() {
 			if (!displayCacheDirty) return;
 
@@ -981,7 +990,7 @@ namespace RadarKeys {
 				ImGui::BeginGroup();
 				ImGui::TextWrapped("%s", displayCache[i].detailText.c_str());
 				ImGui::EndGroup();
-				
+
 				float detailTextHeight = ImGui::GetItemRectSize().y;
 				float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
 				float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
