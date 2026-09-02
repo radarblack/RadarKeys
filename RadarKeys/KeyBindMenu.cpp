@@ -42,7 +42,7 @@ namespace RadarKeys {
 		const std::string& GetLogFileName() {
 			static std::string cached;
 			if (cached.empty()) {
-				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radarkeys_log.txt").string();
+				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radarkeys_logs.txt").string();
 			}
 			return cached;
 		}
@@ -259,7 +259,6 @@ namespace RadarKeys {
 				}
 			}
 
-			// If no exact modifier combination was found, fall back to the plain key binding profile cleanly
 			return exactMatch ? exactMatch : plainFallbackMatch;
 		}
 
@@ -331,18 +330,11 @@ namespace RadarKeys {
 				}
 			}
 
-			const KeyBind* exactBind = nullptr;
-			for (const auto& bind : bindings) {
-			    if (bind.vKey == vKey && bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
-			        exactBind = &bind;
-			        break;
-			    }
-			}
-			
-			if (exactBind && exactBind->holdSeconds <= 0.0f && !hasHoldOptionOnKey) {
-			    FireBinding(*exactBind);
+			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
+			if (toRun && !hasHoldOptionOnKey) {
+				FireBinding(*toRun);
 			} else {
-			    holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false, ctrlHeld, shiftHeld, altHeld };
+				holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false, ctrlHeld, shiftHeld, altHeld };
 			}
 		}
 
@@ -984,17 +976,15 @@ namespace RadarKeys {
 				float buttonHeight = 20.0f;
 				const float keyColumnX = 250.0f;
 
-				float wrapWidth = ImGui::GetContentRegionAvail().x - keyColumnX - ImGui::GetStyle().ItemSpacing.x;
-				if (wrapWidth < 10.0f) wrapWidth = 10.0f;
-				float detailTextHeight = ImGui::CalcTextSize(displayCache[i].detailText.c_str(), nullptr, false, wrapWidth).y;
-				float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
-				float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
-
 				ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
 				ImGui::AlignTextToFramePadding();
 				ImGui::BeginGroup();
 				ImGui::TextWrapped("%s", displayCache[i].detailText.c_str());
 				ImGui::EndGroup();
+				
+				float detailTextHeight = ImGui::GetItemRectSize().y;
+				float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
+				float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
 
 				ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
 				if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = i;
