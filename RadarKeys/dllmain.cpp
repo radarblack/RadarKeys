@@ -6,6 +6,7 @@
 #include "KeyBindMenu.h"
 #include "DebuggerMenu.h"
 #include "LuaKeyState.h"
+#include "ModKeyBindings.h"
 #include <MinHook.h>
 
 #include "spdlog/spdlog.h"
@@ -180,6 +181,23 @@ namespace RadarKeys {
 		);
 		return 0;
 	}
+
+	static int l_GetModKeyBinding(lua_State* L) {
+		const char* scriptName = LuaToString(L, 1);
+		const char* functionName = LuaToString(L, 2);
+		if (!scriptName || !functionName) {
+			LuaPushNil(L);
+			return 1;
+		}
+		std::string override = ModKeyBindings::GetOverride(scriptName, functionName);
+		if (override.empty()) {
+			LuaPushNil(L);
+		}
+		else {
+			LuaPushString(L, override.c_str());
+		}
+		return 1;
+	}
 }
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
@@ -198,6 +216,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "ResetRepeat", RadarKeys::l_ResetRepeat },
 		{ "DebugLog", RadarKeys::l_DebugLog },
 		{ "DescribeKey", RadarKeys::l_DescribeKey },
+		{ "GetModKeyBinding", RadarKeys::l_GetModKeyBinding },
 		{ NULL, NULL }
 	};
 
