@@ -63,35 +63,35 @@ namespace RadarKeys {
 		bool LogScriptAttempt(const std::string& scriptPath) {
 			bool exists = std::filesystem::exists(scriptPath);
 			if (!exists) {
-				spdlog::error("[SCR][DLL] missing - SKIP: {}", scriptPath);
+				spdlog::error("[SCR][DLL] MISSING - SKIP: {}", scriptPath);
 				if (logScriptResult) {
-					AddLogEntry("[SCR][DLL] missing - SKIP: " + scriptPath);
+					AddLogEntry("[SCR][DLL] MISSING - SKIP: " + scriptPath);
 				}
 				return false;
 			}
-			spdlog::debug("[SCR][DLL] attempt: {}", scriptPath);
+			spdlog::debug("[SCR][DLL] ATTEMPT: {}", scriptPath);
 			if (logScriptResult) {
-				AddLogEntry("[SCR][DLL] attempt: " + scriptPath);
+				AddLogEntry("[SCR][DLL] ATTEMPT: " + scriptPath);
 			}
 			return true;
 		}
 
 		void OnDoScriptResult(std::vector<std::string> args) {
 			if (args.size() < 3) {
-				spdlog::warn("DebuggerMenu::OnDoScriptResult: malformed args (size {})", args.size());
+				spdlog::warn("DebuggerMenu::OnDoScriptResult: Malformed arguments feed (size {})", args.size());
 				return;
 			}
 
 			bool success = args[2] == "1";
 			if (success) {
-				spdlog::debug("[SCR][LUA] success");
+				spdlog::debug("[SCR][LUA] SUCCESS");
 				if (logScriptResult) {
-					AddLogEntry("[SCR][LUA] success");
+					AddLogEntry("[SCR][LUA] SUCCESS");
 				}
 			}
 			else {
 				if (args.size() < 4) {
-					spdlog::warn("DebuggerMenu::OnDoScriptResult: script failed but no error message provided (size {})", args.size());
+					spdlog::warn("DebuggerMenu::OnDoScriptResult: Script failed with no message provided (size {})", args.size());
 					return;
 				}
 
@@ -122,10 +122,10 @@ namespace RadarKeys {
 				logLuaDebug = allOn;
 			}
 			ImGui::Separator();
-			ImGui::Checkbox("Log key bind / unbind", &logBindUnbind);
-			ImGui::Checkbox("Log button presses", &logButtonPress);
-			ImGui::Checkbox("Log script run attempts (success/fail, dll-side vs lua-side)", &logScriptResult);
-			ImGui::Checkbox("Log script debug messages (RadarKeys.DebugLog)", &logLuaDebug);
+			ImGui::Checkbox("Log Key Bind / Unbind", &logBindUnbind);
+			ImGui::Checkbox("Log Button Press", &logButtonPress);
+			ImGui::Checkbox("Log Script Attempts (DLL vs. LUA error check)", &logScriptResult);
+			ImGui::Checkbox("Log Script Debug Message (RadarKeys.DebugLog)", &logLuaDebug);
 
 			ImGui::Separator();
 			if (ImGui::Button("Clear Log")) {
