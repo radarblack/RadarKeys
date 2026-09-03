@@ -80,7 +80,6 @@ namespace RadarKeys {
 			return lastNonEmptyLine.empty() || lastNonEmptyLine == "[STATE] CLEAN_EXIT";
 		}
 
-		// once-per-session setup: rotate prev log, detect a dirty previous exit, and record the baseline byte size we truncate back to on every flush
 		void EnsureActivityLogReady() {
 			if (activityLogReady) return;
 			EnsureBindsDirectory();
@@ -96,7 +95,6 @@ namespace RadarKeys {
 			bool wasClean = true;
 			if (std::filesystem::exists(currentLog, ec)) {
 				wasClean = PreviousSessionEndedCleanly(currentLog);
-				// overwrite the prev log
 				std::filesystem::copy_file(currentLog, prevLog, std::filesystem::copy_options::overwrite_existing, ec);
 			}
 
@@ -112,7 +110,6 @@ namespace RadarKeys {
 			activityLogReady = true;
 		}
 
-		// rewrites the file as [baseline] + [currently retained window], without dropping the window from memory
 		void FlushActivityLog() {
 			std::string currentLog = GetLogFileName();
 			std::error_code ec;
@@ -197,6 +194,7 @@ namespace RadarKeys {
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
 		std::string NameForVKey(USHORT vKey) {
+			// faster entry scanning
 			for (const auto& entry : vkNameTable) {
 				if (entry.vKey == vKey) return entry.name;
 			}
@@ -725,8 +723,6 @@ namespace RadarKeys {
 		
 			bool isUpperPathValid = false, isLowerPathValid = false;
 			int scriptStatus = 0, lowerStatus = 0;
-
-			// gets rid of the repeating disk check for the file
 			static char lastStatCheckedOnBuffer[512] = "";
 			static int cachedOnStatus = 0;
 			static char lastStatCheckedOffBuffer[512] = "";
@@ -993,38 +989,53 @@ namespace RadarKeys {
 			ImGui::Separator();
 
 			if (ImGui::CollapsingHeader("Keys Polled by Scripts", ImGuiTreeNodeFlags_DefaultOpen)) {
-				std::vector<USHORT> trackedVKeys = LuaKeyState::GetTrackedVKeys();
+				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
 				ImGui::BeginChild("TrackedScriptKeys", ImVec2(0, 150), true);
-				if (trackedVKeys.empty()) {
+				if (trackedKeys.empty()) {
 					ImGui::TextDisabled("(none yet - a key shows up here the first time a script queries it via RadarKeys.OnButtonDown/ButtonHeld/etc)");
 				}
 				else {
-					for (USHORT vKey : trackedVKeys) {
-						ImGui::PushID(vKey);
+					for (const LuaKeyState::TrackedKeyInfo& info : trackedKeys) {
+						ImGui::PushID(info.vKey);
 						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
 						float rowTopY = ImGui::GetCursorPosY();
 						float buttonHeight = 20.0f;
 						const float keyColumnX = 250.0f;
 
-						bool isDown = RawInput::IsKeyHeldReal(vKey);
+						std::string detailText;
+						if (info.hasDescription) {
+							std::string funcStr = info.functionName.empty() ? "" : " [" + info.functionName + "]";
+							detailText = "-> " + info.scriptName + funcStr;
+						}
+						else {
+							detailText = "-> (undescribed - call RadarKeys.DescribeKey(...) to label this)";
+						}
+
 						ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
 						ImGui::AlignTextToFramePadding();
 						ImGui::BeginGroup();
-						ImGui::TextColored(
-							isDown ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
-							"%s", isDown ? "DOWN" : "up"
-						);
+						ImGui::TextWrapped("%s", detailText.c_str());
 						ImGui::EndGroup();
 
 						float detailTextHeight = ImGui::GetItemRectSize().y;
 						float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
 						float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
 
+						ImVec4 keyNameColor;
+						if (info.hasToggleState) {
+							keyNameColor = info.toggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
+						}
+						else {
+							keyNameColor = info.isPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+						}
+
 						ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
 						ImGui::BeginDisabled();
 						ImGui::Button("Script", ImVec2(55, buttonHeight));
 						ImGui::SameLine();
-						ImGui::Button(NameForVKey(vKey).c_str(), ImVec2(130, buttonHeight));
+						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
+						ImGui::Button(NameForVKey(info.vKey).c_str(), ImVec2(130, buttonHeight));
+						ImGui::PopStyleColor();
 						ImGui::EndDisabled();
 
 						ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
