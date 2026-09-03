@@ -17,10 +17,8 @@ namespace RadarKeys {
 			RawInput::ActionHandle handle = 0;
 
 			bool isPressed = false;
-
 			bool downEdgePending = false;
 			bool upEdgePending = false;
-
 			bool heldStartSet = false;
 			bool onHoldStartSet = false;
 			bool repeatStartSet = false;
