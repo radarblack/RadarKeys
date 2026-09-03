@@ -90,6 +90,22 @@ namespace RadarKeys {
 		g_lua_pushnil(L);
 	}
 
+	void LuaPushNumber(lua_State* L, double n) {
+		if (!g_lua_pushnumber) {
+			return;
+		}
+		g_lua_pushnumber(L, (lua_Number)n);
+	}
+
+	void LuaPushBool(lua_State* L, bool b) {
+		if (b) {
+			LuaPushNumber(L, 1);
+		}
+		else {
+			LuaPushNil(L);
+		}
+	}
+
 	void LuaRawSetIndexed(lua_State* L, int tableAbsIdx, int n, const char* value) {
 		if (!g_lua_pushnumber || !g_lua_pushstring || !g_lua_rawset) {
 			return;
