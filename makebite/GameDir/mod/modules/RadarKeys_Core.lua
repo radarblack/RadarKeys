@@ -14,6 +14,20 @@ local RK = RadarKeysOrErr
 _G.RadarKeys = RK
 _G.RadarKeys_Core = this
 
+--[[ Key Polling API:
+    RK.ButtonDown(name)       -- raw physical state, no edge/hold tracking
+    RK.OnButtonDown(name)     -- true once, on the press
+    RK.OnButtonUp(name)       -- true once, on the release
+    RK.ButtonHeld(name)       -- true continuously once held past ~0.9s
+    RK.OnButtonHoldTime(name) -- true once, when that ~0.9s threshold is crossed
+    RK.OnButtonRepeat(name)   -- true on each accelerating repeat tick while held
+    RK.GetRepeatMult(name)    -- current repeat acceleration multiplier
+    RK.ResetRepeat(name)      -- clears hold/repeat timers for that key
+
+  Example - prone directly on Numpad7 instead of requiring a TOGGLE_LIGHT button-mask entry using the Shortcut.lua mod:
+    if RK.OnButtonDown("X") then prone() end
+]]
+
 local function RunDoScript(luaExpr)
   InfCore.Log("RadarKeys DoScript:"..luaExpr)
   local chunk,err=loadstring(luaExpr)
