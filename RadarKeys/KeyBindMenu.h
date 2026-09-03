@@ -40,6 +40,10 @@ namespace RadarKeys {
 		// log tracking for crash errors
 		void LogCleanShutdown();
 
+		// shared here so other modules (LuaKeyState) can resolve the same names Lua scripts see in the UI.
+		std::string NameForVKey(USHORT vKey);
+		int VKeyForName(const std::string& name); // returns -1 if not found
+
 		extern std::vector<KeyBind> bindings;
 		extern bool menuOpen;
 	}
