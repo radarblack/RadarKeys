@@ -17,6 +17,7 @@ namespace RadarKeys {
 			RawInput::ActionHandle handle = 0;
 
 			bool isPressed = false;
+
 			bool downEdgePending = false;
 			bool upEdgePending = false;
 
@@ -111,28 +112,30 @@ namespace RadarKeys {
 			return false;
 		}
 
-		bool ButtonHeld(USHORT vKey) {
+		bool ButtonHeld(USHORT vKey, double holdSecondsOverride) {
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
+			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			if (s.isPressed && s.heldStartSet) {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.heldStart).count();
-				return elapsed > kHoldTimeSeconds;
+				return elapsed > holdTime;
 			}
 			return false;
 		}
 
-		bool OnButtonHoldTime(USHORT vKey) {
+		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride) {
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
+			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			if (s.isPressed && s.onHoldStartSet) {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.onHoldStart).count();
-				if (elapsed > kHoldTimeSeconds) {
+				if (elapsed > holdTime) {
 					s.onHoldStartSet = false;
 					return true;
 				}
