@@ -2,6 +2,7 @@
 #include "RawInput.h"
 #include "LuaBridge.h"
 #include "DebuggerMenu.h"
+#include "LuaKeyState.h"
 #include "Util.h"
 #include "HookUtils.h"
 #include "spdlog/spdlog.h"
@@ -509,7 +510,6 @@ namespace RadarKeys {
 					std::string resolvedOn = ResolveScriptPath(pathOn);
 					std::string resolvedOff = pathOff.empty() ? "" : ResolveScriptPath(pathOff);
 
-					// reconstructing nodes
 					KeyBind b{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, resolvedOn, resolvedOff, false, holdSeconds };
 					b.functionOn = funcOn;
 					b.functionOff = funcOff;
@@ -725,8 +725,6 @@ namespace RadarKeys {
 		
 			bool isUpperPathValid = false, isLowerPathValid = false;
 			int scriptStatus = 0, lowerStatus = 0;
-
-			// gets rid of the repeating disk check for the file
 			static char lastStatCheckedOnBuffer[512] = "";
 			static int cachedOnStatus = 0;
 			static char lastStatCheckedOffBuffer[512] = "";
@@ -991,6 +989,26 @@ namespace RadarKeys {
 				LogActivity("Menu Key Reassignment Prompt opened");
 			}
 			ImGui::Separator();
+
+			if (ImGui::CollapsingHeader("Keys Polled by Scripts", ImGuiTreeNodeFlags_DefaultOpen)) {
+				std::vector<USHORT> trackedVKeys = LuaKeyState::GetTrackedVKeys();
+				ImGui::BeginChild("TrackedScriptKeys", ImVec2(0, 80), true);
+				if (trackedVKeys.empty()) {
+					ImGui::TextDisabled("(none yet - a key shows up here the first time a script queries it via RadarKeys.OnButtonDown/ButtonHeld/etc)");
+				}
+				else {
+					for (USHORT vKey : trackedVKeys) {
+						bool isDown = RawInput::IsKeyHeldReal(vKey);
+						ImGui::TextColored(
+							isDown ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
+							"%s - %s", NameForVKey(vKey).c_str(), isDown ? "DOWN" : "up"
+						);
+					}
+				}
+				ImGui::EndChild();
+				ImGui::TextDisabled("Exact name string to use from Lua - compare against what your script has assigned.");
+				ImGui::Separator();
+			}
 
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
