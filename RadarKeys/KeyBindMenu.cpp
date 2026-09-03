@@ -117,7 +117,7 @@ namespace RadarKeys {
 			std::ofstream out(currentLog, std::ios::app);
 			
 			if (!out) {
-				spdlog::warn("KeyBindMenu::FlushActivityLog: couldn't open {} for writing", currentLog);
+				spdlog::warn("KeyBindMenu::FlushActivityLog: Unable to open {} for writing.", currentLog);
 				return;
 			}
 			for (const std::string& line : activityLogLines) {
@@ -309,21 +309,18 @@ namespace RadarKeys {
 			if (bind.isToggle) {
 				targetPath = bind.toggleState ? bind.scriptPathOff : bind.scriptPathOn;
 				targetFunc = bind.toggleState ? bind.functionOff : bind.functionOn;
-				bind.toggleState = !bind.toggleState; // Alternate toggle state assignment
+				bind.toggleState = !bind.toggleState;
 			}
 
-			// check if the file exist
 			if (DebuggerMenu::LogScriptAttempt(targetPath)) {
-				// if target function is assigned, it runs that specific name block.
-				// fallback: runs the whole script
 				if (!targetFunc.empty()) {
 					std::string luaPayload = "DoScript|local f = loadfile([[" + targetPath + "]]); if f then f(); if " + targetFunc + " then " + targetFunc + "(); end end";
 					LuaBridge::QueueMessageIn(luaPayload);
-					LogActivity("Fired script " + targetPath + " [" + targetFunc + "]");
+					LogActivity("Script ran " + targetPath + " [" + targetFunc + "]");
 				} else {
 					// fallback if all checks fail
 					LuaBridge::QueueMessageIn("DoScript|dofile([[" + targetPath + "]])");
-					LogActivity("Fired script " + targetPath);
+					LogActivity("Script ran " + targetPath);
 				}
 			} else {
 				LogActivity("Script not found: " + targetPath, false);
@@ -386,7 +383,7 @@ namespace RadarKeys {
 				if (holdBind && holdBind->holdSeconds > 0.0f) {
 					if (std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count() >= holdBind->holdSeconds) {
 						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
-						LogActivity(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
+						LogActivity(NameForVKey(vKey) + " held for " + std::to_string(holdBind->holdSeconds) + "s");
 						FireBinding(*holdBind); 
 						track.fired = true;
 					}
@@ -412,8 +409,8 @@ namespace RadarKeys {
 			EnsureBindsDirectory();
 			std::ofstream outFile(GetBindsFileName());
 			if (!outFile) {
-				spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", GetBindsFileName());
-				LogActivity("Save bindings failed: couldn't open " + GetBindsFileName() + " for writing", false);
+				spdlog::warn("KeyBindMenu::SaveBindings: Unable to open {} for writing.", GetBindsFileName());
+				LogActivity("Save Bindings failed: Unable to open " + GetBindsFileName() + " for writing,,", false);
 				return;
 			}
 			
@@ -445,8 +442,8 @@ namespace RadarKeys {
 		void LoadBindings() {
 			std::ifstream inFile(GetBindsFileName());
 			if (!inFile) {
-				spdlog::debug("KeyBindMenu::LoadBindings: no {} yet (fine on first run)", GetBindsFileName());
-				LogActivity("No existing bindings file yet at " + GetBindsFileName() + " (fine on first run)");
+				spdlog::debug("KeyBindMenu::LoadBindings: No {} yet (fine on first run)", GetBindsFileName());
+				LogActivity("No existing bindings file yet at " + GetBindsFileName() + " (fine on first run).");
 				return;
 			}
 
@@ -455,7 +452,7 @@ namespace RadarKeys {
 				if ((line = trim(line)).empty()) continue;
 				std::vector<std::string> parts = split(line, "|");
 				if (parts.size() < 2) {
-					spdlog::warn("KeyBindMenu::LoadBindings: skipping malformed line: {}", line);
+					spdlog::warn("KeyBindMenu::LoadBindings: Skipping malformed line: {}", line);
 					LogActivity("Skipped malformed line while loading bindings: " + line, false);
 					continue;
 				}
@@ -464,15 +461,15 @@ namespace RadarKeys {
 					int vKey = VKeyForName(trim(parts[1]));
 					if (vKey != -1) menuToggleVKey = (USHORT)vKey;
 					else {
-						spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
-						LogActivity("Unknown MENUKEY name '" + parts[1] + "', keeping default", false);
+						spdlog::warn("KeyBindMenu::LoadBindings: Unknown MENUKEY name '{}', keeping default.", parts[1]);
+						LogActivity("Unknown MENUKEY name '" + parts[1] + "', keeping default.", false);
 					}
 				}
 				else if (parts[0] == "BIND" && parts.size() >= 7) {
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
 					if (vKey == -1) {
-						spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName);
-						LogActivity("Unknown Key name '" + keyName + "', skipping binding", false);
+						spdlog::warn("KeyBindMenu::LoadBindings: Unknown key name '{}', skipping binding.", keyName);
+						LogActivity("Unknown Key name '" + keyName + "', skipping binding.", false);
 						continue;
 					}
 					
@@ -515,7 +512,7 @@ namespace RadarKeys {
 					bindings.push_back(b);
 				}
 				else if (parts[0] == "BIND") {
-					spdlog::warn("KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}", line);
+					spdlog::warn("KeyBindMenu::LoadBindings: Skipping old-format/malformed BIND line: {}", line);
 					LogActivity("Skipped old-format/malformed BIND line: " + line, false);
 				}
 			}
@@ -534,7 +531,7 @@ namespace RadarKeys {
 			EnsureDispatcherRegistered(vKey);
 			SaveBindings();
 			MarkDisplayCacheDirty();
-			DebuggerMenu::LogBindEvent("Nound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
+			DebuggerMenu::LogBindEvent("Bound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
 			LogActivity("Bound " + CombinedDisplayName(bindings.back()) + " (toggle: " + (isToggle ? "YES" : "NO") + ")");
 		}
 
@@ -988,11 +985,11 @@ namespace RadarKeys {
 			}
 			ImGui::Separator();
 
-			if (ImGui::CollapsingHeader("Keys Polled by Scripts", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (ImGui::CollapsingHeader("Keys from Scripts", ImGuiTreeNodeFlags_DefaultOpen)) {
 				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
 				ImGui::BeginChild("TrackedScriptKeys", ImVec2(0, 150), true);
 				if (trackedKeys.empty()) {
-					ImGui::TextDisabled("(none yet - a key shows up here the first time a script queries it via RadarKeys.OnButtonDown/ButtonHeld/etc)");
+					ImGui::TextDisabled("(None yet - Keys will show up here once queried via RadarKeys.OnButtonDown/ButtonHeld/etc) from the mod script.");
 				}
 				else {
 					for (const LuaKeyState::TrackedKeyInfo& info : trackedKeys) {
@@ -1008,7 +1005,7 @@ namespace RadarKeys {
 							detailText = "-> " + info.scriptName + funcStr;
 						}
 						else {
-							detailText = "-> (undescribed - call RadarKeys.DescribeKey(...) to label this)";
+							detailText = "-> (Unidentified - Key was not described in the mod script.)";
 						}
 
 						ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
