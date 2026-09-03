@@ -64,7 +64,7 @@ namespace RadarKeys {
 		static std::deque<std::string> activityLogLines;
 		static size_t activityLogBytes = 0;
 		static size_t activityLogBaselineBytes = 0;
-		static size_t activityLogMaxBytes = 10240; // 10KB cap, same budget as the old trace log
+		static size_t activityLogMaxBytes = 10240;
 		static int activityLogWritesSinceFlush = 0;
 		static bool activityLogReady = false;
 		static constexpr int activityLogFlushEveryNWrites = 20;
@@ -180,18 +180,18 @@ namespace RadarKeys {
 			{"Space", VK_SPACE}, {"Tab", VK_TAB}, {"Enter", VK_RETURN},
 			{"Insert", VK_INSERT}, {"Delete", VK_DELETE},
 			{"Home", VK_HOME}, {"End", VK_END},
-			{"PageUp", VK_PRIOR}, {"PageDown", VK_NEXT},
+			{"Page Up", VK_PRIOR}, {"Page Down", VK_NEXT},
 			{"Up", VK_UP}, {"Down", VK_DOWN}, {"Left", VK_LEFT}, {"Right", VK_RIGHT},
-			{"Numpad0", VK_NUMPAD0}, {"Numpad1", VK_NUMPAD1}, {"Numpad2", VK_NUMPAD2},
-			{"Numpad3", VK_NUMPAD3}, {"Numpad4", VK_NUMPAD4}, {"Numpad5", VK_NUMPAD5},
-			{"Numpad6", VK_NUMPAD6}, {"Numpad7", VK_NUMPAD7}, {"Numpad8", VK_NUMPAD8},
-			{"Numpad9", VK_NUMPAD9},
+			{"Numpad 0", VK_NUMPAD0}, {"Numpad 1", VK_NUMPAD1}, {"Numpad 2", VK_NUMPAD2},
+			{"Numpad 3", VK_NUMPAD3}, {"Numpad 4", VK_NUMPAD4}, {"Numpad 5", VK_NUMPAD5},
+			{"Numpad 6", VK_NUMPAD6}, {"Numpad 7", VK_NUMPAD7}, {"Numpad 8", VK_NUMPAD8},
+			{"Numpad 9", VK_NUMPAD9},
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
 			
 			// added extra mouse keys, excluding left and right click
-			{"MouseWheel", VK_MBUTTON},
-			{"Mouse4", VK_XBUTTON1},
-			{"Mouse5", VK_XBUTTON2}
+			{"Mouse Wheel", VK_MBUTTON},
+			{"Mouse 4", VK_XBUTTON1},
+			{"Mouse 5", VK_XBUTTON2}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
@@ -474,7 +474,7 @@ namespace RadarKeys {
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
 					if (vKey == -1) {
 						spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName);
-						LogActivity("Unknown key name '" + keyName + "', skipping binding", false);
+						LogActivity("Unknown Key name '" + keyName + "', skipping binding", false);
 						continue;
 					}
 					
@@ -536,7 +536,7 @@ namespace RadarKeys {
 			EnsureDispatcherRegistered(vKey);
 			SaveBindings();
 			MarkDisplayCacheDirty();
-			DebuggerMenu::LogBindEvent("bound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
+			DebuggerMenu::LogBindEvent("Nound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
 			LogActivity("Bound " + CombinedDisplayName(bindings.back()) + " (toggle: " + (isToggle ? "YES" : "NO") + ")");
 		}
 
@@ -552,7 +552,7 @@ namespace RadarKeys {
 			RemoveDispatcherIfUnused(vKey);
 			SaveBindings();
 			MarkDisplayCacheDirty();
-			DebuggerMenu::LogBindEvent("unbound " + removedDesc);
+			DebuggerMenu::LogBindEvent("Unbound " + removedDesc);
 			LogActivity("Unbound " + removedDesc);
 		}
 
@@ -665,7 +665,7 @@ namespace RadarKeys {
 			    capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false; 
 			    capturedHoldSeconds = 0.0f;
 			    capturedToggleType = 0;
-			    LogActivity("Capture prompt reset");
+			    LogActivity("Keybind has been reset");
 			}
 			ImGui::EndGroup(); ImGui::SameLine(205);
 		
@@ -774,7 +774,7 @@ namespace RadarKeys {
 
 					if (capturedToggleType == 0) {
 						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
-						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target specific global functions inside the file.");
+						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target specific global functions inside the file");
 						ImGui::SameLine(); ImGui::Text("Script Path:");
 						
 						ImGui::SetNextItemWidth(-1);
@@ -792,7 +792,7 @@ namespace RadarKeys {
 					} 
 					else {
 						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
-						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Enable script.");
+						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Enable Script");
 						ImGui::SameLine(); ImGui::Text("Enable Script Path:");
 
 						ImGui::SetNextItemWidth(-1);
@@ -806,7 +806,7 @@ namespace RadarKeys {
 
 						ImGui::Spacing();
 						ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff); ImGui::SameLine();
-						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Disable script.");
+						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Disable Script");
 						
 						ImGui::SameLine(); ImGui::Text("Disable Script Path:");
 						ImGui::SetNextItemWidth(-1);
@@ -821,7 +821,7 @@ namespace RadarKeys {
 				} 
 				else {
 					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn); ImGui::SameLine();
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside this script file.");
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside this script file");
 					
 					ImGui::SameLine(); ImGui::Text("Script Path:");
 					ImGui::SetNextItemWidth(-1);
@@ -866,8 +866,8 @@ namespace RadarKeys {
 					menuToggleVKey = capturedVKey; 
 					menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
 					SaveBindings(); 
-					DebuggerMenu::LogBindEvent("Main Menu Activation Hotkey dynamically reassigned to: " + NameForVKey(capturedVKey));
-					LogActivity("Menu hotkey reassigned to " + NameForVKey(capturedVKey));
+					DebuggerMenu::LogBindEvent("Menu Hotkey reassigned to: " + NameForVKey(capturedVKey));
+					LogActivity("Menu Hotkey reassigned to " + NameForVKey(capturedVKey));
 					capturedToggleMode = capturedLongPressMode = false;
 				} else {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
@@ -916,7 +916,7 @@ namespace RadarKeys {
 				capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
 				capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 				showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
-				LogActivity("Key capture prompt cancelled");
+				LogActivity("Key Assignment Prompt cancelled");
 			}
 			ImGui::End();
 		}
@@ -979,7 +979,7 @@ namespace RadarKeys {
 			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 220), ImVec2(FLT_MAX, FLT_MAX));
 
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
-			if (ImGui::Button("Debugger Overlay")) {
+			if (ImGui::Button("Debugger")) {
 				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 				LogActivity(DebuggerMenu::menuOpen ? "Debugger Overlay opened" : "Debugger Overlay closed");
 			}
@@ -988,7 +988,7 @@ namespace RadarKeys {
 			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
 			if (ImGui::Button(buttonLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) { 
 				isAssigningMenuToggleKey = showCapturePrompt = true; 
-				LogActivity("Opened capture prompt to reassign menu hotkey");
+				LogActivity("Menu Key Reassignment Prompt opened");
 			}
 			ImGui::Separator();
 
@@ -1047,7 +1047,7 @@ namespace RadarKeys {
 					}
 					
 					showCapturePrompt = true;
-					LogActivity("Opened capture prompt to edit binding " + itemLabel);
+					LogActivity("Key Assignment Edit Prompt opened " + itemLabel);
 				}
 
 				ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
@@ -1067,7 +1067,7 @@ namespace RadarKeys {
 			if (ImGui::Button("Add New Binding...", ImVec2(165, 24))) {
 				editingBindingIndex = -1;
 				showCapturePrompt = true;
-				LogActivity("Opened capture prompt for new binding");
+				LogActivity("Key Assignment Binding Prompt opened");
 			}
 			ImGui::End();
 
