@@ -51,7 +51,7 @@ namespace RadarKeys {
 		bool ok = g_FoxLuaRegisterLibrary && g_lua_gettop && g_lua_pushnumber && g_lua_tolstring &&
 			g_lua_pushstring && g_lua_createtable && g_lua_rawset && g_lua_pushnil;
 		if (!ok) {
-			spdlog::error("ResolveLuaApi: one or more Lua function addresses failed to resolve - game version may not match the day3900-en address table this build uses");
+			spdlog::error("ResolveLuaApi: one or more Lua function addresses failed to resolve - game version may not match the address table this build uses");
 		}
 		return ok;
 	}
