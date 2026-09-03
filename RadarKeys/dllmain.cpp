@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <cassert>
+#include <cstdlib>
 
 namespace RadarKeys {
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
@@ -84,10 +85,6 @@ namespace RadarKeys {
 		return 1;
 	}
 
-	//--- Lua bindings: key polling (InfButton-shaped, but keyed by name instead of a bitmask) ---
-	// Resolves arg 1 (a key name from the same table the keybind UI dropdown uses, e.g. "Numpad7")
-	// to a vKey. Returns -1 (and logs) if the name isn't recognized, so callers below can just
-	// treat "-1" as "nothing to query" and fall through to their not-found return.
 	static int ResolveKeyNameArg(lua_State* L) {
 		const char* name = LuaToString(L, 1);
 		if (!name) {
@@ -98,6 +95,20 @@ namespace RadarKeys {
 			spdlog::warn("RadarKeys key query: unrecognized key name '{}'", name);
 		}
 		return vKey;
+	}
+
+	static double ResolveHoldSecondsArg(lua_State* L) {
+		const char* raw = LuaToString(L, 2);
+		if (!raw || !*raw) {
+			return -1.0;
+		}
+		char* end = nullptr;
+		double value = std::strtod(raw, &end);
+		if (end == raw) {
+			spdlog::warn("RadarKeys key query: couldn't parse hold-seconds arg '{}'", raw);
+			return -1.0;
+		}
+		return value;
 	}
 
 	static int l_ButtonDown(lua_State* L) {
@@ -117,12 +128,14 @@ namespace RadarKeys {
 	}
 	static int l_ButtonHeld(lua_State* L) {
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
-		LuaPushBool(L, vKey >= 0 && LuaKeyState::ButtonHeld((USHORT)vKey));
+		double holdOverride = RadarKeys::ResolveHoldSecondsArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::ButtonHeld((USHORT)vKey, holdOverride));
 		return 1;
 	}
 	static int l_OnButtonHoldTime(lua_State* L) {
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
-		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonHoldTime((USHORT)vKey));
+		double holdOverride = RadarKeys::ResolveHoldSecondsArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonHoldTime((USHORT)vKey, holdOverride));
 		return 1;
 	}
 	static int l_OnButtonRepeat(lua_State* L) {
@@ -143,9 +156,6 @@ namespace RadarKeys {
 		return 0;
 	}
 
-	// RadarKeys.DebugLog(message) - lets a Lua script push its own free-form line into the
-	// RadarKeys debugger window (gated behind DebuggerMenu's "Log script debug messages"
-	// checkbox, same as the DLL's own [BTN]/[BND]/[SCR] log lines).
 	static int l_DebugLog(lua_State* L) {
 		const char* message = LuaToString(L, 1);
 		if (message) {
