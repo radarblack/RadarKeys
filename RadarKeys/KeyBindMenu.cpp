@@ -162,7 +162,7 @@ namespace RadarKeys {
 		void LogCleanShutdown() {
 			EnsureActivityLogReady();
 			AppendActivityLogLine("[STATE] CLEAN_EXIT\n");
-			FlushActivityLog(); // force past the batching cadence so the exit marker always reaches disk
+			FlushActivityLog();
 		}
 
 		// Modifiers as checkboxes; dropdown shows persistable base keys only.
@@ -197,7 +197,6 @@ namespace RadarKeys {
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
 		std::string NameForVKey(USHORT vKey) {
-			// faster entry scanning
 			for (const auto& entry : vkNameTable) {
 				if (entry.vKey == vKey) return entry.name;
 			}
@@ -510,6 +509,7 @@ namespace RadarKeys {
 					std::string resolvedOn = ResolveScriptPath(pathOn);
 					std::string resolvedOff = pathOff.empty() ? "" : ResolveScriptPath(pathOff);
 
+					// reconstructing nodes
 					KeyBind b{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, resolvedOn, resolvedOff, false, holdSeconds };
 					b.functionOn = funcOn;
 					b.functionOff = funcOff;
@@ -725,6 +725,8 @@ namespace RadarKeys {
 		
 			bool isUpperPathValid = false, isLowerPathValid = false;
 			int scriptStatus = 0, lowerStatus = 0;
+
+			// gets rid of the repeating disk check for the file
 			static char lastStatCheckedOnBuffer[512] = "";
 			static int cachedOnStatus = 0;
 			static char lastStatCheckedOffBuffer[512] = "";
@@ -992,23 +994,47 @@ namespace RadarKeys {
 
 			if (ImGui::CollapsingHeader("Keys Polled by Scripts", ImGuiTreeNodeFlags_DefaultOpen)) {
 				std::vector<USHORT> trackedVKeys = LuaKeyState::GetTrackedVKeys();
-				ImGui::BeginChild("TrackedScriptKeys", ImVec2(0, 80), true);
+				ImGui::BeginChild("TrackedScriptKeys", ImVec2(0, 150), true);
 				if (trackedVKeys.empty()) {
 					ImGui::TextDisabled("(none yet - a key shows up here the first time a script queries it via RadarKeys.OnButtonDown/ButtonHeld/etc)");
 				}
 				else {
 					for (USHORT vKey : trackedVKeys) {
+						ImGui::PushID(vKey);
+						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
+						float rowTopY = ImGui::GetCursorPosY();
+						float buttonHeight = 20.0f;
+						const float keyColumnX = 250.0f;
+
 						bool isDown = RawInput::IsKeyHeldReal(vKey);
+						ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
+						ImGui::AlignTextToFramePadding();
+						ImGui::BeginGroup();
 						ImGui::TextColored(
 							isDown ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
-							"%s - %s", NameForVKey(vKey).c_str(), isDown ? "DOWN" : "up"
+							"%s", isDown ? "DOWN" : "up"
 						);
+						ImGui::EndGroup();
+
+						float detailTextHeight = ImGui::GetItemRectSize().y;
+						float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
+						float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
+
+						ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
+						ImGui::BeginDisabled();
+						ImGui::Button("Script", ImVec2(55, buttonHeight));
+						ImGui::SameLine();
+						ImGui::Button(NameForVKey(vKey).c_str(), ImVec2(130, buttonHeight));
+						ImGui::EndDisabled();
+
+						ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
+						ImGui::PopID(); ImGui::Separator();
 					}
 				}
 				ImGui::EndChild();
 				ImGui::TextDisabled("Exact name string to use from Lua - compare against what your script has assigned.");
-				ImGui::Separator();
 			}
+			ImGui::Separator();
 
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
