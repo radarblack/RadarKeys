@@ -5,6 +5,7 @@
 #include "HookUtils.h"
 #include "KeyBindMenu.h"
 #include "DebuggerMenu.h"
+#include "LuaKeyState.h"
 #include <MinHook.h>
 
 #include "spdlog/spdlog.h"
@@ -82,6 +83,61 @@ namespace RadarKeys {
 		assert(LuaGetTop(L) == 1); //  table still on stack
 		return 1;
 	}
+
+	static int ResolveKeyNameArg(lua_State* L) {
+		const char* name = LuaToString(L, 1);
+		if (!name) {
+			return -1;
+		}
+		int vKey = KeyBindMenu::VKeyForName(name);
+		if (vKey < 0) {
+			spdlog::warn("RadarKeys key query: unrecognized key name '{}'", name);
+		}
+		return vKey;
+	}
+
+	static int l_ButtonDown(lua_State* L) {
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::ButtonDown((USHORT)vKey));
+		return 1;
+	}
+	static int l_OnButtonDown(lua_State* L) {
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonDown((USHORT)vKey));
+		return 1;
+	}
+	static int l_OnButtonUp(lua_State* L) {
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonUp((USHORT)vKey));
+		return 1;
+	}
+	static int l_ButtonHeld(lua_State* L) {
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::ButtonHeld((USHORT)vKey));
+		return 1;
+	}
+	static int l_OnButtonHoldTime(lua_State* L) {
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonHoldTime((USHORT)vKey));
+		return 1;
+	}
+	static int l_OnButtonRepeat(lua_State* L) {
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonRepeat((USHORT)vKey));
+		return 1;
+	}
+	static int l_GetRepeatMult(lua_State* L) {
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushNumber(L, vKey >= 0 ? LuaKeyState::GetRepeatMult((USHORT)vKey) : 1.0);
+		return 1;
+	}
+	static int l_ResetRepeat(lua_State* L) {
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		if (vKey >= 0) {
+			LuaKeyState::ResetRepeat((USHORT)vKey);
+		}
+		return 0;
+	}
 }
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
@@ -90,6 +146,14 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 	luaL_Reg radarkeys_funcs[] = {
 		{ "MenuMessage", RadarKeys::l_MenuMessage },
 		{ "GetMenuMessages", RadarKeys::l_GetMenuMessages },
+		{ "ButtonDown", RadarKeys::l_ButtonDown },
+		{ "OnButtonDown", RadarKeys::l_OnButtonDown },
+		{ "OnButtonUp", RadarKeys::l_OnButtonUp },
+		{ "ButtonHeld", RadarKeys::l_ButtonHeld },
+		{ "OnButtonHoldTime", RadarKeys::l_OnButtonHoldTime },
+		{ "OnButtonRepeat", RadarKeys::l_OnButtonRepeat },
+		{ "GetRepeatMult", RadarKeys::l_GetRepeatMult },
+		{ "ResetRepeat", RadarKeys::l_ResetRepeat },
 		{ NULL, NULL }
 	};
 
