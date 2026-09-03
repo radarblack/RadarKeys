@@ -6,7 +6,6 @@
 namespace RadarKeys {
 	namespace LuaKeyState {
 		using clock = std::chrono::steady_clock;
-
 		constexpr double kHoldTimeSeconds = 0.9;
 		constexpr double kRepeatRateSeconds = 0.85;
 		constexpr double kIncrementMultIncrementMult = 1.5;
@@ -180,6 +179,16 @@ namespace RadarKeys {
 			s.heldStartSet = false;
 			s.onHoldStartSet = false;
 			s.repeatStartSet = false;
+		}
+
+		std::vector<USHORT> GetTrackedVKeys() {
+			std::vector<USHORT> result;
+			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
+				if (states[vKeyInt].registered) {
+					result.push_back(static_cast<USHORT>(vKeyInt));
+				}
+			}
+			return result;
 		}
 	}
 }
