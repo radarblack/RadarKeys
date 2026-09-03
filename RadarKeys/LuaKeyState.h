@@ -1,6 +1,7 @@
 #pragma once
 #include "windowsapi.h"
 #include <vector>
+#include <string>
 
 namespace RadarKeys {
 	namespace LuaKeyState {
@@ -13,5 +14,18 @@ namespace RadarKeys {
 		double GetRepeatMult(USHORT vKey);
 		void ResetRepeat(USHORT vKey);
 		std::vector<USHORT> GetTrackedVKeys();
+		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
+
+		struct TrackedKeyInfo {
+			USHORT vKey = 0;
+			bool isPressed = false;
+			bool hasDescription = false;
+			std::string scriptName;
+			std::string functionName;
+			bool hasToggleState = false;
+			bool toggleEnabled = false; 
+		};
+
+		std::vector<TrackedKeyInfo> GetTrackedKeyInfo();
 	}
 }
