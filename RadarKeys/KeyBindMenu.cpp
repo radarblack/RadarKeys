@@ -26,11 +26,10 @@ namespace RadarKeys {
 			std::string detailText;
 			std::string fullLine;
 		};
+
 		static std::vector<BindingDisplayCache> displayCache;
 		static bool displayCacheDirty = true;
-
 		void MarkDisplayCacheDirty() { displayCacheDirty = true; }
-
 		const std::string& GetBindsFileName() {
 			static std::string cached;
 			if (cached.empty()) {
@@ -73,7 +72,6 @@ namespace RadarKeys {
 		bool PreviousSessionEndedCleanly(const std::string& logPath) {
 			std::ifstream in(logPath);
 			if (!in) return true;
-
 			std::string line, lastNonEmptyLine;
 			while (std::getline(in, line)) {
 				if (!line.empty()) lastNonEmptyLine = line;
@@ -97,7 +95,6 @@ namespace RadarKeys {
 			bool wasClean = true;
 			if (std::filesystem::exists(currentLog, ec)) {
 				wasClean = PreviousSessionEndedCleanly(currentLog);
-
 				// overwrite the prev log
 				std::filesystem::copy_file(currentLog, prevLog, std::filesystem::copy_options::overwrite_existing, ec);
 			}
@@ -107,11 +104,10 @@ namespace RadarKeys {
 			if (!wasClean) {
 				clearStream << "[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).\n";
 			}
+			
 			clearStream.close();
-
 			activityLogBaselineBytes = std::filesystem::file_size(currentLog, ec);
 			if (ec) activityLogBaselineBytes = 0;
-
 			activityLogReady = true;
 		}
 
@@ -120,8 +116,8 @@ namespace RadarKeys {
 			std::string currentLog = GetLogFileName();
 			std::error_code ec;
 			std::filesystem::resize_file(currentLog, activityLogBaselineBytes, ec);
-
 			std::ofstream out(currentLog, std::ios::app);
+			
 			if (!out) {
 				spdlog::warn("KeyBindMenu::FlushActivityLog: couldn't open {} for writing", currentLog);
 				return;
@@ -338,7 +334,6 @@ namespace RadarKeys {
 
 		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
 			if (showCapturePrompt) return;
-
 			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
 
 			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
@@ -359,7 +354,6 @@ namespace RadarKeys {
 			}
 			
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) return;
-
 			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 			LogActivity(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 
@@ -389,7 +383,6 @@ namespace RadarKeys {
 			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
 				USHORT vKey = it->first; HoldTrack& track = it->second;
 				if (track.fired || !RawInput::IsKeyHeldReal(vKey)) { it = holdTracks.erase(it); continue; }
-
 				const KeyBind* holdBind = FindMatchingBinding(vKey, track.ctrlOnPressed, track.shiftOnPressed, track.altOnPressed, true);
 
 				if (holdBind && holdBind->holdSeconds > 0.0f) {
@@ -419,7 +412,6 @@ namespace RadarKeys {
 
 		void SaveBindings() {
 			EnsureBindsDirectory();
-
 			std::ofstream outFile(GetBindsFileName());
 			if (!outFile) {
 				spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", GetBindsFileName());
@@ -429,7 +421,6 @@ namespace RadarKeys {
 			
 			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
 			std::string gameDirStr = std::filesystem::path(GetGameDirectory()).generic_string() + "/";
-
 			for (auto b : bindings) {
 				std::string genericOn = b.scriptPathOn.empty() ? "" : std::filesystem::path(b.scriptPathOn).generic_string();
 				std::string genericOff = b.scriptPathOff.empty() ? "" : std::filesystem::path(b.scriptPathOff).generic_string();
@@ -442,7 +433,6 @@ namespace RadarKeys {
 				}
 
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
-				
 				if (b.isToggle) {
 					outFile << "1|" << genericOn << "|" << genericOff << "|" << b.functionOn << "|" << b.functionOff << "\n";
 				} else {
@@ -491,7 +481,6 @@ namespace RadarKeys {
 					float holdSeconds = 0.0f;
 					try { holdSeconds = std::stof(trim(parts[5])); }
 					catch (...) { holdSeconds = 0.0f; }
-					
 					bool isToggle = false;
 					std::string pathOn = "";
 					std::string pathOff = "";
@@ -525,7 +514,6 @@ namespace RadarKeys {
 					b.functionOn = funcOn;
 					b.functionOff = funcOff;
 					b.functionTap = funcTap;
-
 					bindings.push_back(b);
 				}
 				else if (parts[0] == "BIND") {
@@ -557,6 +545,7 @@ namespace RadarKeys {
 				LogActivity("Attempted to remove binding at invalid index " + std::to_string(index), false);
 				return;
 			}
+			
 			std::string removedDesc = CombinedDisplayName(bindings[index]) + " -> " + bindings[index].scriptPathOn;
 			USHORT vKey = bindings[index].vKey;
 			bindings.erase(bindings.begin() + index);
@@ -580,7 +569,6 @@ namespace RadarKeys {
 
 		void Init(const std::string& defaultMenuKeyName) {
 			LogActivity("RadarKeys KeyBindMenu initializing");
-
 			int defaultVKey = VKeyForName(defaultMenuKeyName);
 			if (defaultVKey != -1) menuToggleVKey = (USHORT)defaultVKey;
 			else if (!defaultMenuKeyName.empty()) {
@@ -614,7 +602,6 @@ namespace RadarKeys {
 		void DrawKeyCapturePrompt() {
 			ImGui::SetNextWindowSize(ImVec2(340, 330), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 165), ImGuiCond_FirstUseEver);
-			
 			ImGui::SetNextWindowSizeConstraints(ImVec2(340, 330), ImVec2(FLT_MAX, FLT_MAX));
 			ImGui::SetNextWindowFocus();
 		
@@ -672,6 +659,7 @@ namespace RadarKeys {
 			if (!isAssigningMenuToggleKey) {
 				ImGui::Checkbox("Ctrl", &capturedCtrl); ImGui::Checkbox("Shift", &capturedShift); ImGui::Checkbox("Alt", &capturedAlt); 
 			}
+			
 			if (ImGui::Button("Reset", ImVec2(55, 22))) { 
 			    capturedVKey = 0; 
 			    capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false; 
@@ -729,6 +717,7 @@ namespace RadarKeys {
 			ImGui::BeginChild("ComboStatusBox", ImVec2(comboStatusSize.x + ImGui::GetStyle().WindowPadding.x * 2.0f, comboStatusSize.y + ImGui::GetStyle().WindowPadding.y * 2.0f), true, ImGuiWindowFlags_NoScrollbar);
 			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", comboStatusLabel);
 			ImGui::EndChild();
+			
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
 			}
@@ -773,7 +762,6 @@ namespace RadarKeys {
 				float paddingX = ImGui::GetStyle().WindowPadding.x;
 				float totalWidth = ImGui::GetWindowWidth();
 				float rightEdgeX = totalWidth - paddingX;
-				
 				float elementWidth = 145.0f;
 				float targetCursorPosX = rightEdgeX - elementWidth - 8.0f;
 
@@ -796,7 +784,7 @@ namespace RadarKeys {
 							ImGui::Text("Enable Function:"); ImGui::SameLine(targetCursorPosX);
 							ImGui::SetNextItemWidth(elementWidth);
 							ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
-							
+		
 							ImGui::Text("Disable Function:"); ImGui::SameLine(targetCursorPosX);
 							ImGui::SetNextItemWidth(elementWidth);
 							ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
@@ -806,7 +794,7 @@ namespace RadarKeys {
 						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
 						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Enable script.");
 						ImGui::SameLine(); ImGui::Text("Enable Script Path:");
-						
+
 						ImGui::SetNextItemWidth(-1);
 						ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 						
@@ -819,8 +807,8 @@ namespace RadarKeys {
 						ImGui::Spacing();
 						ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff); ImGui::SameLine();
 						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Disable script.");
-						ImGui::SameLine(); ImGui::Text("Disable Script Path:");
 						
+						ImGui::SameLine(); ImGui::Text("Disable Script Path:");
 						ImGui::SetNextItemWidth(-1);
 						ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
 						
@@ -834,8 +822,8 @@ namespace RadarKeys {
 				else {
 					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn); ImGui::SameLine();
 					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside this script file.");
-					ImGui::SameLine(); ImGui::Text("Script Path:");
 					
+					ImGui::SameLine(); ImGui::Text("Script Path:");
 					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 					
@@ -848,8 +836,8 @@ namespace RadarKeys {
 			}
 		
 			bool pathsValid = (capturedToggleMode && capturedToggleType != 0) ? (isUpperPathValid && isLowerPathValid) : isUpperPathValid;
-
 			bool functionsValid = true;
+			
 			if (!isAssigningMenuToggleKey) {
 				if (capturedToggleMode) {
 					if (capturedToggleType == 0) {
@@ -865,10 +853,10 @@ namespace RadarKeys {
 			}
 			
 			bool canFinalize = capturedVKey != 0 && comboAvailable && (isAssigningMenuToggleKey || (pathsValid && functionsValid));
-			
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float buttonHeight = 30.0f;
 			float bottomAnchorY = ImGui::GetWindowHeight() - paddingY - buttonHeight;
+			
 			ImGui::SetCursorPosY(bottomAnchorY);
 
 			if (!canFinalize) ImGui::BeginDisabled();
@@ -883,15 +871,14 @@ namespace RadarKeys {
 					capturedToggleMode = capturedLongPressMode = false;
 				} else {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
-					
+				
 					if (capturedToggleMode && capturedToggleType == 0) {
 						snprintf(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), "%s", capturedScriptPathOnBuffer);
 						capturedHasFuncOff = capturedHasFuncOn;
 					}
-
+					
 					std::string finalPathOn = ResolveScriptPath(capturedScriptPathOnBuffer);
 					std::string finalPathOff = capturedToggleMode ? ResolveScriptPath(capturedScriptPathOffBuffer) : "";
-
 					std::string finalFuncOn  = (capturedToggleMode && capturedHasFuncOn) ? capturedFuncOnBuffer : "";
 					std::string finalFuncOff = (capturedToggleMode && capturedHasFuncOff) ? capturedFuncOffBuffer : "";
 					std::string finalFuncTap = (!capturedToggleMode && capturedHasFuncOn) ? capturedFuncTapBuffer : "";
@@ -910,12 +897,10 @@ namespace RadarKeys {
 					} else {
 						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap);
 					}
-
 					capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 					capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
 					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 				}
-				
 				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
 				showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
 			}
@@ -957,7 +942,6 @@ namespace RadarKeys {
 				        snprintf(buf, sizeof(buf), "(Hold %.1fs) ", bind.holdSeconds);
 				        holdPrefix = buf;
 				    }
-				
 				    if (bind.scriptPathOn == bind.scriptPathOff) {
 				        entry.detailText = holdPrefix + "Toggle: " + fileOn + funcOnStr + " <-> " + funcOffStr;
 				    } else {
@@ -969,18 +953,15 @@ namespace RadarKeys {
 
 					entry.detailText = "-> " + fileOn + funcTapStr;
 				}
-
 				entry.fullLine = entry.itemLabel + " " + entry.detailText;
 				displayCache.push_back(std::move(entry));
 			}
-
 			displayCacheDirty = false;
 		}
 
 		// draws the ui
 		void Draw(bool* p_open) {
 			RebuildDisplayCacheIfNeeded();
-
 			float longestItemWidth = 0.0f;
 			for (const auto& entry : displayCache) {
 				float stringPixelWidth = ImGui::CalcTextSize(entry.fullLine.c_str()).x;
@@ -990,7 +971,6 @@ namespace RadarKeys {
 			}
 
 			float finalMinWidthFloor = longestItemWidth + 111.0f;
-
 			if (finalMinWidthFloor < 480.0f) {
 				finalMinWidthFloor = 480.0f;
 			}
@@ -999,7 +979,6 @@ namespace RadarKeys {
 			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 220), ImVec2(FLT_MAX, FLT_MAX));
 
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
-
 			if (ImGui::Button("Debugger Overlay")) {
 				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 				LogActivity(DebuggerMenu::menuOpen ? "Debugger Overlay opened" : "Debugger Overlay closed");
@@ -1015,7 +994,6 @@ namespace RadarKeys {
 
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
-			
 			float footerHeight = 45.0f; 
 			float listRemainingHeight = ImGui::GetWindowHeight() - ImGui::GetCursorPosY() - footerHeight - paddingY;
 			if (listRemainingHeight < 100.0f) listRemainingHeight = 100.0f; 
@@ -1024,10 +1002,8 @@ namespace RadarKeys {
 			ImGui::BeginChild("ActiveBindingsOverviewList", ImVec2(0, listRemainingHeight), true);
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
-				
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
 				float rowTopY = ImGui::GetCursorPosY();
-
 				float buttonHeight = 20.0f;
 				const float keyColumnX = 250.0f;
 
@@ -1043,7 +1019,6 @@ namespace RadarKeys {
 
 				ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
 				if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = i;
-				
 				ImGui::SameLine(); 
 
 				const std::string& itemLabel = displayCache[i].itemLabel;
@@ -1056,16 +1031,14 @@ namespace RadarKeys {
 					capturedToggleMode = bindings[i].isToggle;
 					capturedLongPressMode = (bindings[i].holdSeconds > 0.0f);
 					capturedHoldSeconds = bindings[i].holdSeconds;
+					capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
+					capturedHasFuncOff = !bindings[i].functionOff.empty();
 					
 					snprintf(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), "%s", bindings[i].scriptPathOn.c_str());
 					snprintf(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), "%s", bindings[i].scriptPathOff.c_str());
-					
 					snprintf(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), "%s", bindings[i].functionOn.c_str());
 					snprintf(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), "%s", bindings[i].functionOff.c_str());
 					snprintf(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), "%s", bindings[i].functionTap.c_str());
-					
-					capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
-					capturedHasFuncOff = !bindings[i].functionOff.empty();
 					
 					if (bindings[i].isToggle) {
 						capturedToggleType = (bindings[i].scriptPathOn == bindings[i].scriptPathOff) ? 0 : 1;
@@ -1083,7 +1056,6 @@ namespace RadarKeys {
 			ImGui::EndChild();
 
 			if (removeIndex != -1) RemoveBinding(removeIndex);
-
 			float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 35.0f; 
 			ImGui::SetCursorPosY(bottomControlPanelY);
 			
@@ -1092,7 +1064,6 @@ namespace RadarKeys {
 			if (bindings.empty()) ImGui::EndDisabled();
 			
 			ImGui::SameLine(ImGui::GetContentRegionMax().x - 165.0f);
-
 			if (ImGui::Button("Add New Binding...", ImVec2(165, 24))) {
 				editingBindingIndex = -1;
 				showCapturePrompt = true;
