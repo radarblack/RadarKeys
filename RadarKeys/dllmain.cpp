@@ -163,6 +163,23 @@ namespace RadarKeys {
 		}
 		return 0;
 	}
+
+	static int l_DescribeKey(lua_State* L) {
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		if (vKey < 0) {
+			return 0;
+		}
+		const char* scriptName = LuaToString(L, 2);
+		const char* functionName = LuaToString(L, 3);
+		const char* toggleState = LuaToString(L, 4);
+		LuaKeyState::DescribeKey(
+			(USHORT)vKey,
+			scriptName ? scriptName : "",
+			functionName ? functionName : "",
+			toggleState ? toggleState : ""
+		);
+		return 0;
+	}
 }
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
@@ -180,6 +197,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "GetRepeatMult", RadarKeys::l_GetRepeatMult },
 		{ "ResetRepeat", RadarKeys::l_ResetRepeat },
 		{ "DebugLog", RadarKeys::l_DebugLog },
+		{ "DescribeKey", RadarKeys::l_DescribeKey },
 		{ NULL, NULL }
 	};
 
