@@ -8,6 +8,7 @@ namespace RadarKeys {
 		extern bool logBindUnbind;
 		extern bool logButtonPress;
 		extern bool logScriptResult;
+		extern bool logLuaDebug; // messages Lua scripts push themselves via RadarKeys.DebugLog(), see LogLuaDebug
 
 		extern bool menuOpen; // opened via a button inside KeyBindMenu::Draw(), not its own hotkey
 
@@ -18,6 +19,7 @@ namespace RadarKeys {
 		// each is a no-op unless its matching logXxx toggle is enabled, so callers (KeyBindMenu) don't need to check the toggle themselves.
 		void LogBindEvent(const std::string& message);
 		void LogButtonPress(const std::string& message);
+		void LogLuaDebug(const std::string& message);
 
 		bool LogScriptAttempt(const std::string& scriptPath);
 	}
