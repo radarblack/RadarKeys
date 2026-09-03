@@ -26,6 +26,11 @@ namespace RadarKeys {
 			clock::time_point repeatStart{};
 
 			double currentIncrementMult = 1.0;
+			bool hasDescription = false;
+			std::string scriptName;
+			std::string functionName;
+			bool hasToggleState = false;
+			bool toggleEnabled = false;
 		};
 
 		KeyPollState states[256];
@@ -187,6 +192,48 @@ namespace RadarKeys {
 				if (states[vKeyInt].registered) {
 					result.push_back(static_cast<USHORT>(vKeyInt));
 				}
+			}
+			return result;
+		}
+
+		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState) {
+			if (!ValidVKey(vKey)) {
+				return;
+			}
+			EnsureTracked(vKey);
+			KeyPollState& s = states[vKey];
+			s.hasDescription = true;
+			s.scriptName = scriptName;
+			s.functionName = functionName;
+			if (toggleState == "on") {
+				s.hasToggleState = true;
+				s.toggleEnabled = true;
+			}
+			else if (toggleState == "off") {
+				s.hasToggleState = true;
+				s.toggleEnabled = false;
+			}
+			else {
+				s.hasToggleState = false;
+			}
+		}
+
+		std::vector<TrackedKeyInfo> GetTrackedKeyInfo() {
+			std::vector<TrackedKeyInfo> result;
+			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
+				if (!states[vKeyInt].registered) {
+					continue;
+				}
+				const KeyPollState& s = states[vKeyInt];
+				TrackedKeyInfo info;
+				info.vKey = static_cast<USHORT>(vKeyInt);
+				info.isPressed = RawInput::IsKeyHeldReal(info.vKey);
+				info.hasDescription = s.hasDescription;
+				info.scriptName = s.scriptName;
+				info.functionName = s.functionName;
+				info.hasToggleState = s.hasToggleState;
+				info.toggleEnabled = s.toggleEnabled;
+				result.push_back(std::move(info));
 			}
 			return result;
 		}
