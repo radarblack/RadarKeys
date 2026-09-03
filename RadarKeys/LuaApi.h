@@ -35,6 +35,8 @@ namespace RadarKeys {
 	int LuaGetTop(lua_State* L);
 	void LuaCreateTable(lua_State* L, int narr, int nrec);
 	void LuaPushNil(lua_State* L);
+	void LuaPushNumber(lua_State* L, double n);
+	void LuaPushBool(lua_State* L, bool b);
 	void LuaRawSetIndexed(lua_State* L, int tableAbsIdx, int n, const char* value);
 	bool RegisterLuaLibrary(lua_State* L, const char* libName, luaL_Reg* funcs);
 
