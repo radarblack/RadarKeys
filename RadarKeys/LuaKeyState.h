@@ -1,5 +1,6 @@
 #pragma once
 #include "windowsapi.h"
+#include <vector>
 
 namespace RadarKeys {
 	namespace LuaKeyState {
@@ -11,5 +12,6 @@ namespace RadarKeys {
 		bool OnButtonRepeat(USHORT vKey);
 		double GetRepeatMult(USHORT vKey);
 		void ResetRepeat(USHORT vKey);
+		std::vector<USHORT> GetTrackedVKeys();
 	}
 }
