@@ -12,6 +12,7 @@ namespace RadarKeys {
 		bool logBindUnbind = false;
 		bool logButtonPress = false;
 		bool logScriptResult = false;
+		bool logLuaDebug = false;
 		bool menuOpen = false;
 
 		struct LogEntry {
@@ -51,6 +52,12 @@ namespace RadarKeys {
 			if (!logButtonPress) return;
 			spdlog::debug("[BTN] {}", message);
 			AddLogEntry("[BTN] " + message);
+		}
+
+		void LogLuaDebug(const std::string& message) {
+			if (!logLuaDebug) return;
+			spdlog::debug("[LUA] {}", message);
+			AddLogEntry("[LUA] " + message);
 		}
 
 		bool LogScriptAttempt(const std::string& scriptPath) {
@@ -107,16 +114,18 @@ namespace RadarKeys {
 				return;
 			}
 
-			bool allOn = logBindUnbind && logButtonPress && logScriptResult;
+			bool allOn = logBindUnbind && logButtonPress && logScriptResult && logLuaDebug;
 			if (ImGui::Checkbox("Log All", &allOn)) {
 				logBindUnbind = allOn;
 				logButtonPress = allOn;
 				logScriptResult = allOn;
+				logLuaDebug = allOn;
 			}
 			ImGui::Separator();
 			ImGui::Checkbox("Log key bind / unbind", &logBindUnbind);
 			ImGui::Checkbox("Log button presses", &logButtonPress);
 			ImGui::Checkbox("Log script run attempts (success/fail, dll-side vs lua-side)", &logScriptResult);
+			ImGui::Checkbox("Log script debug messages (RadarKeys.DebugLog)", &logLuaDebug);
 
 			ImGui::Separator();
 			if (ImGui::Button("Clear Log")) {
