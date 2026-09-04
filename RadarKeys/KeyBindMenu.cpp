@@ -21,7 +21,6 @@ namespace RadarKeys {
 	namespace KeyBindMenu {
 		std::vector<KeyBind> bindings;
 		static bool isAssigningMenuToggleKey = false; 
-
 		struct BindingDisplayCache {
 			std::string itemLabel;
 			std::string detailText;
@@ -139,19 +138,15 @@ namespace RadarKeys {
 			}
 		}
 
-		// improved activity tracker and logging
-		void LogActivity(const std::string& message, bool success = true) {
+		void LogActivity(const std::string& message, bool success) {
 			EnsureActivityLogReady();
-
 			auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::duration<double>(ImGui::GetTime()));
 			auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
 			duration -= hours;
 			auto minutes = std::chrono::duration_cast<std::chrono::minutes>(duration);
 			duration -= minutes;
-
 			char timeBuf[32];
 			snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d", hours.count(), minutes.count(), duration.count());
-
 			AppendActivityLogLine(std::string("[") + timeBuf + "] [" + (success ? "OK" : "FAIL") + "] " + message + "\n");
 		}
 
@@ -161,7 +156,6 @@ namespace RadarKeys {
 			FlushActivityLog();
 		}
 
-		// Modifiers as checkboxes; dropdown shows persistable base keys only.
 		struct VkNameEntry { const char* name; USHORT vKey; };
 		const VkNameEntry vkNameTable[] = {
 			{"A", 'A'}, {"B", 'B'}, {"C", 'C'}, {"D", 'D'}, {"E", 'E'}, {"F", 'F'},
@@ -185,7 +179,6 @@ namespace RadarKeys {
 			{"Numpad 9", VK_NUMPAD9},
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
 			
-			// added extra mouse keys, excluding left and right click
 			{"Mouse Wheel", VK_MBUTTON},
 			{"Mouse 4", VK_XBUTTON1},
 			{"Mouse 5", VK_XBUTTON2}
@@ -193,14 +186,12 @@ namespace RadarKeys {
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
 		std::string NameForVKey(USHORT vKey) {
-			// faster entry scanning
 			for (const auto& entry : vkNameTable) {
 				if (entry.vKey == vKey) return entry.name;
 			}
 			return "Unknown(" + std::to_string(vKey) + ")";
 		}
 
-		// returns -1 if not found in the table
 		int VKeyForName(const std::string& name) {
 			for (const auto& entry : vkNameTable) {
 				if (name == entry.name) return entry.vKey;
@@ -224,15 +215,11 @@ namespace RadarKeys {
 			return (std::filesystem::path(GetGameDirectory()) / (hasSeparators ? std::filesystem::path(typedPath) : std::filesystem::path("mod") / "modules" / typedPath)).string();
 		}
 
-		// menu key. default F7
 		USHORT menuToggleVKey = VK_F7;
 		RawInput::ActionHandle menuToggleHandle = 0;
 		bool menuOpen = false;
-
-		// share one RawInput action per vKey to let OnBoundKeyPressed see all bindings and fall back to plain key when modifiers don't match.
 		std::map<USHORT, RawInput::ActionHandle> vKeyDispatchers;
 
-		// RawInput action wired to whatever menuToggleVKey currently is - see RegisterMenuToggleKey
 		void OnMenuToggleKeyPressed(RawInput::BUTTONEVENT buttonEvent) {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
@@ -289,6 +276,7 @@ namespace RadarKeys {
 					if (!preferHold && bind.holdSeconds <= 0.0f) plainFallbackMatch = &bind;
 				}
 			}
+
 			return exactMatch ? exactMatch : plainFallbackMatch;
 		}
 
@@ -302,7 +290,6 @@ namespace RadarKeys {
 				bind.toggleState = !bind.toggleState;
 			}
 
-			// check if the file exist
 			if (DebuggerMenu::LogScriptAttempt(targetPath)) {
 				if (!targetFunc.empty()) {
 					std::string luaPayload = "DoScript|local f = loadfile([[" + targetPath + "]]); if f then f(); if " + targetFunc + " then " + targetFunc + "(); end end";
@@ -325,7 +312,6 @@ namespace RadarKeys {
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
 					if (!it->second.fired) {
-						// for tap
 						const KeyBind* tapBind = FindMatchingBinding(vKey, it->second.ctrlOnPressed, it->second.shiftOnPressed, it->second.altOnPressed, false);
 						if (tapBind && tapBind->holdSeconds <= 0.0f) {
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
@@ -342,7 +328,6 @@ namespace RadarKeys {
 			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 			LogActivity(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 
-			// for long press
 			bool hasHoldOptionOnKey = false;
 			for (const auto& bind : bindings) {
 				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
@@ -381,13 +366,11 @@ namespace RadarKeys {
 			}
 		}
 
-		// registers shared vKey dispatcher; safe to call repeatedly per binding.
 		void EnsureDispatcherRegistered(USHORT vKey) {
 			if (vKeyDispatchers.find(vKey) != vKeyDispatchers.end()) return;
 			vKeyDispatchers[vKey] = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnBoundKeyPressed(vKey, ev); });
 		}
 
-		// unregisters vKey dispatcher only when no bindings remain; other modifier combos may still need it.
 		void RemoveDispatcherIfUnused(USHORT vKey) {
 			for (const auto& bind : bindings) if (bind.vKey == vKey) return;
 			auto it = vKeyDispatchers.find(vKey);
@@ -472,7 +455,6 @@ namespace RadarKeys {
 					std::string funcOff = "";
 					std::string funcTap = "";
 					
-					// dynamic size router
 					if (trim(parts[6]) == "1" && parts.size() >= 9) {
 						isToggle = true;
 						pathOn = trim(parts[7]);
@@ -493,7 +475,6 @@ namespace RadarKeys {
 					std::string resolvedOn = ResolveScriptPath(pathOn);
 					std::string resolvedOff = pathOff.empty() ? "" : ResolveScriptPath(pathOff);
 
-					// reconstructing nodes
 					KeyBind b{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, resolvedOn, resolvedOff, false, holdSeconds };
 					b.functionOn = funcOn;
 					b.functionOff = funcOff;
@@ -1081,6 +1062,7 @@ namespace RadarKeys {
 						float detailTextHeight = ImGui::GetItemRectSize().y;
 						float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
 						float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
+
 						ImVec4 keyNameColor;
 						if (info.hasToggleState) {
 							keyNameColor = info.toggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
