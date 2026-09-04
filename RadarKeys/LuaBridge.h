@@ -1,31 +1,17 @@
 #pragma once
-#include "windowsapi.h"
+#include "SafeQueue.h"
 #include <vector>
 #include <string>
 
 namespace RadarKeys {
-	namespace LuaKeyState {
-		bool ButtonDown(USHORT vKey);
-		bool OnButtonDown(USHORT vKey);
-		bool OnButtonUp(USHORT vKey);
-		bool ButtonHeld(USHORT vKey, double holdSecondsOverride = -1.0);
-		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride = -1.0);
-		bool OnButtonRepeat(USHORT vKey);
-		double GetRepeatMult(USHORT vKey);
-		void ResetRepeat(USHORT vKey);
-		std::vector<USHORT> GetTrackedVKeys();
-		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
-		void HideFromTrackedList(USHORT vKey);
+	namespace LuaBridge {
+		typedef void(*MenuCommandFunc) (std::vector<std::string> args);
+		void AddMenuCommand(const std::string& cmd, MenuCommandFunc func);
+		void ProcessMessages();
+		void QueueMessageOut(std::string message);
+		void QueueMessageIn(std::string message);
 
-		struct TrackedKeyInfo {
-			USHORT vKey = 0;
-			bool isPressed = false;
-			bool hasDescription = false;
-			std::string scriptName;
-			std::string functionName;
-			bool hasToggleState = false;
-			bool toggleEnabled = false;
-		};
-		std::vector<TrackedKeyInfo> GetTrackedKeyInfo();
+		extern SafeQueue<std::string> messagesOut;
+		extern SafeQueue<std::string> messagesIn;
 	}
 }
