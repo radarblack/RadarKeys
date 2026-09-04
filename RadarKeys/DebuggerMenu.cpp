@@ -1,5 +1,6 @@
 #include "DebuggerMenu.h"
 #include "LuaBridge.h"
+#include "KeyBindMenu.h"
 #include "spdlog/spdlog.h"
 #include "imgui/imgui.h"
 
@@ -44,59 +45,66 @@ namespace RadarKeys {
 
 		void LogBindEvent(const std::string& message) {
 			spdlog::info("[BND] {}", message);
+			KeyBindMenu::LogActivity("[BND] " + message);
 			if (!logBindUnbind) return;
 			AddLogEntry("[BND] " + message);
 		}
 
 		void LogButtonPress(const std::string& message) {
-			if (!logButtonPress) return;
 			spdlog::debug("[BTN] {}", message);
+			KeyBindMenu::LogActivity("[BTN] " + message);
+			if (!logButtonPress) return;
 			AddLogEntry("[BTN] " + message);
 		}
 
 		void LogLuaDebug(const std::string& message) {
-			if (!logLuaDebug) return;
 			spdlog::debug("[LUA] {}", message);
+			KeyBindMenu::LogActivity("[LUA] " + message);
+			if (!logLuaDebug) return;
 			AddLogEntry("[LUA] " + message);
 		}
 
 		bool LogScriptAttempt(const std::string& scriptPath) {
 			bool exists = std::filesystem::exists(scriptPath);
 			if (!exists) {
-				spdlog::error("[SCR][DLL] MISSING - SKIP: {}", scriptPath);
+				spdlog::error("[SCR][DLL] missing - SKIP: {}", scriptPath);
+				KeyBindMenu::LogActivity("[SCR][DLL] missing - SKIP: " + scriptPath, false);
 				if (logScriptResult) {
-					AddLogEntry("[SCR][DLL] MISSING - SKIP: " + scriptPath);
+					AddLogEntry("[SCR][DLL] missing - SKIP: " + scriptPath);
 				}
 				return false;
 			}
-			spdlog::debug("[SCR][DLL] ATTEMPT: {}", scriptPath);
+			spdlog::debug("[SCR][DLL] attempt: {}", scriptPath);
+			KeyBindMenu::LogActivity("[SCR][DLL] attempt: " + scriptPath);
 			if (logScriptResult) {
-				AddLogEntry("[SCR][DLL] ATTEMPT: " + scriptPath);
+				AddLogEntry("[SCR][DLL] attempt: " + scriptPath);
 			}
 			return true;
 		}
 
 		void OnDoScriptResult(std::vector<std::string> args) {
 			if (args.size() < 3) {
-				spdlog::warn("DebuggerMenu::OnDoScriptResult: Malformed arguments feed (size {})", args.size());
+				spdlog::warn("DebuggerMenu::OnDoScriptResult: malformed args (size {})", args.size());
 				return;
 			}
 
 			bool success = args[2] == "1";
 			if (success) {
-				spdlog::debug("[SCR][LUA] SUCCESS");
+				spdlog::debug("[SCR][LUA] success");
+				KeyBindMenu::LogActivity("[SCR][LUA] success");
 				if (logScriptResult) {
-					AddLogEntry("[SCR][LUA] SUCCESS");
+					AddLogEntry("[SCR][LUA] success");
 				}
 			}
 			else {
 				if (args.size() < 4) {
-					spdlog::warn("DebuggerMenu::OnDoScriptResult: Script failed with no message provided (size {})", args.size());
+					spdlog::warn("DebuggerMenu::OnDoScriptResult: script failed but no error message provided (size {})", args.size());
 					return;
 				}
 
 				std::string errorMsg = args[3];
 				spdlog::error("[SCR][LUA] fail: {}", errorMsg);
+				KeyBindMenu::LogActivity("[SCR][LUA] fail: " + errorMsg, false);
 				if (logScriptResult) {
 					AddLogEntry("[SCR][LUA] fail: " + errorMsg);
 				}
@@ -122,10 +130,11 @@ namespace RadarKeys {
 				logLuaDebug = allOn;
 			}
 			ImGui::Separator();
-			ImGui::Checkbox("Log Key Bind / Unbind", &logBindUnbind);
-			ImGui::Checkbox("Log Button Press", &logButtonPress);
-			ImGui::Checkbox("Log Script Attempts (DLL vs. LUA error check)", &logScriptResult);
-			ImGui::Checkbox("Log Script Debug Message (RadarKeys.DebugLog)", &logLuaDebug);
+			ImGui::Checkbox("Log key bind / unbind", &logBindUnbind);
+			ImGui::Checkbox("Log button presses", &logButtonPress);
+			ImGui::Checkbox("Log script run attempts (success/fail, dll-side vs lua-side)", &logScriptResult);
+			ImGui::Checkbox("Log script debug messages (RadarKeys.DebugLog)", &logLuaDebug);
+			ImGui::TextDisabled("These only control what's shown live below - everything is always written to radarkeys_log.txt regardless.");
 
 			ImGui::Separator();
 			if (ImGui::Button("Clear Log")) {
