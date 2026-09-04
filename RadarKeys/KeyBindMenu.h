@@ -13,36 +13,26 @@ namespace RadarKeys {
 			bool needCtrl;
 			bool needShift;
 			bool needAlt;
-			std::string keyName;     // base key display name, e.g. "F6", "A", "," - see vkNameTable
-			
+			std::string keyName;
 			bool isToggle = false;
 			std::string scriptPathOn;  // for toggle On
 			std::string scriptPathOff; // for toggle Off
 			mutable bool toggleState = false; // checks toggle state
-			
-			float holdSeconds = 0.0f; // 0 = fires instantly on press (default/original behavior); >0 = fires once after being held this long, see Update()
+			float holdSeconds = 0.0f;
 
 			// lua script pass
 			std::string functionOn;   // toggle ON slot
 			std::string functionOff;  // toggle OFF slot
 			std::string functionTap;  // instant tap / long press slot
 		};
-
-		// loads bindings and menu key at startup from mod/radarKeys/radar_keybinds.conf; uses hardcoded F7 as fallback if nopersisted menu key.
 		void Init(const std::string& defaultMenuKeyName);
-
-		// Draws key-bindings window; call only when menu open (ImGui p_open pattern).
 		void Draw(bool* p_open);
-
-		// call once per frame when the key is held (?). Doubt if this works. Hopefully. lol
 		void Update();
-
-		// log tracking for crash errors
 		void LogCleanShutdown();
+		void LogActivity(const std::string& message, bool success = true);
 
-		// shared here so other modules (LuaKeyState) can resolve the same names Lua scripts see in the UI.
 		std::string NameForVKey(USHORT vKey);
-		int VKeyForName(const std::string& name); // returns -1 if not found
+		int VKeyForName(const std::string& name);
 
 		extern std::vector<KeyBind> bindings;
 		extern bool menuOpen;
