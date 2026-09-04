@@ -15,6 +15,7 @@ namespace RadarKeys {
 		void ResetRepeat(USHORT vKey);
 		std::vector<USHORT> GetTrackedVKeys();
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
+		void HideFromTrackedList(USHORT vKey);
 
 		struct TrackedKeyInfo {
 			USHORT vKey = 0;
@@ -23,9 +24,8 @@ namespace RadarKeys {
 			std::string scriptName;
 			std::string functionName;
 			bool hasToggleState = false;
-			bool toggleEnabled = false; 
+			bool toggleEnabled = false;
 		};
-
 		std::vector<TrackedKeyInfo> GetTrackedKeyInfo();
 	}
 }
