@@ -6,6 +6,7 @@
 namespace RadarKeys {
 	namespace LuaKeyState {
 		using clock = std::chrono::steady_clock;
+
 		constexpr double kHoldTimeSeconds = 0.9;
 		constexpr double kRepeatRateSeconds = 0.85;
 		constexpr double kIncrementMultIncrementMult = 1.5;
@@ -14,13 +15,14 @@ namespace RadarKeys {
 		struct KeyPollState {
 			bool registered = false;
 			RawInput::ActionHandle handle = 0;
-
 			bool isPressed = false;
 			bool downEdgePending = false;
 			bool upEdgePending = false;
+
 			bool heldStartSet = false;
 			bool onHoldStartSet = false;
 			bool repeatStartSet = false;
+
 			clock::time_point heldStart{};
 			clock::time_point onHoldStart{};
 			clock::time_point repeatStart{};
@@ -31,6 +33,7 @@ namespace RadarKeys {
 			std::string functionName;
 			bool hasToggleState = false;
 			bool toggleEnabled = false;
+			bool hiddenFromList = false;
 		};
 
 		KeyPollState states[256];
@@ -205,6 +208,7 @@ namespace RadarKeys {
 			s.hasDescription = true;
 			s.scriptName = scriptName;
 			s.functionName = functionName;
+			s.hiddenFromList = false;
 			if (toggleState == "on") {
 				s.hasToggleState = true;
 				s.toggleEnabled = true;
@@ -218,10 +222,17 @@ namespace RadarKeys {
 			}
 		}
 
+		void HideFromTrackedList(USHORT vKey) {
+			if (!ValidVKey(vKey)) {
+				return;
+			}
+			states[vKey].hiddenFromList = true;
+		}
+
 		std::vector<TrackedKeyInfo> GetTrackedKeyInfo() {
 			std::vector<TrackedKeyInfo> result;
 			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
-				if (!states[vKeyInt].registered) {
+				if (!states[vKeyInt].registered || states[vKeyInt].hiddenFromList) {
 					continue;
 				}
 				const KeyPollState& s = states[vKeyInt];
