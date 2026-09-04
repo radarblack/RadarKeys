@@ -8,6 +8,7 @@
 #include "HookUtils.h"
 #include "spdlog/spdlog.h"
 #include "imgui/imgui.h"
+
 #include <fstream>
 #include <filesystem>
 #include <map>
@@ -21,6 +22,7 @@ namespace RadarKeys {
 	namespace KeyBindMenu {
 		std::vector<KeyBind> bindings;
 		static bool isAssigningMenuToggleKey = false; 
+
 		struct BindingDisplayCache {
 			std::string itemLabel;
 			std::string detailText;
@@ -94,6 +96,7 @@ namespace RadarKeys {
 			bool wasClean = true;
 			if (std::filesystem::exists(currentLog, ec)) {
 				wasClean = PreviousSessionEndedCleanly(currentLog);
+
 				std::filesystem::copy_file(currentLog, prevLog, std::filesystem::copy_options::overwrite_existing, ec);
 			}
 
@@ -123,6 +126,21 @@ namespace RadarKeys {
 			}
 		}
 
+		void MarkInitializationComplete() {
+			FlushActivityLog();
+			std::string currentLog = GetLogFileName();
+			std::error_code ec;
+			size_t newBaseline = std::filesystem::file_size(currentLog, ec);
+			if (ec) {
+				spdlog::warn("KeyBindMenu::MarkInitializationComplete: couldn't stat {}: {}", currentLog, ec.message());
+				return;
+			}
+			activityLogBaselineBytes = newBaseline;
+			activityLogLines.clear();
+			activityLogBytes = 0;
+			activityLogWritesSinceFlush = 0;
+		}
+
 		void AppendActivityLogLine(const std::string& line) {
 			activityLogLines.push_back(line);
 			activityLogBytes += line.size();
@@ -140,13 +158,16 @@ namespace RadarKeys {
 
 		void LogActivity(const std::string& message, bool success) {
 			EnsureActivityLogReady();
+
 			auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::duration<double>(ImGui::GetTime()));
 			auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
 			duration -= hours;
 			auto minutes = std::chrono::duration_cast<std::chrono::minutes>(duration);
 			duration -= minutes;
+
 			char timeBuf[32];
 			snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d", hours.count(), minutes.count(), duration.count());
+
 			AppendActivityLogLine(std::string("[") + timeBuf + "] [" + (success ? "OK" : "FAIL") + "] " + message + "\n");
 		}
 
@@ -224,6 +245,7 @@ namespace RadarKeys {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
 			}
+			
 			if (showCapturePrompt) {
 				return;
 			}
@@ -276,7 +298,6 @@ namespace RadarKeys {
 					if (!preferHold && bind.holdSeconds <= 0.0f) plainFallbackMatch = &bind;
 				}
 			}
-
 			return exactMatch ? exactMatch : plainFallbackMatch;
 		}
 
@@ -545,6 +566,7 @@ namespace RadarKeys {
 			for (const auto& bind : bindings) EnsureDispatcherRegistered(bind.vKey);
 			RegisterMenuToggleKey(menuToggleVKey);
 			LogActivity("Menu hotkey set to " + NameForVKey(menuToggleVKey));
+			MarkInitializationComplete();
 		}
 
 		static USHORT capturedVKey = 0;
@@ -765,6 +787,7 @@ namespace RadarKeys {
 		
 			bool isUpperPathValid = false, isLowerPathValid = false;
 			int scriptStatus = 0, lowerStatus = 0;
+
 			static char lastStatCheckedOnBuffer[512] = "";
 			static int cachedOnStatus = 0;
 			static char lastStatCheckedOffBuffer[512] = "";
