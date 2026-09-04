@@ -139,6 +139,7 @@ namespace RadarKeys {
 			}
 		}
 
+		// improved activity tracker and logging
 		void LogActivity(const std::string& message, bool success = true) {
 			EnsureActivityLogReady();
 
@@ -160,6 +161,7 @@ namespace RadarKeys {
 			FlushActivityLog();
 		}
 
+		// Modifiers as checkboxes; dropdown shows persistable base keys only.
 		struct VkNameEntry { const char* name; USHORT vKey; };
 		const VkNameEntry vkNameTable[] = {
 			{"A", 'A'}, {"B", 'B'}, {"C", 'C'}, {"D", 'D'}, {"E", 'E'}, {"F", 'F'},
@@ -183,6 +185,7 @@ namespace RadarKeys {
 			{"Numpad 9", VK_NUMPAD9},
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
 			
+			// added extra mouse keys, excluding left and right click
 			{"Mouse Wheel", VK_MBUTTON},
 			{"Mouse 4", VK_XBUTTON1},
 			{"Mouse 5", VK_XBUTTON2}
@@ -197,6 +200,7 @@ namespace RadarKeys {
 			return "Unknown(" + std::to_string(vKey) + ")";
 		}
 
+		// returns -1 if not found in the table
 		int VKeyForName(const std::string& name) {
 			for (const auto& entry : vkNameTable) {
 				if (name == entry.name) return entry.vKey;
@@ -220,16 +224,19 @@ namespace RadarKeys {
 			return (std::filesystem::path(GetGameDirectory()) / (hasSeparators ? std::filesystem::path(typedPath) : std::filesystem::path("mod") / "modules" / typedPath)).string();
 		}
 
+		// menu key. default F7
 		USHORT menuToggleVKey = VK_F7;
 		RawInput::ActionHandle menuToggleHandle = 0;
 		bool menuOpen = false;
 
+		// share one RawInput action per vKey to let OnBoundKeyPressed see all bindings and fall back to plain key when modifiers don't match.
 		std::map<USHORT, RawInput::ActionHandle> vKeyDispatchers;
+
+		// RawInput action wired to whatever menuToggleVKey currently is - see RegisterMenuToggleKey
 		void OnMenuToggleKeyPressed(RawInput::BUTTONEVENT buttonEvent) {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
 			}
-			
 			if (showCapturePrompt) {
 				return;
 			}
@@ -282,7 +289,6 @@ namespace RadarKeys {
 					if (!preferHold && bind.holdSeconds <= 0.0f) plainFallbackMatch = &bind;
 				}
 			}
-
 			return exactMatch ? exactMatch : plainFallbackMatch;
 		}
 
@@ -296,6 +302,7 @@ namespace RadarKeys {
 				bind.toggleState = !bind.toggleState;
 			}
 
+			// check if the file exist
 			if (DebuggerMenu::LogScriptAttempt(targetPath)) {
 				if (!targetFunc.empty()) {
 					std::string luaPayload = "DoScript|local f = loadfile([[" + targetPath + "]]); if f then f(); if " + targetFunc + " then " + targetFunc + "(); end end";
@@ -318,6 +325,7 @@ namespace RadarKeys {
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
 					if (!it->second.fired) {
+						// for tap
 						const KeyBind* tapBind = FindMatchingBinding(vKey, it->second.ctrlOnPressed, it->second.shiftOnPressed, it->second.altOnPressed, false);
 						if (tapBind && tapBind->holdSeconds <= 0.0f) {
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
@@ -334,6 +342,7 @@ namespace RadarKeys {
 			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 			LogActivity(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 
+			// for long press
 			bool hasHoldOptionOnKey = false;
 			for (const auto& bind : bindings) {
 				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
@@ -372,11 +381,13 @@ namespace RadarKeys {
 			}
 		}
 
+		// registers shared vKey dispatcher; safe to call repeatedly per binding.
 		void EnsureDispatcherRegistered(USHORT vKey) {
 			if (vKeyDispatchers.find(vKey) != vKeyDispatchers.end()) return;
 			vKeyDispatchers[vKey] = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnBoundKeyPressed(vKey, ev); });
 		}
 
+		// unregisters vKey dispatcher only when no bindings remain; other modifier combos may still need it.
 		void RemoveDispatcherIfUnused(USHORT vKey) {
 			for (const auto& bind : bindings) if (bind.vKey == vKey) return;
 			auto it = vKeyDispatchers.find(vKey);
@@ -773,8 +784,6 @@ namespace RadarKeys {
 		
 			bool isUpperPathValid = false, isLowerPathValid = false;
 			int scriptStatus = 0, lowerStatus = 0;
-
-			// gets rid of the repeating disk check for the file
 			static char lastStatCheckedOnBuffer[512] = "";
 			static int cachedOnStatus = 0;
 			static char lastStatCheckedOffBuffer[512] = "";
@@ -1072,7 +1081,6 @@ namespace RadarKeys {
 						float detailTextHeight = ImGui::GetItemRectSize().y;
 						float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
 						float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
-
 						ImVec4 keyNameColor;
 						if (info.hasToggleState) {
 							keyNameColor = info.toggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
@@ -1098,7 +1106,7 @@ namespace RadarKeys {
 								showCapturePrompt = true;
 							}
 							if (ImGui::IsItemHovered()) {
-								ImGui::SetTooltip("Click to reassign this key.\nSaved to radar_keybinds_mod_.conf - takes effect immediately.");
+								ImGui::SetTooltip("Click to reassign this key.\nSaved to radar_keybinds_mod.conf - takes effect immediately.");
 							}
 						}
 						else {
