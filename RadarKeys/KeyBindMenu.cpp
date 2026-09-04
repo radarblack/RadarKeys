@@ -8,7 +8,6 @@
 #include "HookUtils.h"
 #include "spdlog/spdlog.h"
 #include "imgui/imgui.h"
-
 #include <fstream>
 #include <filesystem>
 #include <map>
@@ -81,7 +80,6 @@ namespace RadarKeys {
 			return lastNonEmptyLine.empty() || lastNonEmptyLine == "[STATE] CLEAN_EXIT";
 		}
 
-		// once-per-session setup: rotate prev log, detect a dirty previous exit, and record the baseline byte size we truncate back to on every flush
 		void EnsureActivityLogReady() {
 			if (activityLogReady) return;
 			EnsureBindsDirectory();
@@ -97,11 +95,9 @@ namespace RadarKeys {
 			bool wasClean = true;
 			if (std::filesystem::exists(currentLog, ec)) {
 				wasClean = PreviousSessionEndedCleanly(currentLog);
-				// overwrite the prev log
 				std::filesystem::copy_file(currentLog, prevLog, std::filesystem::copy_options::overwrite_existing, ec);
 			}
 
-			// clear the new log
 			std::ofstream clearStream(currentLog, std::ios::trunc);
 			if (!wasClean) {
 				clearStream << "[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).\n";
@@ -113,7 +109,6 @@ namespace RadarKeys {
 			activityLogReady = true;
 		}
 
-		// rewrites the file as [baseline] + [currently retained window], without dropping the window from memory
 		void FlushActivityLog() {
 			std::string currentLog = GetLogFileName();
 			std::error_code ec;
@@ -144,7 +139,6 @@ namespace RadarKeys {
 			}
 		}
 
-		// improved activity tracker and logging
 		void LogActivity(const std::string& message, bool success = true) {
 			EnsureActivityLogReady();
 
@@ -166,7 +160,6 @@ namespace RadarKeys {
 			FlushActivityLog();
 		}
 
-		// Modifiers as checkboxes; dropdown shows persistable base keys only.
 		struct VkNameEntry { const char* name; USHORT vKey; };
 		const VkNameEntry vkNameTable[] = {
 			{"A", 'A'}, {"B", 'B'}, {"C", 'C'}, {"D", 'D'}, {"E", 'E'}, {"F", 'F'},
@@ -190,7 +183,6 @@ namespace RadarKeys {
 			{"Numpad 9", VK_NUMPAD9},
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
 			
-			// added extra mouse keys, excluding left and right click
 			{"Mouse Wheel", VK_MBUTTON},
 			{"Mouse 4", VK_XBUTTON1},
 			{"Mouse 5", VK_XBUTTON2}
@@ -205,7 +197,6 @@ namespace RadarKeys {
 			return "Unknown(" + std::to_string(vKey) + ")";
 		}
 
-		// returns -1 if not found in the table
 		int VKeyForName(const std::string& name) {
 			for (const auto& entry : vkNameTable) {
 				if (name == entry.name) return entry.vKey;
@@ -229,21 +220,16 @@ namespace RadarKeys {
 			return (std::filesystem::path(GetGameDirectory()) / (hasSeparators ? std::filesystem::path(typedPath) : std::filesystem::path("mod") / "modules" / typedPath)).string();
 		}
 
-		// menu key. default F7
 		USHORT menuToggleVKey = VK_F7;
 		RawInput::ActionHandle menuToggleHandle = 0;
 		bool menuOpen = false;
 
-		// share one RawInput action per vKey to let OnBoundKeyPressed see all bindings and fall back to plain key when modifiers don't match.
 		std::map<USHORT, RawInput::ActionHandle> vKeyDispatchers;
-
-		// RawInput action wired to whatever menuToggleVKey currently is - see RegisterMenuToggleKey
 		void OnMenuToggleKeyPressed(RawInput::BUTTONEVENT buttonEvent) {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
 			}
 			
-			// safety gate. so that you can't close the menu when the prompt is up.
 			if (showCapturePrompt) {
 				return;
 			}
@@ -257,7 +243,6 @@ namespace RadarKeys {
 			menuToggleHandle = RawInput::RegisterAction(vKey, OnMenuToggleKeyPressed);
 		}
 
-		// reserved regardless of modifiers for IH commands and other default keys
 		bool IsReservedVKey(USHORT vKey) {
 			return vKey == VK_F2 || vKey == VK_F3 || vKey == VK_ESCAPE || vKey == menuToggleVKey;
 		}
@@ -275,7 +260,6 @@ namespace RadarKeys {
 		struct HoldTrack {
 			std::chrono::steady_clock::time_point startTime;
 			bool fired = false;
-			// stops tracking modifier keys
 			bool ctrlOnPressed = false;
 			bool shiftOnPressed = false;
 			bool altOnPressed = false;
@@ -288,21 +272,17 @@ namespace RadarKeys {
 
 			for (const auto& bind : bindings) {
 				if (bind.vKey != vKey) continue;
-
-				// look for assigned modifier + key
 				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
 					if (preferHold && bind.holdSeconds > 0.0f) return &bind;
 					if (!preferHold && bind.holdSeconds <= 0.0f) return &bind;
 					exactMatch = &bind;
 				}
-				// fallback to the pressed key if none found
 				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) {
 					if (preferHold && bind.holdSeconds > 0.0f) plainFallbackMatch = &bind;
 					if (!preferHold && bind.holdSeconds <= 0.0f) plainFallbackMatch = &bind;
 				}
 			}
 
-			// If no exact modifier combination was found, fall back to the plain key binding profile cleanly
 			return exactMatch ? exactMatch : plainFallbackMatch;
 		}
 
@@ -313,19 +293,15 @@ namespace RadarKeys {
 			if (bind.isToggle) {
 				targetPath = bind.toggleState ? bind.scriptPathOff : bind.scriptPathOn;
 				targetFunc = bind.toggleState ? bind.functionOff : bind.functionOn;
-				bind.toggleState = !bind.toggleState; // Alternate toggle state assignment
+				bind.toggleState = !bind.toggleState;
 			}
 
-			// check if the file exist
 			if (DebuggerMenu::LogScriptAttempt(targetPath)) {
-				// if target function is assigned, it runs that specific name block.
-				// fallback: runs the whole script
 				if (!targetFunc.empty()) {
 					std::string luaPayload = "DoScript|local f = loadfile([[" + targetPath + "]]); if f then f(); if " + targetFunc + " then " + targetFunc + "(); end end";
 					LuaBridge::QueueMessageIn(luaPayload);
 					LogActivity("Fired script " + targetPath + " [" + targetFunc + "]");
 				} else {
-					// fallback if all checks fail
 					LuaBridge::QueueMessageIn("DoScript|dofile([[" + targetPath + "]])");
 					LogActivity("Fired script " + targetPath);
 				}
@@ -342,7 +318,6 @@ namespace RadarKeys {
 				auto it = holdTracks.find(vKey);
 				if (it != holdTracks.end()) {
 					if (!it->second.fired) {
-						// for tap
 						const KeyBind* tapBind = FindMatchingBinding(vKey, it->second.ctrlOnPressed, it->second.shiftOnPressed, it->second.altOnPressed, false);
 						if (tapBind && tapBind->holdSeconds <= 0.0f) {
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
@@ -359,11 +334,9 @@ namespace RadarKeys {
 			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 			LogActivity(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 
-			// for long press
 			bool hasHoldOptionOnKey = false;
 			for (const auto& bind : bindings) {
 				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
-					// check if modifier key is assigned
 					if ((bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) ||
 						(!bind.needCtrl && !bind.needShift && !bind.needAlt)) {
 						hasHoldOptionOnKey = true;
@@ -399,15 +372,13 @@ namespace RadarKeys {
 			}
 		}
 
-		// registers shared vKey dispatcher; safe to call repeatedly per binding.
 		void EnsureDispatcherRegistered(USHORT vKey) {
 			if (vKeyDispatchers.find(vKey) != vKeyDispatchers.end()) return;
 			vKeyDispatchers[vKey] = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnBoundKeyPressed(vKey, ev); });
 		}
 
-		// unregisters vKey dispatcher only when no bindings remain; other modifier combos may still need it.
 		void RemoveDispatcherIfUnused(USHORT vKey) {
-			for (const auto& bind : bindings) if (bind.vKey == vKey) return; // still in use by another binding
+			for (const auto& bind : bindings) if (bind.vKey == vKey) return;
 			auto it = vKeyDispatchers.find(vKey);
 			if (it != vKeyDispatchers.end()) { RawInput::UnRegisterAction(vKey, it->second); vKeyDispatchers.erase(it); }
 		}
@@ -604,6 +575,7 @@ namespace RadarKeys {
 		static std::string modKeyCaptureScriptName;
 		static std::string modKeyCaptureFunctionName;
 		static USHORT modKeyCaptureVKey = 0;
+		static USHORT modKeyCaptureOldVKey = 0;
 
 		void DrawModKeyCapturePrompt() {
 			ImGui::SetNextWindowSize(ImVec2(300, 160), ImGuiCond_FirstUseEver);
@@ -658,6 +630,9 @@ namespace RadarKeys {
 				ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(modKeyCaptureVKey));
 				DebuggerMenu::LogBindEvent("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(modKeyCaptureVKey));
 				LogActivity("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(modKeyCaptureVKey));
+				if (modKeyCaptureVKey != modKeyCaptureOldVKey) {
+					LuaKeyState::HideFromTrackedList(modKeyCaptureOldVKey);
+				}
 				modKeyCaptureVKey = 0;
 				showModKeyCapturePrompt = showCapturePrompt = false;
 			}
@@ -668,7 +643,7 @@ namespace RadarKeys {
 				showModKeyCapturePrompt = showCapturePrompt = false;
 				LogActivity("Mod key reassignment cancelled");
 			}
-			ImGui::TextDisabled("Takes effect next time the script loads (keys are cached, not re-read live).");
+			ImGui::TextDisabled("Takes effect immediately, as long as the script re-checks its key every frame.");
 			ImGui::End();
 		}
 
@@ -799,6 +774,7 @@ namespace RadarKeys {
 			bool isUpperPathValid = false, isLowerPathValid = false;
 			int scriptStatus = 0, lowerStatus = 0;
 
+			// gets rid of the repeating disk check for the file
 			static char lastStatCheckedOnBuffer[512] = "";
 			static int cachedOnStatus = 0;
 			static char lastStatCheckedOffBuffer[512] = "";
@@ -1117,11 +1093,12 @@ namespace RadarKeys {
 								modKeyCaptureScriptName = info.scriptName;
 								modKeyCaptureFunctionName = info.functionName;
 								modKeyCaptureVKey = 0;
+								modKeyCaptureOldVKey = info.vKey;
 								showModKeyCapturePrompt = true;
 								showCapturePrompt = true;
 							}
 							if (ImGui::IsItemHovered()) {
-								ImGui::SetTooltip("Click to reassign this key.\nSaved to radar_keybinds_mod_.conf - takes effect next time the script loads.");
+								ImGui::SetTooltip("Click to reassign this key.\nSaved to radar_keybinds_mod_.conf - takes effect immediately.");
 							}
 						}
 						else {
