@@ -9,14 +9,13 @@
 
 namespace RadarKeys {
 	namespace ModKeyBindings {
-
 		static std::map<std::string, std::map<std::string, std::string>> overrides;
 		static bool loaded = false;
 
 		const std::string& GetConfFileName() {
 			static std::string cached;
 			if (cached.empty()) {
-				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radar_keybinds_mod_.conf").string();
+				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radar_keybinds_mod.conf").string();
 			}
 			return cached;
 		}
@@ -53,7 +52,7 @@ namespace RadarKeys {
 					continue;
 				}
 				if (currentScript.empty()) {
-					continue; // stray line before any [Section] header
+					continue;
 				}
 
 				size_t eq = line.find('=');
