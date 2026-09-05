@@ -15,6 +15,7 @@ namespace RadarKeys {
 		void ResetRepeat(USHORT vKey);
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
 		void SweepStaleDescriptions();
+		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName);
 
 		struct TrackedKeyInfo {
 			USHORT vKey = 0;
