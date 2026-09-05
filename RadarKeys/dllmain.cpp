@@ -67,13 +67,13 @@ namespace RadarKeys {
 	}
 
 	static int l_GetMenuMessages(lua_State* L) {
-		std::optional<std::string> messageOpt = LuaBridge::messagesIn.pop(); // waits if empty
+		std::optional<std::string> messageOpt = LuaBridge::messagesIn.pop();
 		if (!messageOpt) {
 			LuaPushNil(L); // no messages
 			return 1;
 		}
 		LuaCreateTable(L, 0, 0);
-		int tableAbsIdx = LuaGetTop(L); // captured once, stays valid regardless of later pushes
+		int tableAbsIdx = LuaGetTop(L);
 
 		int index = 0;
 		while (messageOpt) {
@@ -82,7 +82,7 @@ namespace RadarKeys {
 			LuaRawSetIndexed(L, tableAbsIdx, index, message.c_str());
 			messageOpt = LuaBridge::messagesIn.pop();
 		}
-		assert(LuaGetTop(L) == 1); //  table still on stack
+		assert(LuaGetTop(L) == 1);
 		return 1;
 	}
 
