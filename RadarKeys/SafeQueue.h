@@ -2,6 +2,7 @@
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <string>
 
 // A threadsafe-queue.
 //https://bitbucket.org/marco/samples/src/develop/src/queue.cpp
@@ -22,7 +23,6 @@ class SafeQueue {
     std::queue<T> queue_;
     mutable std::mutex mutex_;
 
-    // moved out of public interface to prevent races between this and pop().
     [[nodiscard]] bool empty() const {
         return queue_.empty();
     }
@@ -40,12 +40,7 @@ public:
         queue_ = std::move(other.queue_);
     }
 
-    virtual ~SafeQueue() noexcept(false) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (!empty()) {
-            throw non_empty_queue("Destroying a non-empty queue");
-        }
-    }
+    ~SafeQueue() noexcept = default;
 
     [[nodiscard]] unsigned long size() const {
         std::lock_guard<std::mutex> lock(mutex_);
