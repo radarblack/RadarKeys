@@ -166,7 +166,7 @@ namespace RadarKeys {
 			duration -= minutes;
 
 			char timeBuf[32];
-			snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d", hours.count(), minutes.count(), duration.count());
+			snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d", (int)hours.count(), (int)minutes.count(), (int)duration.count());
 
 			AppendActivityLogLine(std::string("[") + timeBuf + "] [" + (success ? "OK" : "FAIL") + "] " + message + "\n");
 		}
@@ -522,7 +522,7 @@ namespace RadarKeys {
 			EnsureDispatcherRegistered(vKey);
 			SaveBindings();
 			MarkDisplayCacheDirty();
-			DebuggerMenu::LogBindEvent("Nound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
+			DebuggerMenu::LogBindEvent("Bound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
 			LogActivity("Bound " + CombinedDisplayName(bindings.back()) + " (toggle: " + (isToggle ? "YES" : "NO") + ")");
 		}
 
