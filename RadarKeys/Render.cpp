@@ -209,6 +209,7 @@ namespace RadarKeys {
 			ID3D11DeviceContext* context = nullptr;
 			d3d11Hook->get_device()->GetImmediateContext(&context);
 			context->OMSetRenderTargets(1, &mainRenderTargetView, NULL);
+			context->Release();
 			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 		}
 
