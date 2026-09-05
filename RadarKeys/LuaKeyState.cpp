@@ -14,7 +14,6 @@ namespace RadarKeys {
 
 		struct KeyPollState {
 			bool registered = false;
-			RawInput::ActionHandle handle = 0;
 			bool isPressed = false;
 			bool downEdgePending = false;
 			bool upEdgePending = false;
@@ -78,7 +77,7 @@ namespace RadarKeys {
 				return;
 			}
 			s.isPressed = RawInput::IsKeyHeldReal(vKey);
-			s.handle = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnRawEvent(vKey, ev); });
+			RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnRawEvent(vKey, ev); });
 			s.registered = true;
 			spdlog::debug("LuaKeyState EnsureTracked: now tracking vKey:{}", vKey);
 		}
@@ -187,16 +186,6 @@ namespace RadarKeys {
 			s.heldStartSet = false;
 			s.onHoldStartSet = false;
 			s.repeatStartSet = false;
-		}
-
-		std::vector<USHORT> GetTrackedVKeys() {
-			std::vector<USHORT> result;
-			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
-				if (states[vKeyInt].registered) {
-					result.push_back(static_cast<USHORT>(vKeyInt));
-				}
-			}
-			return result;
 		}
 
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState) {
