@@ -80,10 +80,10 @@ namespace RadarKeys {
 			}
 
 			if (handledMessage) {
-				if (w_param == WM_KEYUP) {
-					return true;
-				}
-				return false;
+			    if (message == WM_KEYUP) {
+			        return true;
+			    }
+			    return false;
 			}
 			return true;
 		}
