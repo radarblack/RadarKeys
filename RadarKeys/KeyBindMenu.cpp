@@ -583,6 +583,8 @@ namespace RadarKeys {
 		static char capturedFuncTapBuffer[128] = "";
 		static bool capturedToggleMode = false;
 		static bool capturedLongPressMode = false;
+		static bool capturedInstantMode = false;
+		static int capturedInstantTriggerType = 0;
 		static bool capturedHasFuncOn = false;
 		static bool capturedHasFuncOff = false;
 		static int capturedToggleType = 0; 
@@ -738,6 +740,8 @@ namespace RadarKeys {
 			    capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false; 
 			    capturedHoldSeconds = 0.0f;
 			    capturedToggleType = 0;
+		    capturedInstantMode = false;
+		    capturedInstantTriggerType = 0;
 			    LogActivity("Keybind has been reset");
 			}
 			ImGui::EndGroup(); ImGui::SameLine(205);
@@ -753,6 +757,14 @@ namespace RadarKeys {
 				    if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
 				    if (ImGui::Button(" - ", ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine(40);
 				    if (ImGui::Button(" + ", ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
+				}
+
+				ImGui::Checkbox("Instant", &capturedInstantMode);
+
+				if (capturedInstantMode) {
+					static const char* instantTriggerLabels[] = { "On Press", "On Release", "Repeat" };
+					ImGui::SetNextItemWidth(120);
+					ImGui::Combo("##capturedInstantTrigger", &capturedInstantTriggerType, instantTriggerLabels, IM_ARRAYSIZE(instantTriggerLabels));
 				}
 			}
 			
@@ -941,6 +953,7 @@ namespace RadarKeys {
 					DebuggerMenu::LogBindEvent("Menu Hotkey reassigned to: " + NameForVKey(capturedVKey));
 					LogActivity("Menu Hotkey reassigned to " + NameForVKey(capturedVKey));
 					capturedToggleMode = capturedLongPressMode = false;
+					capturedInstantMode = false; capturedInstantTriggerType = 0;
 				} else {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 				
@@ -972,6 +985,7 @@ namespace RadarKeys {
 					capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 					capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
 					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
+					capturedInstantMode = false; capturedInstantTriggerType = 0;
 				}
 				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
 				showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
@@ -987,6 +1001,7 @@ namespace RadarKeys {
 				capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 				capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
 				capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
+				capturedInstantMode = false; capturedInstantTriggerType = 0;
 				showCapturePrompt = isAssigningMenuToggleKey = false; editingBindingIndex = -1;
 				LogActivity("Key Assignment Prompt cancelled");
 			}
