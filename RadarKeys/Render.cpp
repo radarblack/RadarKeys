@@ -14,10 +14,8 @@
 #include <memory>
 #include <filesystem>
 #include <string>
-#include <chrono>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
 namespace RadarKeys {
 	namespace Render {
 
@@ -32,7 +30,6 @@ namespace RadarKeys {
 		bool firstFrame = true;
 
 		bool IsUnlockCursor() {
-			// cursor visibility tied to open menus; computed fresh each frame (no cache).
 			return KeyBindMenu::menuOpen || DebuggerMenu::menuOpen;
 		}
 
@@ -55,14 +52,12 @@ namespace RadarKeys {
 			}
 		}
 
-		// called by IHHook message hook on game's window-message thread (same as RawInput WM_INPUT)
 		bool OnMessage(HWND wnd, UINT message, WPARAM w_param, LPARAM l_param) {
 
 			if (!frameInitialized) {
 				return true;
 			}
 
-			// only swallows input if its from the mouse
 			if (message == WM_INPUT && (IsUnlockCursor() || showCapturePrompt)) {
 				RAWINPUT raw{};
 				UINT size = sizeof(RAWINPUT);
@@ -70,7 +65,7 @@ namespace RadarKeys {
 				// Windows Input API...
 				if (GetRawInputData((HRAWINPUT)l_param, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER)) != (UINT)-1) {
 					if (raw.header.dwType == RIM_TYPEMOUSE) {
-						return false; // should only swallow mouse inputs????
+						return false;
 					}
 				}
 			}
@@ -78,7 +73,6 @@ namespace RadarKeys {
 			bool handledMessage = !RawInput::OnMessage(wnd, message, w_param, l_param);
 
 			if (IsUnlockCursor() && ImGui_ImplWin32_WndProcHandler(wnd, message, w_param, l_param) != 0) {
-				// Block game input when UI active (RE2FW pattern)
 				auto& io = ImGui::GetIO();
 				if (io.WantCaptureMouse || io.WantCaptureKeyboard || io.WantTextInput) {
 					handledMessage = true;
@@ -86,16 +80,14 @@ namespace RadarKeys {
 			}
 
 			if (handledMessage) {
-				// Menu eating input may swallow keyup events for keys held when menu opened.
 				if (w_param == WM_KEYUP) {
 					return true;
 				}
-				return false;// eat the message
+				return false;
 			}
 			return true;
 		}
 
-		// called on initialize and on device reset (see OnReset)
 		bool FrameInitialize() {
 			if (frameInitialized) {
 				return true;
@@ -116,10 +108,7 @@ namespace RadarKeys {
 
 			DXGI_SWAP_CHAIN_DESC swapDesc{};
 			swapChain->GetDesc(&swapDesc);
-
 			hwnd = swapDesc.OutputWindow;
-
-			// RE2FW: explicitly call the destructor first
 			windowsMessageHook.reset();
 			windowsMessageHook = std::make_unique<WindowsMessageHook>(hwnd);
 			windowsMessageHook->on_message = [](auto wnd, auto msg, auto wParam, auto lParam) {
@@ -198,9 +187,6 @@ namespace RadarKeys {
 
 		void OnFrame() {
 			KeyBindMenu::Update();
-			auto frameTimeStart = std::chrono::high_resolution_clock::now();
-
-			// frameInitialized resets on device reset; place session‑once init behind firstFrame in FrameInitialize.
 			if (!frameInitialized) {
 				if (!FrameInitialize()) {
 					spdlog::error("Failed to frame initialize RadarKeys");
@@ -208,7 +194,7 @@ namespace RadarKeys {
 				}
 				spdlog::info("RadarKeys frame initialized");
 				frameInitialized = true;
-				return; // give it an extra frame to settle
+				return;
 			}
 
 			ImGui_ImplDX11_NewFrame();
@@ -224,16 +210,11 @@ namespace RadarKeys {
 			d3d11Hook->get_device()->GetImmediateContext(&context);
 			context->OMSetRenderTargets(1, &mainRenderTargetView, NULL);
 			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-
-			auto frameTimeEnd = std::chrono::high_resolution_clock::now();
-			auto frameDuration = std::chrono::duration_cast<std::chrono::microseconds>(frameTimeEnd - frameTimeStart).count();
-			(void)frameDuration;
 		}
 
 		void OnReset() {
 			spdlog::info("OnReset");
 
-			//RE2FW: crashes if we don't release it at this point
 			CleanupRenderTarget();
 			frameInitialized = false;
 
