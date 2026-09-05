@@ -13,7 +13,6 @@ namespace RadarKeys {
 		bool OnButtonRepeat(USHORT vKey);
 		double GetRepeatMult(USHORT vKey);
 		void ResetRepeat(USHORT vKey);
-		std::vector<USHORT> GetTrackedVKeys();
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
 		void HideFromTrackedList(USHORT vKey);
 
