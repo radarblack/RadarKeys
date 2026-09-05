@@ -16,6 +16,8 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <algorithm>
+#include <unordered_set>
 
 namespace RadarKeys {
 	bool showCapturePrompt = false; 
@@ -589,7 +591,6 @@ namespace RadarKeys {
 		static std::string modKeyCaptureScriptName;
 		static std::string modKeyCaptureFunctionName;
 		static USHORT modKeyCaptureVKey = 0;
-		static USHORT modKeyCaptureOldVKey = 0;
 
 		void DrawModKeyCapturePrompt() {
 			ImGui::SetNextWindowSize(ImVec2(300, 160), ImGuiCond_FirstUseEver);
@@ -644,9 +645,6 @@ namespace RadarKeys {
 				ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(modKeyCaptureVKey));
 				DebuggerMenu::LogBindEvent("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(modKeyCaptureVKey));
 				LogActivity("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(modKeyCaptureVKey));
-				if (modKeyCaptureVKey != modKeyCaptureOldVKey) {
-					LuaKeyState::HideFromTrackedList(modKeyCaptureOldVKey);
-				}
 				modKeyCaptureVKey = 0;
 				showModKeyCapturePrompt = showCapturePrompt = false;
 			}
@@ -1054,14 +1052,35 @@ namespace RadarKeys {
 			ImGui::Separator();
 
 			if (ImGui::CollapsingHeader("Keys Polled by Scripts", ImGuiTreeNodeFlags_DefaultOpen)) {
+				LuaKeyState::SweepStaleDescriptions();
 				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
+				std::unordered_set<USHORT> manualBoundVKeys;
+				for (const KeyBind& bind : bindings) {
+					manualBoundVKeys.insert(bind.vKey);
+				}
+
+				struct TrackedRow {
+					LuaKeyState::TrackedKeyInfo info;
+					bool conflicted;
+				};
+				std::vector<TrackedRow> rows;
+				rows.reserve(trackedKeys.size());
+				for (LuaKeyState::TrackedKeyInfo& info : trackedKeys) {
+					bool conflicted = info.isConflicted || manualBoundVKeys.count(info.vKey) > 0;
+					rows.push_back(TrackedRow{ std::move(info), conflicted });
+				}
+				std::stable_partition(rows.begin(), rows.end(), [](const TrackedRow& r) { return r.conflicted; });
+
 				ImGui::BeginChild("TrackedScriptKeys", ImVec2(0, 150), true);
-				if (trackedKeys.empty()) {
+				if (rows.empty()) {
 					ImGui::TextDisabled("(none yet - a key shows up here the first time a script queries it via RadarKeys.OnButtonDown/ButtonHeld/etc)");
 				}
 				else {
-					for (const LuaKeyState::TrackedKeyInfo& info : trackedKeys) {
-						ImGui::PushID(info.vKey);
+					for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
+						const LuaKeyState::TrackedKeyInfo& info = rows[rowIdx].info;
+						bool conflicted = rows[rowIdx].conflicted;
+
+						ImGui::PushID((int)rowIdx);
 						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
 						float rowTopY = ImGui::GetCursorPosY();
 						float buttonHeight = 20.0f;
@@ -1076,10 +1095,22 @@ namespace RadarKeys {
 							detailText = "-> (undescribed - call RadarKeys.DescribeKey(...) to label this)";
 						}
 
+						const float conflictBoxHeight = 34.0f;
 						ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
 						ImGui::AlignTextToFramePadding();
 						ImGui::BeginGroup();
-						ImGui::TextWrapped("%s", detailText.c_str());
+						if (conflicted) {
+							ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
+							ImGui::BeginChild("ConflictDetailBox", ImVec2(0, conflictBoxHeight), true);
+							ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+							ImGui::TextWrapped("%s", detailText.c_str());
+							ImGui::PopStyleColor();
+							ImGui::EndChild();
+							ImGui::PopStyleColor();
+						}
+						else {
+							ImGui::TextWrapped("%s", detailText.c_str());
+						}
 						ImGui::EndGroup();
 
 						float detailTextHeight = ImGui::GetItemRectSize().y;
@@ -1094,21 +1125,46 @@ namespace RadarKeys {
 							keyNameColor = info.isPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 						}
 
+						auto openReassignPrompt = [&info]() {
+							modKeyCaptureScriptName = info.scriptName;
+							modKeyCaptureFunctionName = info.functionName;
+							modKeyCaptureVKey = 0;
+							showModKeyCapturePrompt = true;
+							showCapturePrompt = true;
+						};
+
 						ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
-						ImGui::BeginDisabled();
-						ImGui::Button("Script", ImVec2(55, buttonHeight));
-						ImGui::EndDisabled();
+						if (conflicted) {
+							ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
+							if (info.hasDescription) {
+								if (ImGui::Button("Conflict!", ImVec2(55, buttonHeight))) {
+									openReassignPrompt();
+								}
+								if (ImGui::IsItemHovered()) {
+									ImGui::SetTooltip("Another binding is using this same key.\nClick to reassign this one.");
+								}
+							}
+							else {
+								ImGui::BeginDisabled();
+								ImGui::Button("Conflict!", ImVec2(55, buttonHeight));
+								ImGui::EndDisabled();
+								if (ImGui::IsItemHovered()) {
+									ImGui::SetTooltip("Another binding is using this same key, but this entry has no script/function identity to reassign (never described via RadarKeys.DescribeKey).");
+								}
+							}
+							ImGui::PopStyleColor();
+						}
+						else {
+							ImGui::BeginDisabled();
+							ImGui::Button("Script", ImVec2(55, buttonHeight));
+							ImGui::EndDisabled();
+						}
 						ImGui::SameLine();
 
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
 						if (info.hasDescription) {
 							if (ImGui::Button(NameForVKey(info.vKey).c_str(), ImVec2(130, buttonHeight))) {
-								modKeyCaptureScriptName = info.scriptName;
-								modKeyCaptureFunctionName = info.functionName;
-								modKeyCaptureVKey = 0;
-								modKeyCaptureOldVKey = info.vKey;
-								showModKeyCapturePrompt = true;
-								showCapturePrompt = true;
+								openReassignPrompt();
 							}
 							if (ImGui::IsItemHovered()) {
 								ImGui::SetTooltip("Click to reassign this key.\nSaved to radar_keybinds_mod.conf - takes effect immediately.");
