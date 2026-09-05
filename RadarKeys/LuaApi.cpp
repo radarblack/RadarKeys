@@ -12,6 +12,7 @@ namespace RadarKeys {
 	lua_createtable_t g_lua_createtable = nullptr;
 	lua_rawset_t g_lua_rawset = nullptr;
 	lua_pushnil_t g_lua_pushnil = nullptr;
+	lua_pushboolean_t g_lua_pushboolean = nullptr;
 
 	constexpr uintptr_t ADDR_FoxLuaRegisterLibrary = 0x14006b8c0ull;
 	constexpr uintptr_t ADDR_lua_gettop = 0x141A112E0ull;
@@ -21,6 +22,7 @@ namespace RadarKeys {
 	constexpr uintptr_t ADDR_lua_createtable = 0x141A10E80ull;
 	constexpr uintptr_t ADDR_lua_rawset = 0x141A11B20ull;
 	constexpr uintptr_t ADDR_lua_pushnil = 0x141A11930ull;
+	constexpr uintptr_t ADDR_lua_pushboolean = 0x141A11920ull;
 
 	bool ResolveLuaApi() {
 		if (!g_FoxLuaRegisterLibrary) {
@@ -47,9 +49,12 @@ namespace RadarKeys {
 		if (!g_lua_pushnil) {
 			g_lua_pushnil = reinterpret_cast<lua_pushnil_t>(ResolveGameAddress(ADDR_lua_pushnil));
 		}
+		if (!g_lua_pushboolean) {
+			g_lua_pushboolean = reinterpret_cast<lua_pushboolean_t>(ResolveGameAddress(ADDR_lua_pushboolean));
+		}
 
 		bool ok = g_FoxLuaRegisterLibrary && g_lua_gettop && g_lua_pushnumber && g_lua_tolstring &&
-			g_lua_pushstring && g_lua_createtable && g_lua_rawset && g_lua_pushnil;
+			g_lua_pushstring && g_lua_createtable && g_lua_rawset && g_lua_pushnil && g_lua_pushboolean;
 		if (!ok) {
 			spdlog::error("ResolveLuaApi: one or more Lua function addresses failed to resolve - game version may not match the day3900-en address table this build uses");
 		}
@@ -98,7 +103,10 @@ namespace RadarKeys {
 	}
 
 	void LuaPushBool(lua_State* L, bool b) {
-		if (b) {
+		if (g_lua_pushboolean) {
+			g_lua_pushboolean(L, b ? 1 : 0);
+		}
+		else if (b) {
 			LuaPushNumber(L, 1);
 		}
 		else {
