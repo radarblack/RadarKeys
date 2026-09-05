@@ -642,11 +642,23 @@ namespace RadarKeys {
 			bool canFinalize = (modKeyCaptureVKey != 0);
 			if (!canFinalize) ImGui::BeginDisabled();
 			if (ImGui::Button("Assign", ImVec2(130, 24))) {
+			    USHORT oldVKey = 0;
+			    for (const auto& row : LuaKeyState::GetTrackedKeyInfo()) {
+			        if (row.scriptName == modKeyCaptureScriptName && row.functionName == modKeyCaptureFunctionName) {
+			            oldVKey = row.vKey;
+			            break;
+			        }
+			    }
 			    ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(modKeyCaptureVKey));
 			    DebuggerMenu::LogBindEvent("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(modKeyCaptureVKey));
 			    LogActivity("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(modKeyCaptureVKey));
+			
+			    if (oldVKey != 0 && oldVKey != modKeyCaptureVKey) {
+			        LuaKeyState::DescribeKey(modKeyCaptureVKey, modKeyCaptureScriptName, modKeyCaptureFunctionName, "");
+			        LuaKeyState::SweepStaleDescriptions(); 
+			    }
 			    MarkDisplayCacheDirty();
-			    
+			
 			    modKeyCaptureVKey = 0;
 			    showModKeyCapturePrompt = showCapturePrompt = false;
 			}
