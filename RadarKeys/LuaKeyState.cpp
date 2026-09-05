@@ -1,5 +1,7 @@
 #include "LuaKeyState.h"
 #include "RawInput.h"
+#include "ModKeyBindings.h"
+#include "KeyBindMenu.h"
 #include "spdlog/spdlog.h"
 #include <chrono>
 #include <algorithm>
@@ -41,9 +43,39 @@ namespace RadarKeys {
 		};
 
 		KeyPollState states[256];
-
+		USHORT redirectTarget[256] = {};
 		bool ValidVKey(USHORT vKey) {
 			return vKey < 256;
+		}
+
+		USHORT ResolveActive(USHORT vKey) {
+			if (!ValidVKey(vKey)) {
+				return vKey;
+			}
+			USHORT current = vKey;
+			for (int hops = 0; hops < 8; ++hops) {
+				USHORT next = redirectTarget[current];
+				if (next == 0 || next == current || !ValidVKey(next)) {
+					break;
+				}
+				current = next;
+			}
+			return current;
+		}
+
+		void UpdateRedirectForIdentity(USHORT nativeVKey, const std::string& scriptName, const std::string& functionName) {
+			if (!ValidVKey(nativeVKey)) {
+				return;
+			}
+			USHORT desired = nativeVKey;
+			std::string overrideName = ModKeyBindings::GetOverride(scriptName, functionName);
+			if (!overrideName.empty()) {
+				int resolved = KeyBindMenu::VKeyForName(overrideName);
+				if (resolved > 0 && ValidVKey((USHORT)resolved)) {
+					desired = (USHORT)resolved;
+				}
+			}
+			redirectTarget[nativeVKey] = (desired == nativeVKey) ? 0 : desired;
 		}
 
 		void OnRawEvent(USHORT vKey, RawInput::BUTTONEVENT ev) {
@@ -104,6 +136,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
+			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			return RawInput::IsKeyHeldReal(vKey);
 		}
@@ -112,6 +145,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
+			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			if (s.downEdgePending) {
@@ -125,6 +159,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
+			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			if (s.upEdgePending) {
@@ -138,6 +173,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
+			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
@@ -152,6 +188,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
+			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
@@ -169,6 +206,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
+			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			if (!s.isPressed) {
@@ -193,6 +231,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return 1.0;
 			}
+			vKey = ResolveActive(vKey);
 			return states[vKey].currentIncrementMult;
 		}
 
@@ -200,6 +239,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return;
 			}
+			vKey = ResolveActive(vKey);
 			KeyPollState& s = states[vKey];
 			s.heldStartSet = false;
 			s.onHoldStartSet = false;
@@ -210,6 +250,8 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return;
 			}
+			UpdateRedirectForIdentity(vKey, scriptName, functionName);
+			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 
@@ -268,6 +310,7 @@ namespace RadarKeys {
 				movedDesc.touchedSinceSweep = true;
 				newState.descriptions.push_back(std::move(movedDesc));
 				oldState.descriptions.erase(it);
+				redirectTarget[oldVKey] = newVKey;
 				RetireIfUndescribed(oldVKey);
 			}
 		}
