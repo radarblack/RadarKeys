@@ -1,13 +1,10 @@
 //WindowsMessageHook.cpp - from RE2Framework
 #include <unordered_map>
 #include <vector>
-
 #include <spdlog/spdlog.h>
-
 #include "WindowsMessageHook.hpp"
 
 using namespace std;
-
 static WindowsMessageHook* g_windows_message_hook{ nullptr };
 std::recursive_mutex g_proc_mutex{};
 
@@ -18,9 +15,7 @@ LRESULT WINAPI window_proc(HWND wnd, UINT message, WPARAM w_param, LPARAM l_para
         return 0;
     }
 
-    // Call our onMessage callback.
     auto& on_message = g_windows_message_hook->on_message;
-
     if (on_message) {
         // If it returns false we don't call the original window procedure.
         if (!on_message(wnd, message, w_param, l_param)) {
