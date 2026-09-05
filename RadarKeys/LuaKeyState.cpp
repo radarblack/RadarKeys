@@ -2,6 +2,7 @@
 #include "RawInput.h"
 #include "spdlog/spdlog.h"
 #include <chrono>
+#include <algorithm>
 
 namespace RadarKeys {
 	namespace LuaKeyState {
@@ -11,6 +12,14 @@ namespace RadarKeys {
 		constexpr double kRepeatRateSeconds = 0.85;
 		constexpr double kIncrementMultIncrementMult = 1.5;
 		constexpr double kMaxIncrementMult = 50.0;
+
+		struct KeyDescription {
+			std::string scriptName;
+			std::string functionName;
+			bool hasToggleState = false;
+			bool toggleEnabled = false;
+			bool touchedSinceSweep = true;
+		};
 
 		struct KeyPollState {
 			bool registered = false;
@@ -27,12 +36,7 @@ namespace RadarKeys {
 			clock::time_point repeatStart{};
 
 			double currentIncrementMult = 1.0;
-			bool hasDescription = false;
-			std::string scriptName;
-			std::string functionName;
-			bool hasToggleState = false;
-			bool toggleEnabled = false;
-			bool hiddenFromList = false;
+			std::vector<KeyDescription> descriptions;
 		};
 
 		KeyPollState states[256];
@@ -194,46 +198,76 @@ namespace RadarKeys {
 			}
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
-			s.hasDescription = true;
-			s.scriptName = scriptName;
-			s.functionName = functionName;
-			s.hiddenFromList = false;
-			if (toggleState == "on") {
-				s.hasToggleState = true;
-				s.toggleEnabled = true;
+
+			bool hasToggleState = (toggleState == "on" || toggleState == "off");
+			bool toggleEnabled = (toggleState == "on");
+
+			for (KeyDescription& d : s.descriptions) {
+				if (d.scriptName == scriptName && d.functionName == functionName) {
+					d.hasToggleState = hasToggleState;
+					d.toggleEnabled = toggleEnabled;
+					d.touchedSinceSweep = true;
+					return;
+				}
 			}
-			else if (toggleState == "off") {
-				s.hasToggleState = true;
-				s.toggleEnabled = false;
-			}
-			else {
-				s.hasToggleState = false;
-			}
+
+			KeyDescription d;
+			d.scriptName = scriptName;
+			d.functionName = functionName;
+			d.hasToggleState = hasToggleState;
+			d.toggleEnabled = toggleEnabled;
+			d.touchedSinceSweep = true;
+			s.descriptions.push_back(std::move(d));
 		}
 
-		void HideFromTrackedList(USHORT vKey) {
-			if (!ValidVKey(vKey)) {
-				return;
+		void SweepStaleDescriptions() {
+			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
+				std::vector<KeyDescription>& descs = states[vKeyInt].descriptions;
+				if (descs.empty()) {
+					continue;
+				}
+				descs.erase(
+					std::remove_if(descs.begin(), descs.end(), [](const KeyDescription& d) { return !d.touchedSinceSweep; }),
+					descs.end()
+				);
+				for (KeyDescription& d : descs) {
+					d.touchedSinceSweep = false;
+				}
 			}
-			states[vKey].hiddenFromList = true;
 		}
 
 		std::vector<TrackedKeyInfo> GetTrackedKeyInfo() {
 			std::vector<TrackedKeyInfo> result;
 			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
-				if (!states[vKeyInt].registered || states[vKeyInt].hiddenFromList) {
+				const KeyPollState& s = states[vKeyInt];
+				if (!s.registered) {
 					continue;
 				}
-				const KeyPollState& s = states[vKeyInt];
-				TrackedKeyInfo info;
-				info.vKey = static_cast<USHORT>(vKeyInt);
-				info.isPressed = RawInput::IsKeyHeldReal(info.vKey);
-				info.hasDescription = s.hasDescription;
-				info.scriptName = s.scriptName;
-				info.functionName = s.functionName;
-				info.hasToggleState = s.hasToggleState;
-				info.toggleEnabled = s.toggleEnabled;
-				result.push_back(std::move(info));
+				USHORT vKey = static_cast<USHORT>(vKeyInt);
+				bool isPressed = RawInput::IsKeyHeldReal(vKey);
+
+				if (s.descriptions.empty()) {
+					TrackedKeyInfo info;
+					info.vKey = vKey;
+					info.isPressed = isPressed;
+					info.hasDescription = false;
+					result.push_back(std::move(info));
+					continue;
+				}
+
+				bool conflicted = s.descriptions.size() > 1;
+				for (const KeyDescription& d : s.descriptions) {
+					TrackedKeyInfo info;
+					info.vKey = vKey;
+					info.isPressed = isPressed;
+					info.hasDescription = true;
+					info.scriptName = d.scriptName;
+					info.functionName = d.functionName;
+					info.hasToggleState = d.hasToggleState;
+					info.toggleEnabled = d.toggleEnabled;
+					info.isConflicted = conflicted;
+					result.push_back(std::move(info));
+				}
 			}
 			return result;
 		}
