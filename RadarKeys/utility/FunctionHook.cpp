@@ -40,6 +40,7 @@ bool FunctionHook::create() {
         return false;
     }
 
+    auto target = m_target;
     if (MH_EnableHook((LPVOID)m_target) != MH_OK) {
         m_original = 0;
         m_destination = 0;
