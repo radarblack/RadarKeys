@@ -10,6 +10,12 @@ static D3D11Hook* g_d3d11_hook = nullptr;
 
 D3D11Hook::~D3D11Hook() {
     unhook();
+    if (m_device) {
+        m_device->Release();
+        m_device = nullptr;
+    }
+    m_swap_chain = nullptr;
+    g_d3d11_hook = nullptr;
 }
 
 bool D3D11Hook::hook() {
@@ -73,14 +79,39 @@ bool D3D11Hook::hook() {
 }
 
 bool D3D11Hook::unhook() {
-    return true;
+    bool ok = true;
+
+    if (m_present_hook) {
+        ok = m_present_hook->remove() && ok;
+    }
+    if (m_resize_buffers_hook) {
+        ok = m_resize_buffers_hook->remove() && ok;
+    }
+
+    m_hooked = false;
+    if (g_d3d11_hook == this) {
+        g_d3d11_hook = nullptr;
+    }
+    return ok;
 }
 
 HRESULT WINAPI D3D11Hook::present(IDXGISwapChain* swap_chain, UINT sync_interval, UINT flags) {
     auto d3d11 = g_d3d11_hook;
 
     d3d11->m_swap_chain = swap_chain;
-    swap_chain->GetDevice(__uuidof(d3d11->m_device), (void**)&d3d11->m_device);
+
+    ID3D11Device* device = nullptr;
+    if (SUCCEEDED(swap_chain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device)))) {
+        if (d3d11->m_device != device) {
+            if (d3d11->m_device) {
+                d3d11->m_device->Release();
+            }
+            d3d11->m_device = device;
+        }
+        else {
+            device->Release();
+        }
+    }
 
     if (d3d11->m_on_present) {
         d3d11->m_on_present(*d3d11);
