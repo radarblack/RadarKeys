@@ -642,11 +642,13 @@ namespace RadarKeys {
 			bool canFinalize = (modKeyCaptureVKey != 0);
 			if (!canFinalize) ImGui::BeginDisabled();
 			if (ImGui::Button("Assign", ImVec2(130, 24))) {
-				ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(modKeyCaptureVKey));
-				DebuggerMenu::LogBindEvent("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(modKeyCaptureVKey));
-				LogActivity("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(modKeyCaptureVKey));
-				modKeyCaptureVKey = 0;
-				showModKeyCapturePrompt = showCapturePrompt = false;
+			    ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(modKeyCaptureVKey));
+			    DebuggerMenu::LogBindEvent("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(modKeyCaptureVKey));
+			    LogActivity("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(modKeyCaptureVKey));
+			    MarkDisplayCacheDirty();
+			    
+			    modKeyCaptureVKey = 0;
+			    showModKeyCapturePrompt = showCapturePrompt = false;
 			}
 			if (!canFinalize) ImGui::EndDisabled();
 			ImGui::SameLine();
@@ -1126,11 +1128,11 @@ namespace RadarKeys {
 						}
 
 						auto openReassignPrompt = [&info]() {
-							modKeyCaptureScriptName = info.scriptName;
-							modKeyCaptureFunctionName = info.functionName;
-							modKeyCaptureVKey = 0;
-							showModKeyCapturePrompt = true;
-							showCapturePrompt = true;
+						    modKeyCaptureScriptName = info.scriptName;
+						    modKeyCaptureFunctionName = info.functionName;
+						    modKeyCaptureVKey = 0;
+						    showModKeyCapturePrompt = true;
+						    showCapturePrompt = true;
 						};
 
 						ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
