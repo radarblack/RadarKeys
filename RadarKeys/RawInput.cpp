@@ -176,12 +176,8 @@ namespace RadarKeys {
 					buttonEvent = BUTTONEVENT::HELD;
 				}
 
-				// Always update RadarKeys state and process the event first.
-				// Blocking only controls whether the game receives the input.
 				if (blockGameKeys[vKey]) {
 					allowGameInput = false;
-					// Keep processing the remaining buttons in this raw-input packet.
-					// The caller uses the aggregate result below to block the game.
 				}
 
 				// safety filter
