@@ -13,12 +13,10 @@ FunctionHook::FunctionHook(Address target, Address destination)
 {
     spdlog::info("Attempting to hook {:p}->{:p}", target.ptr(), destination.ptr());
 
-    // Initialize MinHook if it hasn't been already.
     if (!g_isMinHookInitialized && MH_Initialize() == MH_OK) {
         g_isMinHookInitialized = true;
     }
-
-    // Create the hook. Call create afterwards to prevent race conditions accessing FunctionHook before it leaves its constructor.
+    
     if (MH_CreateHook(target.as<LPVOID>(), destination.as<LPVOID>(), (LPVOID*)&m_original) == MH_OK) {
         m_target = target;
         m_destination = destination;
@@ -40,13 +38,15 @@ bool FunctionHook::create() {
         return false;
     }
 
-    auto target = m_target;
-    if (MH_EnableHook((LPVOID)m_target) != MH_OK) {
+    const auto target = m_target;
+    const auto destination = m_destination;
+
+    if (MH_EnableHook((LPVOID)target) != MH_OK) {
         m_original = 0;
         m_destination = 0;
         m_target = 0;
 
-        spdlog::error("Failed to hook {:x}", m_target);
+        spdlog::error("Failed to enable hook {:x}->{:x}", target, destination);
         return false;
     }
 
@@ -55,18 +55,14 @@ bool FunctionHook::create() {
 }
 
 bool FunctionHook::remove() {
-    // Don't try to remove invalid hooks.
     if (m_original == 0) {
         return true;
     }
 
-    // Disable then remove the hook.
     if (MH_DisableHook((LPVOID)m_target) != MH_OK ||
         MH_RemoveHook((LPVOID)m_target) != MH_OK) {
         return false;
     }
-
-    // Invalidate the members.
     m_target = 0;
     m_destination = 0;
     m_original = 0;
