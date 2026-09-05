@@ -18,6 +18,7 @@ namespace RadarKeys {
 	using lua_createtable_t = void(__fastcall*)(lua_State* L, int narr, int nrec);
 	using lua_rawset_t = void(__fastcall*)(lua_State* L, int idx);
 	using lua_pushnil_t = void(__fastcall*)(lua_State* L);
+	using lua_pushboolean_t = void(__fastcall*)(lua_State* L, int b);
 
 	extern FoxLuaRegisterLibrary_t g_FoxLuaRegisterLibrary;
 	extern lua_tolstring_t g_lua_tolstring;
@@ -27,6 +28,7 @@ namespace RadarKeys {
 	extern lua_createtable_t g_lua_createtable;
 	extern lua_rawset_t g_lua_rawset;
 	extern lua_pushnil_t g_lua_pushnil;
+	extern lua_pushboolean_t g_lua_pushboolean;
 
 	bool ResolveLuaApi();
 
@@ -39,5 +41,4 @@ namespace RadarKeys {
 	void LuaPushBool(lua_State* L, bool b);
 	void LuaRawSetIndexed(lua_State* L, int tableAbsIdx, int n, const char* value);
 	bool RegisterLuaLibrary(lua_State* L, const char* libName, luaL_Reg* funcs);
-
 }
