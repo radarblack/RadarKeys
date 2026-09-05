@@ -236,6 +236,26 @@ namespace RadarKeys {
 			}
 		}
 
+		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName) {
+			if (!ValidVKey(oldVKey) || !ValidVKey(newVKey) || oldVKey == newVKey) {
+				return;
+			}
+			KeyPollState& oldState = states[oldVKey];
+			auto it = std::find_if(oldState.descriptions.begin(), oldState.descriptions.end(),
+				[&](const KeyDescription& d) {
+					return d.scriptName == scriptName && d.functionName == functionName;
+				});
+
+			if (it != oldState.descriptions.end()) {
+				EnsureTracked(newVKey);
+				KeyPollState& newState = states[newVKey];
+				KeyDescription movedDesc = *it;
+				movedDesc.touchedSinceSweep = true;
+				newState.descriptions.push_back(std::move(movedDesc));
+				oldState.descriptions.erase(it);
+			}
+		}
+
 		std::vector<TrackedKeyInfo> GetTrackedKeyInfo() {
 			std::vector<TrackedKeyInfo> result;
 			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
