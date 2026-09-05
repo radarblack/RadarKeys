@@ -23,6 +23,7 @@ namespace RadarKeys {
 
 		struct KeyPollState {
 			bool registered = false;
+			RawInput::ActionHandle actionHandle = 0;
 			bool isPressed = false;
 			bool downEdgePending = false;
 			bool upEdgePending = false;
@@ -81,9 +82,22 @@ namespace RadarKeys {
 				return;
 			}
 			s.isPressed = RawInput::IsKeyHeldReal(vKey);
-			RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnRawEvent(vKey, ev); });
+			s.actionHandle = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnRawEvent(vKey, ev); });
 			s.registered = true;
 			spdlog::debug("LuaKeyState EnsureTracked: now tracking vKey:{}", vKey);
+		}
+
+		void RetireIfUndescribed(USHORT vKey) {
+			if (!ValidVKey(vKey)) {
+				return;
+			}
+			KeyPollState& s = states[vKey];
+			if (!s.registered || !s.descriptions.empty()) {
+				return;
+			}
+			RawInput::UnRegisterAction(vKey, s.actionHandle);
+			s = KeyPollState{};
+			spdlog::debug("LuaKeyState RetireIfUndescribed: released vKey:{}", vKey);
 		}
 
 		bool ButtonDown(USHORT vKey) {
@@ -233,6 +247,7 @@ namespace RadarKeys {
 				for (KeyDescription& d : descs) {
 					d.touchedSinceSweep = false;
 				}
+				RetireIfUndescribed(static_cast<USHORT>(vKeyInt));
 			}
 		}
 
@@ -253,6 +268,7 @@ namespace RadarKeys {
 				movedDesc.touchedSinceSweep = true;
 				newState.descriptions.push_back(std::move(movedDesc));
 				oldState.descriptions.erase(it);
+				RetireIfUndescribed(oldVKey);
 			}
 		}
 
