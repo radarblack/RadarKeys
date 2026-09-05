@@ -1075,12 +1075,23 @@ namespace RadarKeys {
 				struct TrackedRow {
 					LuaKeyState::TrackedKeyInfo info;
 					bool conflicted;
+					USHORT displayVKey;
 				};
 				std::vector<TrackedRow> rows;
 				rows.reserve(trackedKeys.size());
 				for (LuaKeyState::TrackedKeyInfo& info : trackedKeys) {
-					bool conflicted = info.isConflicted || manualBoundVKeys.count(info.vKey) > 0;
-					rows.push_back(TrackedRow{ std::move(info), conflicted });
+					USHORT displayVKey = info.vKey;
+					if (info.hasDescription) {
+						std::string overrideKeyName = ModKeyBindings::GetOverride(info.scriptName, info.functionName);
+						if (!overrideKeyName.empty()) {
+							int resolved = VKeyForName(overrideKeyName);
+							if (resolved > 0) {
+								displayVKey = (USHORT)resolved;
+							}
+						}
+					}
+					bool conflicted = info.isConflicted || manualBoundVKeys.count(displayVKey) > 0;
+					rows.push_back(TrackedRow{ std::move(info), conflicted, displayVKey });
 				}
 				std::stable_partition(rows.begin(), rows.end(), [](const TrackedRow& r) { return r.conflicted; });
 
@@ -1092,6 +1103,7 @@ namespace RadarKeys {
 					for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
 						const LuaKeyState::TrackedKeyInfo& info = rows[rowIdx].info;
 						bool conflicted = rows[rowIdx].conflicted;
+						USHORT displayVKey = rows[rowIdx].displayVKey;
 
 						ImGui::PushID((int)rowIdx);
 						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
@@ -1131,11 +1143,12 @@ namespace RadarKeys {
 						float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
 
 						ImVec4 keyNameColor;
+						bool displayKeyPressed = (displayVKey == info.vKey) ? info.isPressed : RawInput::IsKeyHeldReal(displayVKey);
 						if (info.hasToggleState) {
 							keyNameColor = info.toggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
 						}
 						else {
-							keyNameColor = info.isPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+							keyNameColor = displayKeyPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 						}
 
 						auto openReassignPrompt = [&info]() {
@@ -1176,7 +1189,7 @@ namespace RadarKeys {
 
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
 						if (info.hasDescription) {
-							if (ImGui::Button(NameForVKey(info.vKey).c_str(), ImVec2(130, buttonHeight))) {
+							if (ImGui::Button(NameForVKey(displayVKey).c_str(), ImVec2(130, buttonHeight))) {
 								openReassignPrompt();
 							}
 							if (ImGui::IsItemHovered()) {
@@ -1185,7 +1198,7 @@ namespace RadarKeys {
 						}
 						else {
 							ImGui::BeginDisabled();
-							ImGui::Button(NameForVKey(info.vKey).c_str(), ImVec2(130, buttonHeight));
+							ImGui::Button(NameForVKey(displayVKey).c_str(), ImVec2(130, buttonHeight));
 							ImGui::EndDisabled();
 							if (ImGui::IsItemHovered()) {
 								ImGui::SetTooltip("Can't reassign yet - this key hasn't been described via RadarKeys.DescribeKey(), so there's no script/function to save an override under.");
