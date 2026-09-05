@@ -16,6 +16,7 @@
 #include <string>
 #include <cassert>
 #include <cstdlib>
+#include <cmath>
 
 namespace RadarKeys {
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
@@ -105,8 +106,8 @@ namespace RadarKeys {
 		}
 		char* end = nullptr;
 		double value = std::strtod(raw, &end);
-		if (end == raw) {
-			spdlog::warn("RadarKeys key query: couldn't parse hold-seconds arg '{}'", raw);
+		if (end == raw || *end != '\0' || !std::isfinite(value) || value < 0.0) {
+			spdlog::warn("RadarKeys key query: invalid hold-seconds arg '{}'", raw);
 			return -1.0;
 		}
 		return value;
