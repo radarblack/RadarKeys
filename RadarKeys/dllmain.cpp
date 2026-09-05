@@ -63,7 +63,7 @@ namespace RadarKeys {
 		const char* message = LuaToString(L, 2);
 		spdlog::trace("l_MenuMessage cmd:{},<> message:{}", cmd ? cmd : "", message ? message : "");
 		LuaBridge::QueueMessageOut(message ? message : "");
-		return 1;
+		return 0;
 	}
 
 	static int l_GetMenuMessages(lua_State* L) {
