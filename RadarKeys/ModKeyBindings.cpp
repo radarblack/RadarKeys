@@ -1,4 +1,5 @@
 #include "ModKeyBindings.h"
+#include "KeyBindMenu.h"
 #include "HookUtils.h"
 #include "Util.h"
 #include "spdlog/spdlog.h"
@@ -11,37 +12,16 @@ namespace RadarKeys {
 	namespace ModKeyBindings {
 		static std::map<std::string, std::map<std::string, std::string>> overrides;
 		static bool loaded = false;
-
-		const std::string& GetConfFileName() {
-			static std::string cached;
-			if (cached.empty()) {
-				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radar_keybinds_mod.conf").string();
-			}
-			return cached;
-		}
-
-		bool EnsureConfDirectory() {
-			std::error_code ec;
-			std::filesystem::path dir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
-			std::filesystem::create_directories(dir, ec);
-			if (ec) {
-				spdlog::warn("ModKeyBindings: couldn't create {} directory: {}", dir.string(), ec.message());
-				return false;
-			}
-			return true;
-		}
-
-		void Load() {
-			overrides.clear();
-			std::ifstream inFile(GetConfFileName());
+		static bool TryMigrateLegacyFile() {
+			std::filesystem::path legacyPath = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radar_keybinds_mod.conf";
+			std::ifstream inFile(legacyPath);
 			if (!inFile) {
-				spdlog::debug("ModKeyBindings::Load: no {} yet (fine on first run)", GetConfFileName());
-				loaded = true;
-				return;
+				return false;
 			}
 
 			std::string currentScript;
 			std::string line;
+			bool foundAny = false;
 			while (std::getline(inFile, line)) {
 				line = trim(line);
 				if (line.empty()) {
@@ -57,7 +37,6 @@ namespace RadarKeys {
 
 				size_t eq = line.find('=');
 				if (eq == std::string::npos) {
-					spdlog::warn("ModKeyBindings::Load: skipping malformed line under [{}]: {}", currentScript, line);
 					continue;
 				}
 				std::string functionName = line.substr(0, eq);
@@ -67,28 +46,55 @@ namespace RadarKeys {
 				if (functionName.empty() || keyName.empty()) {
 					continue;
 				}
+
 				overrides[currentScript][functionName] = keyName;
+				foundAny = true;
 			}
-			loaded = true;
-			spdlog::debug("ModKeyBindings::Load: loaded overrides for {} script(s) from {}", overrides.size(), GetConfFileName());
+
+			if (foundAny) {
+				spdlog::info("ModKeyBindings: migrated {} script(s) worth of overrides from legacy {}", overrides.size(), legacyPath.string());
+			}
+			return foundAny;
 		}
 
-		void Save() {
-			EnsureConfDirectory();
-			std::ofstream outFile(GetConfFileName());
-			if (!outFile) {
-				spdlog::warn("ModKeyBindings::Save: couldn't open {} for writing", GetConfFileName());
+		void Load() {
+			if (loaded) {
 				return;
 			}
+			loaded = true;
+		}
+
+		std::vector<OverrideEntry> GetAllOverrides() {
+			std::vector<OverrideEntry> result;
 			for (const auto& scriptEntry : overrides) {
-				outFile << "[" << scriptEntry.first << "]\n";
 				for (const auto& funcEntry : scriptEntry.second) {
-					outFile << funcEntry.first << "=" << funcEntry.second << "\n";
+					result.push_back(OverrideEntry{ scriptEntry.first, funcEntry.first, funcEntry.second });
 				}
-				outFile << "\n";
 			}
-			outFile.close();
-			spdlog::debug("ModKeyBindings::Save: wrote overrides for {} script(s) to {}", overrides.size(), GetConfFileName());
+			return result;
+		}
+
+		void LoadFromEntries(const std::vector<OverrideEntry>& entries) {
+			overrides.clear();
+			for (const auto& e : entries) {
+				if (e.scriptName.empty() || e.functionName.empty() || e.keyName.empty()) {
+					continue;
+				}
+				overrides[e.scriptName][e.functionName] = e.keyName;
+			}
+
+			bool migrated = false;
+			if (overrides.empty()) {
+				migrated = TryMigrateLegacyFile();
+			}
+
+			loaded = true;
+			spdlog::debug("ModKeyBindings::LoadFromEntries: loaded overrides for {} script(s){}",
+				overrides.size(), migrated ? " (migrated from legacy file)" : "");
+
+			if (migrated) {
+				KeyBindMenu::SaveBindings();
+			}
 		}
 
 		std::string GetOverride(const std::string& scriptName, const std::string& functionName) {
@@ -111,7 +117,7 @@ namespace RadarKeys {
 				Load();
 			}
 			overrides[scriptName][functionName] = keyName;
-			Save();
+			KeyBindMenu::SaveBindings();
 		}
 	}
 }
