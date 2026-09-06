@@ -30,6 +30,7 @@ namespace RadarKeys {
 		void Update();
 		void LogCleanShutdown();
 		void LogActivity(const std::string& message, bool success = true);
+		void SaveBindings();
 
 		std::string NameForVKey(USHORT vKey);
 		int VKeyForName(const std::string& name);
