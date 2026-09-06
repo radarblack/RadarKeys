@@ -16,6 +16,7 @@ namespace RadarKeys {
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
 		void SweepStaleDescriptions();
 		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName);
+		void RetireIfUndescribed(USHORT vKey);
 		void SetSuppressedVKeys(const std::vector<USHORT>& vKeys);
 
 		struct TrackedKeyInfo {
