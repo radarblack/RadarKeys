@@ -27,6 +27,11 @@ namespace RadarKeys {
 			bool hasToggleState = false;
 			bool toggleEnabled = false;
 			bool isConflicted = false;
+			bool usesOnPress = false;
+			bool usesHoldTime = false;
+			double lastHoldSeconds = 0.0;
+			bool usesRepeat = false;
+			bool usesOnRelease = false;
 		};
 		std::vector<TrackedKeyInfo> GetTrackedKeyInfo();
 	}
