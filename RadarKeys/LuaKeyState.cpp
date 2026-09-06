@@ -311,12 +311,10 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return;
 			}
-			
 			UpdateRedirectForIdentity(vKey, scriptName, functionName);
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
-
 			bool hasToggleState = (toggleState == "on" || toggleState == "off");
 			bool toggleEnabled = (toggleState == "on");
 			bool obsOnPress = s.pendingUsesOnPress;
