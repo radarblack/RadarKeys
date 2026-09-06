@@ -385,7 +385,8 @@ namespace RadarKeys {
 					}
 
 					const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
-					if (toRun && !hasHoldOptionOnKey) {
+					bool deferForInstantTiming = toRun && toRun->isInstant && toRun->instantTriggerType != 0;
+					if (toRun && !hasHoldOptionOnKey && !deferForInstantTiming) {
 						FireBinding(*toRun);
 					} else {
 						pendingPresses[vKey] = PendingPress{ ctrlHeld, shiftHeld, altHeld, false };
@@ -408,12 +409,21 @@ namespace RadarKeys {
 					}
 				}
 
+				const KeyBind* pendingBind = FindMatchingBinding(vKey, pending.ctrlOnPressed, pending.shiftOnPressed, pending.altOnPressed, false);
+				bool isRepeatBind = pendingBind && pendingBind->holdSeconds <= 0.0f && pendingBind->isInstant && pendingBind->instantTriggerType == 2;
+				if (isRepeatBind && LuaKeyState::OnButtonRepeat(vKey)) {
+					DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " repeat-fired");
+					LogActivity(NameForVKey(vKey) + " repeat-fired");
+					FireBinding(*pendingBind);
+				}
+
 				if (LuaKeyState::OnButtonUp(vKey)) {
-					if (!pending.holdFired) {
+					if (!pending.holdFired && !isRepeatBind) {
 						const KeyBind* tapBind = FindMatchingBinding(vKey, pending.ctrlOnPressed, pending.shiftOnPressed, pending.altOnPressed, false);
 						if (tapBind && tapBind->holdSeconds <= 0.0f) {
-							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
-							LogActivity(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
+							std::string reason = (tapBind->isInstant && tapBind->instantTriggerType == 1) ? "released (On Release)" : "tapped cleanly (Hold bypassed)";
+							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " " + reason);
+							LogActivity(NameForVKey(vKey) + " " + reason);
 							FireBinding(*tapBind);
 						}
 					}
@@ -456,12 +466,15 @@ namespace RadarKeys {
 
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
 				if (b.isToggle) {
-					outFile << "1|" << genericOn << "|" << genericOff << "|" << b.functionOn << "|" << b.functionOff << "\n";
+					outFile << "1|" << genericOn << "|" << genericOff << "|" << b.functionOn << "|" << b.functionOff;
 				} else {
-					outFile << "0|" << genericOn << "|" << b.functionTap << "\n";
+					outFile << "0|" << genericOn << "|" << b.functionTap;
 				}
+				outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "\n";
 			}
 
+			// Mod key overrides (script/function -> polled key) share this same conf file and
+			// line-based format now, instead of their own separately-formatted file.
 			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
 				outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "\n";
 			}
@@ -545,7 +558,18 @@ namespace RadarKeys {
 					std::string resolvedOn = ResolveScriptPath(pathOn);
 					std::string resolvedOff = pathOff.empty() ? "" : ResolveScriptPath(pathOff);
 
+					bool isInstant = false;
+					int instantTriggerType = 0;
+					size_t instantFieldStart = isToggle ? 11 : 9;
+					if (parts.size() >= instantFieldStart + 2) {
+						isInstant = trim(parts[instantFieldStart]) == "1";
+						try { instantTriggerType = std::stoi(trim(parts[instantFieldStart + 1])); }
+						catch (...) { instantTriggerType = 0; }
+					}
+
 					KeyBind b{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, resolvedOn, resolvedOff, false, holdSeconds };
+					b.isInstant = isInstant;
+					b.instantTriggerType = instantTriggerType;
 					b.functionOn = funcOn;
 					b.functionOff = funcOff;
 					b.functionTap = funcTap;
@@ -562,8 +586,10 @@ namespace RadarKeys {
 			MarkDisplayCacheDirty();
 		}
 
-		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, bool isToggle, const std::string& pathOn, const std::string& pathOff, const std::string& funcOn, const std::string& funcOff, const std::string& funcTap) {
+		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, bool isToggle, const std::string& pathOn, const std::string& pathOff, const std::string& funcOn, const std::string& funcOff, const std::string& funcTap, bool isInstant, int instantTriggerType) {
 			KeyBind b{ vKey, needCtrl, needShift, needAlt, keyName, isToggle, pathOn, pathOff, false, holdSeconds };
+			b.isInstant = isInstant;
+			b.instantTriggerType = instantTriggerType;
 			b.functionOn = funcOn;
 			b.functionOff = funcOff;
 			b.functionTap = funcTap;
@@ -1019,6 +1045,8 @@ namespace RadarKeys {
 					if (editingBindingIndex != -1) {
 						USHORT oldVKey = bindings[editingBindingIndex].vKey;
 						KeyBind editedBind{ capturedVKey, capturedCtrl, capturedShift, capturedAlt, NameForVKey(capturedVKey), capturedToggleMode, finalPathOn, finalPathOff, false, finalHoldSeconds };
+						editedBind.isInstant = capturedInstantMode;
+						editedBind.instantTriggerType = capturedInstantTriggerType;
 						editedBind.functionOn = finalFuncOn;
 						editedBind.functionOff = finalFuncOff;
 						editedBind.functionTap = finalFuncTap;
@@ -1028,7 +1056,7 @@ namespace RadarKeys {
 						MarkDisplayCacheDirty();
 						LogActivity("Edited binding -> " + CombinedDisplayName(editedBind));
 					} else {
-						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap);
+						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap, capturedInstantMode, capturedInstantTriggerType);
 					}
 					capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 					capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
@@ -1308,6 +1336,8 @@ namespace RadarKeys {
 					capturedToggleMode = bindings[i].isToggle;
 					capturedLongPressMode = (bindings[i].holdSeconds > 0.0f);
 					capturedHoldSeconds = bindings[i].holdSeconds;
+					capturedInstantMode = bindings[i].isInstant;
+					capturedInstantTriggerType = bindings[i].instantTriggerType;
 					capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 					capturedHasFuncOff = !bindings[i].functionOff.empty();
 					
