@@ -242,8 +242,8 @@ namespace RadarKeys {
 		USHORT menuToggleVKey = VK_F7;
 		RawInput::ActionHandle menuToggleHandle = 0;
 		bool menuOpen = false;
-
 		std::unordered_set<USHORT> activeBindVKeys;
+
 		void OnMenuToggleKeyPressed(RawInput::BUTTONEVENT buttonEvent) {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
@@ -288,7 +288,6 @@ namespace RadarKeys {
 
 		constexpr double kHoldRepeatIntervalSeconds = 0.3;
 		constexpr double kNearMissHoldFraction = 0.8;
-
 		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld, bool preferHold) {
 			const KeyBind* exactMatch = nullptr;
 			const KeyBind* plainFallbackMatch = nullptr;
@@ -686,7 +685,7 @@ namespace RadarKeys {
 		static bool capturedToggleMode = false;
 		static bool capturedLongPressMode = false;
 		static bool capturedInstantMode = false;
-		static int capturedInstantTriggerType = 0;
+		static int capturedInstantTriggerType = 0; // 0 = On Press, 1 = On Release, 2 = Repeat
 		static bool capturedHasFuncOn = false;
 		static bool capturedHasFuncOff = false;
 		static int capturedToggleType = 0; 
@@ -700,7 +699,7 @@ namespace RadarKeys {
 			bool anyLongPress = false;
 			double longPressSeconds = 0.0;
 			bool anyInstant = false;
-			int instantType = 0;
+			int instantType = 0; // 0 = On Press, 1 = On Release, 2 = Repeat
 			std::vector<std::string> breakdownLines;
 		};
 
@@ -777,7 +776,7 @@ namespace RadarKeys {
 				modKeyInfo = ComputeModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
 				capturedToggleMode = modKeyInfo.anyToggle;
 				capturedLongPressMode = modKeyInfo.anyLongPress;
-				capturedHoldSeconds = modKeyInfo.longPressSeconds;
+				capturedHoldSeconds = (float)modKeyInfo.longPressSeconds;
 				capturedInstantMode = modKeyInfo.anyInstant;
 				capturedInstantTriggerType = modKeyInfo.instantType;
 
@@ -1331,7 +1330,7 @@ namespace RadarKeys {
 							ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2.0f, ImGui::GetStyle().WindowPadding.y));
 							ImGui::BeginChild("ConflictBadge", ImVec2(60, buttonHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoInputs);
 							float textWidth = ImGui::CalcTextSize("Error!").x;
-							ImGui::SetCursorPosX(ImMax(0.0f, (60.0f - textWidth) * 0.5f));
+							ImGui::SetCursorPosX((60.0f - textWidth) * 0.5f > 0.0f ? (60.0f - textWidth) * 0.5f : 0.0f);
 							ImGui::TextUnformatted("Error!");
 							ImGui::EndChild();
 							ImGui::PopStyleVar();
