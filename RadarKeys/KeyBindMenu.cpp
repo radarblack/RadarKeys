@@ -241,8 +241,8 @@ namespace RadarKeys {
 		USHORT menuToggleVKey = VK_F7;
 		RawInput::ActionHandle menuToggleHandle = 0;
 		bool menuOpen = false;
-		std::map<USHORT, RawInput::ActionHandle> vKeyDispatchers;
 
+		std::unordered_set<USHORT> activeBindVKeys;
 		void OnMenuToggleKeyPressed(RawInput::BUTTONEVENT buttonEvent) {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
@@ -275,14 +275,13 @@ namespace RadarKeys {
 			return true;
 		}
 
-		struct HoldTrack {
-			std::chrono::steady_clock::time_point startTime;
-			bool fired = false;
+		struct PendingPress {
 			bool ctrlOnPressed = false;
 			bool shiftOnPressed = false;
 			bool altOnPressed = false;
+			bool holdFired = false;
 		};
-		std::map<USHORT, HoldTrack> holdTracks;
+		std::map<USHORT, PendingPress> pendingPresses;
 
 		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld, bool preferHold) {
 			const KeyBind* exactMatch = nullptr;
@@ -327,77 +326,110 @@ namespace RadarKeys {
 			}
 		}
 
-		void OnBoundKeyPressed(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
-			if (showCapturePrompt) return;
-			bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
+		USHORT ResolveDisplayVKey(const LuaKeyState::TrackedKeyInfo& info) {
+			if (!info.hasDescription) {
+				return info.vKey;
+			}
+			std::string overrideKeyName = ModKeyBindings::GetOverride(info.scriptName, info.functionName);
+			if (overrideKeyName.empty()) {
+				return info.vKey;
+			}
+			int resolved = VKeyForName(overrideKeyName);
+			return (resolved > 0) ? (USHORT)resolved : info.vKey;
+		}
 
-			if (buttonEvent == RawInput::BUTTONEVENT::ONUP) {
-				auto it = holdTracks.find(vKey);
-				if (it != holdTracks.end()) {
-					if (!it->second.fired) {
-						const KeyBind* tapBind = FindMatchingBinding(vKey, it->second.ctrlOnPressed, it->second.shiftOnPressed, it->second.altOnPressed, false);
+		std::vector<USHORT> ComputeConflictedVKeys() {
+			std::unordered_set<USHORT> manualVKeys;
+			for (const auto& bind : bindings) {
+				manualVKeys.insert(bind.vKey);
+			}
+
+			std::unordered_set<USHORT> conflicted;
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (info.isConflicted) {
+					conflicted.insert(info.vKey);
+				}
+				if (info.hasDescription && manualVKeys.count(ResolveDisplayVKey(info)) > 0) {
+					conflicted.insert(ResolveDisplayVKey(info));
+				}
+			}
+			return std::vector<USHORT>(conflicted.begin(), conflicted.end());
+		}
+
+		void Update() {
+			LuaKeyState::SetSuppressedVKeys(ComputeConflictedVKeys());
+
+			if (showCapturePrompt) {
+				for (USHORT vKey : activeBindVKeys) {
+					LuaKeyState::OnButtonDown(vKey);
+					LuaKeyState::OnButtonUp(vKey);
+				}
+				return;
+			}
+
+			for (USHORT vKey : activeBindVKeys) {
+				if (LuaKeyState::OnButtonDown(vKey)) {
+					bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
+					DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
+					LogActivity(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
+
+					bool hasHoldOptionOnKey = false;
+					for (const auto& bind : bindings) {
+						if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
+							if ((bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) ||
+								(!bind.needCtrl && !bind.needShift && !bind.needAlt)) {
+								hasHoldOptionOnKey = true;
+								break;
+							}
+						}
+					}
+
+					const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
+					if (toRun && !hasHoldOptionOnKey) {
+						FireBinding(*toRun);
+					} else {
+						pendingPresses[vKey] = PendingPress{ ctrlHeld, shiftHeld, altHeld, false };
+					}
+				}
+
+				auto pendingIt = pendingPresses.find(vKey);
+				if (pendingIt == pendingPresses.end()) {
+					continue;
+				}
+				PendingPress& pending = pendingIt->second;
+
+				if (!pending.holdFired) {
+					const KeyBind* holdBind = FindMatchingBinding(vKey, pending.ctrlOnPressed, pending.shiftOnPressed, pending.altOnPressed, true);
+					if (holdBind && holdBind->holdSeconds > 0.0f && LuaKeyState::OnButtonHoldTime(vKey, holdBind->holdSeconds)) {
+						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
+						LogActivity(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
+						FireBinding(*holdBind);
+						pending.holdFired = true;
+					}
+				}
+
+				if (LuaKeyState::OnButtonUp(vKey)) {
+					if (!pending.holdFired) {
+						const KeyBind* tapBind = FindMatchingBinding(vKey, pending.ctrlOnPressed, pending.shiftOnPressed, pending.altOnPressed, false);
 						if (tapBind && tapBind->holdSeconds <= 0.0f) {
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
 							LogActivity(NameForVKey(vKey) + " tapped cleanly (Hold bypassed)");
 							FireBinding(*tapBind);
 						}
 					}
-					holdTracks.erase(it);
+					pendingPresses.erase(pendingIt);
 				}
-				return;
-			}
-			
-			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) return;
-			DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
-			LogActivity(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
-
-			bool hasHoldOptionOnKey = false;
-			for (const auto& bind : bindings) {
-				if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
-					if ((bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) ||
-						(!bind.needCtrl && !bind.needShift && !bind.needAlt)) {
-						hasHoldOptionOnKey = true;
-						break;
-					}
-				}
-			}
-
-			const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
-			if (toRun && !hasHoldOptionOnKey) {
-				FireBinding(*toRun);
-			} else {
-				holdTracks[vKey] = HoldTrack{ std::chrono::steady_clock::now(), false, ctrlHeld, shiftHeld, altHeld };
-			}
-		}
-
-		void Update() {
-			if (showCapturePrompt) return;
-			for (auto it = holdTracks.begin(); it != holdTracks.end(); ) {
-				USHORT vKey = it->first; HoldTrack& track = it->second;
-				if (track.fired || !RawInput::IsKeyHeldReal(vKey)) { it = holdTracks.erase(it); continue; }
-				const KeyBind* holdBind = FindMatchingBinding(vKey, track.ctrlOnPressed, track.shiftOnPressed, track.altOnPressed, true);
-
-				if (holdBind && holdBind->holdSeconds > 0.0f) {
-					if (std::chrono::duration<float>(std::chrono::steady_clock::now() - track.startTime).count() >= holdBind->holdSeconds) {
-						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
-						LogActivity(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
-						FireBinding(*holdBind); 
-						track.fired = true;
-					}
-				}
-				++it;
 			}
 		}
 
 		void EnsureDispatcherRegistered(USHORT vKey) {
-			if (vKeyDispatchers.find(vKey) != vKeyDispatchers.end()) return;
-			vKeyDispatchers[vKey] = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnBoundKeyPressed(vKey, ev); });
+			activeBindVKeys.insert(vKey);
 		}
 
 		void RemoveDispatcherIfUnused(USHORT vKey) {
 			for (const auto& bind : bindings) if (bind.vKey == vKey) return;
-			auto it = vKeyDispatchers.find(vKey);
-			if (it != vKeyDispatchers.end()) { RawInput::UnRegisterAction(vKey, it->second); vKeyDispatchers.erase(it); }
+			activeBindVKeys.erase(vKey);
+			pendingPresses.erase(vKey);
 		}
 
 		void SaveBindings() {
@@ -429,6 +461,10 @@ namespace RadarKeys {
 					outFile << "0|" << genericOn << "|" << b.functionTap << "\n";
 				}
 			}
+
+			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
+				outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "\n";
+			}
 			outFile.close();
 			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), GetBindsFileName());
 			LogActivity("Saved " + std::to_string(bindings.size()) + " binding(s) to " + GetBindsFileName());
@@ -439,9 +475,11 @@ namespace RadarKeys {
 			if (!inFile) {
 				spdlog::debug("KeyBindMenu::LoadBindings: no {} yet (fine on first run)", GetBindsFileName());
 				LogActivity("No existing bindings file yet at " + GetBindsFileName() + " (fine on first run)");
+				ModKeyBindings::LoadFromEntries({});
 				return;
 			}
 
+			std::vector<ModKeyBindings::OverrideEntry> modKeyEntries;
 			std::string line;
 			while (std::getline(inFile, line)) {
 				if ((line = trim(line)).empty()) continue;
@@ -458,6 +496,15 @@ namespace RadarKeys {
 					else {
 						spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
 						LogActivity("Unknown MENUKEY name '" + parts[1] + "', keeping default", false);
+					}
+				}
+				else if (parts[0] == "MODKEY" && parts.size() >= 4) {
+					ModKeyBindings::OverrideEntry entry;
+					entry.scriptName = trim(parts[1]);
+					entry.functionName = trim(parts[2]);
+					entry.keyName = trim(parts[3]);
+					if (!entry.scriptName.empty() && !entry.functionName.empty() && !entry.keyName.empty()) {
+						modKeyEntries.push_back(std::move(entry));
 					}
 				}
 				else if (parts[0] == "BIND" && parts.size() >= 7) {
@@ -509,6 +556,7 @@ namespace RadarKeys {
 					LogActivity("Skipped old-format/malformed BIND line: " + line, false);
 				}
 			}
+			ModKeyBindings::LoadFromEntries(modKeyEntries);
 			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), GetBindsFileName());
 			LogActivity("Loaded " + std::to_string(bindings.size()) + " binding(s) from " + GetBindsFileName());
 			MarkDisplayCacheDirty();
@@ -546,8 +594,8 @@ namespace RadarKeys {
 
 		void RemoveAllBindings() {
 			size_t count = bindings.size();
-			for (const auto& entry : vKeyDispatchers) RawInput::UnRegisterAction(entry.first, entry.second);
-			vKeyDispatchers.clear();
+			activeBindVKeys.clear();
+			pendingPresses.clear();
 			bindings.clear();
 			SaveBindings();
 			MarkDisplayCacheDirty();
@@ -1086,6 +1134,8 @@ namespace RadarKeys {
 				for (const KeyBind& bind : bindings) {
 					manualBoundVKeys.insert(bind.vKey);
 				}
+				std::vector<USHORT> conflictedList = ComputeConflictedVKeys();
+				std::unordered_set<USHORT> conflictedVKeys(conflictedList.begin(), conflictedList.end());
 
 				struct TrackedRow {
 					LuaKeyState::TrackedKeyInfo info;
@@ -1095,17 +1145,11 @@ namespace RadarKeys {
 				std::vector<TrackedRow> rows;
 				rows.reserve(trackedKeys.size());
 				for (LuaKeyState::TrackedKeyInfo& info : trackedKeys) {
-					USHORT displayVKey = info.vKey;
-					if (info.hasDescription) {
-						std::string overrideKeyName = ModKeyBindings::GetOverride(info.scriptName, info.functionName);
-						if (!overrideKeyName.empty()) {
-							int resolved = VKeyForName(overrideKeyName);
-							if (resolved > 0) {
-								displayVKey = (USHORT)resolved;
-							}
-						}
+					if (!info.hasDescription && manualBoundVKeys.count(info.vKey) > 0) {
+						continue;
 					}
-					bool conflicted = info.isConflicted || manualBoundVKeys.count(displayVKey) > 0;
+					USHORT displayVKey = ResolveDisplayVKey(info);
+					bool conflicted = conflictedVKeys.count(displayVKey) > 0;
 					rows.push_back(TrackedRow{ std::move(info), conflicted, displayVKey });
 				}
 				std::stable_partition(rows.begin(), rows.end(), [](const TrackedRow& r) { return r.conflicted; });
@@ -1176,24 +1220,19 @@ namespace RadarKeys {
 
 						ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
 						if (conflicted) {
+							ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
 							ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
-							if (info.hasDescription) {
-								if (ImGui::Button("Conflict!", ImVec2(55, buttonHeight))) {
-									openReassignPrompt();
-								}
-								if (ImGui::IsItemHovered()) {
-									ImGui::SetTooltip("Another binding is using this same key.\nClick to reassign this one.");
-								}
+							ImGui::BeginChild("ConflictBadge", ImVec2(55, buttonHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoInputs);
+							float textWidth = ImGui::CalcTextSize("Conflict!").x;
+							ImGui::SetCursorPosX((55.0f - textWidth) * 0.5f);
+							ImGui::TextUnformatted("Conflict!");
+							ImGui::EndChild();
+							ImGui::PopStyleColor(2);
+							if (ImGui::IsItemHovered()) {
+								ImGui::SetTooltip(info.hasDescription
+									? "Another binding is using this same key - it's disabled until resolved.\nClick the key name to reassign this one."
+									: "Another binding is using this same key - it's disabled until resolved.\nThis entry has no script/function identity to reassign (never described via RadarKeys.DescribeKey); reassign the other one.");
 							}
-							else {
-								ImGui::BeginDisabled();
-								ImGui::Button("Conflict!", ImVec2(55, buttonHeight));
-								ImGui::EndDisabled();
-								if (ImGui::IsItemHovered()) {
-									ImGui::SetTooltip("Another binding is using this same key, but this entry has no script/function identity to reassign (never described via RadarKeys.DescribeKey).");
-								}
-							}
-							ImGui::PopStyleColor();
 						}
 						else {
 							ImGui::BeginDisabled();
