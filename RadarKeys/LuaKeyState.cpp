@@ -21,6 +21,11 @@ namespace RadarKeys {
 			bool hasToggleState = false;
 			bool toggleEnabled = false;
 			bool touchedSinceSweep = true;
+			bool usesOnPress = false;
+			bool usesHoldTime = false;
+			double lastHoldSeconds = 0.0;
+			bool usesRepeat = false;
+			bool usesOnRelease = false;
 		};
 
 		struct KeyPollState {
@@ -40,16 +45,21 @@ namespace RadarKeys {
 
 			double currentIncrementMult = 1.0;
 			std::vector<KeyDescription> descriptions;
+
+			bool pendingUsesOnPress = false;
+			bool pendingUsesHoldTime = false;
+			double pendingLastHoldSeconds = 0.0;
+			bool pendingUsesRepeat = false;
+			bool pendingUsesOnRelease = false;
 		};
 
 		KeyPollState states[256];
 		USHORT redirectTarget[256] = {};
-
 		bool ValidVKey(USHORT vKey) {
 			return vKey < 256;
 		}
-		bool suppressed[256] = {};
 
+		bool suppressed[256] = {};
 		bool IsSuppressed(USHORT vKey) {
 			return ValidVKey(vKey) && suppressed[vKey];
 		}
@@ -155,6 +165,7 @@ namespace RadarKeys {
 			}
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
+			states[vKey].pendingUsesOnPress = true;
 			if (IsSuppressed(vKey)) {
 				return false;
 			}
@@ -168,6 +179,7 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
+			s.pendingUsesOnPress = true;
 			if (IsSuppressed(vKey)) {
 				s.downEdgePending = false;
 				return false;
@@ -186,6 +198,7 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
+			s.pendingUsesOnRelease = true;
 			if (IsSuppressed(vKey)) {
 				s.upEdgePending = false;
 				return false;
@@ -203,14 +216,16 @@ namespace RadarKeys {
 			}
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
+			double heldHoldTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			states[vKey].pendingUsesHoldTime = true;
+			states[vKey].pendingLastHoldSeconds = heldHoldTime;
 			if (IsSuppressed(vKey)) {
 				return false;
 			}
 			KeyPollState& s = states[vKey];
-			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			if (s.isPressed && s.heldStartSet) {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.heldStart).count();
-				return elapsed > holdTime;
+				return elapsed > heldHoldTime;
 			}
 			return false;
 		}
@@ -222,11 +237,13 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
+			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			s.pendingUsesHoldTime = true;
+			s.pendingLastHoldSeconds = holdTime;
 			if (IsSuppressed(vKey)) {
 				s.onHoldStartSet = false;
 				return false;
 			}
-			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			if (s.isPressed && s.onHoldStartSet) {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.onHoldStart).count();
 				if (elapsed > holdTime) {
@@ -244,6 +261,7 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
+			s.pendingUsesRepeat = true;
 			if (IsSuppressed(vKey)) {
 				s.repeatStartSet = false;
 				s.currentIncrementMult = 1.0;
@@ -293,6 +311,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return;
 			}
+			
 			UpdateRedirectForIdentity(vKey, scriptName, functionName);
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
@@ -300,12 +319,27 @@ namespace RadarKeys {
 
 			bool hasToggleState = (toggleState == "on" || toggleState == "off");
 			bool toggleEnabled = (toggleState == "on");
+			bool obsOnPress = s.pendingUsesOnPress;
+			bool obsHoldTime = s.pendingUsesHoldTime;
+			double obsHoldSeconds = s.pendingLastHoldSeconds;
+			bool obsRepeat = s.pendingUsesRepeat;
+			bool obsOnRelease = s.pendingUsesOnRelease;
+			s.pendingUsesOnPress = false;
+			s.pendingUsesHoldTime = false;
+			s.pendingLastHoldSeconds = 0.0;
+			s.pendingUsesRepeat = false;
+			s.pendingUsesOnRelease = false;
 
 			for (KeyDescription& d : s.descriptions) {
 				if (d.scriptName == scriptName && d.functionName == functionName) {
 					d.hasToggleState = hasToggleState;
 					d.toggleEnabled = toggleEnabled;
 					d.touchedSinceSweep = true;
+					d.usesOnPress = obsOnPress;
+					d.usesHoldTime = obsHoldTime;
+					d.lastHoldSeconds = obsHoldSeconds;
+					d.usesRepeat = obsRepeat;
+					d.usesOnRelease = obsOnRelease;
 					return;
 				}
 			}
@@ -316,6 +350,11 @@ namespace RadarKeys {
 			d.hasToggleState = hasToggleState;
 			d.toggleEnabled = toggleEnabled;
 			d.touchedSinceSweep = true;
+			d.usesOnPress = obsOnPress;
+			d.usesHoldTime = obsHoldTime;
+			d.lastHoldSeconds = obsHoldSeconds;
+			d.usesRepeat = obsRepeat;
+			d.usesOnRelease = obsOnRelease;
 			s.descriptions.push_back(std::move(d));
 		}
 
@@ -388,6 +427,11 @@ namespace RadarKeys {
 					info.hasToggleState = d.hasToggleState;
 					info.toggleEnabled = d.toggleEnabled;
 					info.isConflicted = conflicted;
+					info.usesOnPress = d.usesOnPress;
+					info.usesHoldTime = d.usesHoldTime;
+					info.lastHoldSeconds = d.lastHoldSeconds;
+					info.usesRepeat = d.usesRepeat;
+					info.usesOnRelease = d.usesOnRelease;
 					result.push_back(std::move(info));
 				}
 			}
