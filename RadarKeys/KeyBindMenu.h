@@ -19,6 +19,8 @@ namespace RadarKeys {
 			std::string scriptPathOff; // for toggle Off
 			mutable bool toggleState = false; // checks toggle state
 			float holdSeconds = 0.0f;
+			bool isInstant = false;
+			int instantTriggerType = 0;
 
 			// lua script pass
 			std::string functionOn;   // toggle ON slot
