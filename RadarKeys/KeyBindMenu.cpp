@@ -25,6 +25,7 @@ namespace RadarKeys {
 		std::vector<KeyBind> bindings;
 		static bool isAssigningMenuToggleKey = false; 
 		static bool isAssigningModKey = false;
+		static bool requestCaptureFocus = false;
 
 		struct BindingDisplayCache {
 			std::string itemLabel;
@@ -469,6 +470,7 @@ namespace RadarKeys {
 			for (const auto& bind : bindings) if (bind.vKey == vKey) return;
 			activeBindVKeys.erase(vKey);
 			pendingPresses.erase(vKey);
+			LuaKeyState::RetireIfUndescribed(vKey);
 		}
 
 		void SaveBindings() {
@@ -647,6 +649,9 @@ namespace RadarKeys {
 
 		void RemoveAllBindings() {
 			size_t count = bindings.size();
+			for (const KeyBind& bind : bindings) {
+				LuaKeyState::RetireIfUndescribed(bind.vKey);
+			}
 			activeBindVKeys.clear();
 			pendingPresses.clear();
 			bindings.clear();
@@ -763,7 +768,10 @@ namespace RadarKeys {
 			ImGui::SetNextWindowSize(ImVec2(340, 330), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 165), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowSizeConstraints(ImVec2(340, 330), ImVec2(FLT_MAX, FLT_MAX));
-			ImGui::SetNextWindowFocus();
+			if (requestCaptureFocus) {
+				ImGui::SetNextWindowFocus();
+				requestCaptureFocus = false;
+			}
 		
 			const char* windowTitle = isAssigningModKey ? "Reassign mod key..." : "Assigning key bind...";
 			if (!ImGui::Begin(windowTitle, nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -1221,11 +1229,19 @@ namespace RadarKeys {
 			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
 			if (ImGui::Button(buttonLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) { 
 				isAssigningMenuToggleKey = showCapturePrompt = true; 
+				requestCaptureFocus = true;
 				LogActivity("Menu Key Reassignment Prompt opened");
 			}
 			ImGui::Separator();
 
-			if (ImGui::CollapsingHeader("Keys Polled by Scripts", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Text("Key Bindings");
+			float paddingX = ImGui::GetStyle().WindowPadding.x;
+			float paddingY = ImGui::GetStyle().WindowPadding.y;
+			float footerHeight = 45.0f;
+			float listRemainingHeight = ImGui::GetWindowHeight() - ImGui::GetCursorPosY() - ImGui::GetTextLineHeightWithSpacing() - footerHeight - paddingY;
+			if (listRemainingHeight < 150.0f) listRemainingHeight = 150.0f;
+
+			{
 				LuaKeyState::SweepStaleDescriptions();
 				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
 				std::unordered_set<USHORT> manualBoundVKeys;
@@ -1252,7 +1268,9 @@ namespace RadarKeys {
 				}
 				std::stable_partition(rows.begin(), rows.end(), [](const TrackedRow& r) { return r.conflicted; });
 
-				ImGui::BeginChild("TrackedScriptKeys", ImVec2(0, 150), true);
+				ImGui::BeginChild("KeyBindingsList", ImVec2(0, listRemainingHeight), true);
+				ImGui::TextDisabled("From scripts:");
+				ImGui::PushID("ModKeyRows");
 				if (rows.empty()) {
 					ImGui::TextDisabled("(none yet - a key shows up here the first time a script queries it via RadarKeys.OnButtonDown/ButtonHeld/etc)");
 				}
@@ -1320,6 +1338,7 @@ namespace RadarKeys {
 						    editingBindingIndex = -1;
 						    isAssigningMenuToggleKey = false;
 						    isAssigningModKey = true;
+					    requestCaptureFocus = true;
 						    showCapturePrompt = true;
 						};
 
@@ -1371,19 +1390,17 @@ namespace RadarKeys {
 						ImGui::PopID(); ImGui::Separator();
 					}
 				}
-				ImGui::EndChild();
-				ImGui::TextDisabled("Exact name string to use from Lua - compare against what your script has assigned.");
+				ImGui::PopID();
+			ImGui::TextDisabled("Exact name string to use from Lua - compare against what your script has assigned.");
 			}
+
 			ImGui::Separator();
-
-			float paddingX = ImGui::GetStyle().WindowPadding.x;
-			float paddingY = ImGui::GetStyle().WindowPadding.y;
-			float footerHeight = 45.0f; 
-			float listRemainingHeight = ImGui::GetWindowHeight() - ImGui::GetCursorPosY() - footerHeight - paddingY;
-			if (listRemainingHeight < 100.0f) listRemainingHeight = 100.0f; 
-
+			ImGui::TextDisabled("Manual binds:");
+			ImGui::PushID("ManualBindRows");
 			int removeIndex = -1;
-			ImGui::BeginChild("ActiveBindingsOverviewList", ImVec2(0, listRemainingHeight), true);
+			if (bindings.empty()) {
+				ImGui::TextDisabled("(none yet - use \"Add New Binding...\" below)");
+			}
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				ImGui::PushID(i);
 				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
@@ -1433,12 +1450,14 @@ namespace RadarKeys {
 					}
 					
 					showCapturePrompt = true;
+					requestCaptureFocus = true;
 					LogActivity("Key Assignment Edit Prompt opened " + itemLabel);
 				}
 
 				ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
 				ImGui::PopID(); ImGui::Separator();
 			}
+			ImGui::PopID();
 			ImGui::EndChild();
 
 			if (removeIndex != -1) RemoveBinding(removeIndex);
@@ -1453,6 +1472,7 @@ namespace RadarKeys {
 			if (ImGui::Button("Add New Binding...", ImVec2(165, 24))) {
 				editingBindingIndex = -1;
 				showCapturePrompt = true;
+				requestCaptureFocus = true;
 				LogActivity("Key Assignment Binding Prompt opened");
 			}
 			ImGui::End();
