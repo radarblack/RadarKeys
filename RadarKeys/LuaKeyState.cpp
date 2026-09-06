@@ -44,8 +44,25 @@ namespace RadarKeys {
 
 		KeyPollState states[256];
 		USHORT redirectTarget[256] = {};
+
 		bool ValidVKey(USHORT vKey) {
 			return vKey < 256;
+		}
+		bool suppressed[256] = {};
+
+		bool IsSuppressed(USHORT vKey) {
+			return ValidVKey(vKey) && suppressed[vKey];
+		}
+
+		void SetSuppressedVKeys(const std::vector<USHORT>& vKeys) {
+			for (int i = 0; i < 256; ++i) {
+				suppressed[i] = false;
+			}
+			for (USHORT vKey : vKeys) {
+				if (ValidVKey(vKey)) {
+					suppressed[vKey] = true;
+				}
+			}
 		}
 
 		USHORT ResolveActive(USHORT vKey) {
@@ -138,6 +155,9 @@ namespace RadarKeys {
 			}
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
+			if (IsSuppressed(vKey)) {
+				return false;
+			}
 			return RawInput::IsKeyHeldReal(vKey);
 		}
 
@@ -148,6 +168,10 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
+			if (IsSuppressed(vKey)) {
+				s.downEdgePending = false;
+				return false;
+			}
 			if (s.downEdgePending) {
 				s.downEdgePending = false;
 				return true;
@@ -162,6 +186,10 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
+			if (IsSuppressed(vKey)) {
+				s.upEdgePending = false;
+				return false;
+			}
 			if (s.upEdgePending) {
 				s.upEdgePending = false;
 				return true;
@@ -175,6 +203,9 @@ namespace RadarKeys {
 			}
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
+			if (IsSuppressed(vKey)) {
+				return false;
+			}
 			KeyPollState& s = states[vKey];
 			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			if (s.isPressed && s.heldStartSet) {
@@ -191,6 +222,10 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
+			if (IsSuppressed(vKey)) {
+				s.onHoldStartSet = false;
+				return false;
+			}
 			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			if (s.isPressed && s.onHoldStartSet) {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.onHoldStart).count();
@@ -209,6 +244,11 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
+			if (IsSuppressed(vKey)) {
+				s.repeatStartSet = false;
+				s.currentIncrementMult = 1.0;
+				return false;
+			}
 			if (!s.isPressed) {
 				s.currentIncrementMult = 1.0;
 				return false;
@@ -232,6 +272,9 @@ namespace RadarKeys {
 				return 1.0;
 			}
 			vKey = ResolveActive(vKey);
+			if (IsSuppressed(vKey)) {
+				return 1.0;
+			}
 			return states[vKey].currentIncrementMult;
 		}
 
