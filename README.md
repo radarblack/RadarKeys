@@ -40,6 +40,26 @@ To use an assigned script:
              - Assigned maximum log output size to 9~10KB
              - Cleaned and refactored some of the scripts for bug squashing
              - Enhancements on the input detection system
+             - Isolated mofifier keys when held
+[09/01/2026] - Added mouse extra keys to the valid keybinds
+[09/02/2026] - Added LUA function targeting system
+             - Improved log and exception handling systems
+             - Improved UIs for the key assignment and main menu
+             - Refactor codes to improve performance and stability
+[09/08/2026] - Further enhancements on the logs stability, readability, and performance
+             - Unified debugger and logger
+             - Unified key bind list
+             - Enhancement on the bind saving/loading mechanism
+             - Modified LUA detection system → start of the InfiniteHeaven mod script integration
+             - Adapted the InfiniteHeaven input detection and mechanism
+             - Added an implementation process of the RadarKeys as a toolkit for the mod
+             - Designed a LUA reading process with the RadarKeys module interaction
+             - Designed a new process for input reading, allowing all trigger type to work in unison
+             - Redesigned the input detection system. Added a hold capture feature.
+             - Minor changes on the text description
+             - Redesigned process of tracking keys between LUA and manual key binds
+             - Added variations of "Instant" Trigger: On Press/On Release/Repeat - aligned with the InfiniteHeaven input reading mechanism
+             - Major and minor bug squashes on the UI and between the overall cog wheels
 ```
 ## Plans ahead
 - [x] ~~Address some of the immediate UI concerns (misspells, formatting, and spacing, etc.)~~
@@ -49,11 +69,11 @@ To use an assigned script:
 - [x] ~~Release the mod on NexusMods (First Official Release)~~
 - [ ] Make some template scripts for a simple and complex script mods
 - [ ] Final clean up (review, reassessment, function refactoring to shorten runtime execution if needed)
-- [ ] Find a way to read and run certain function within the script without passing through every functions on the script
-- [ ] Add in mouse and gamepad support
+- [x] ~~Find a way to read and run certain function within the script without passing through every functions on the script~~
+- [ ] Add in ~~mouse~~ and gamepad support
 - [x] ~~Enhance key assignment feature (eliminating the dropdown box selection and instead a direct input detection through RawInput)~~
 - [x] ~~Add in "Hold" functionality to the key assignment~~
-- [ ] Add in auto detection for RadarKeys mod
+- [x] ~~Add in auto detection for RadarKeys mod~~
 - [ ] Add in presets that can enhance gameplay experience
 - [ ] Consider this project complete with continued updates until EOS.
 - [ ] \(Optional) Less hopeful, but attempt to bind the mod directly towards the game binding file, instead of using IHHook
