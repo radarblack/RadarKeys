@@ -242,7 +242,13 @@ namespace RadarKeys {
 
 		std::string CombinedDisplayName(const KeyBind& bind) {
 			if (bind.IsCombo()) {
-				return ComboKeysDisplayName(bind.comboKeys);
+				std::string result = ComboKeysDisplayName(bind.comboKeys);
+				if (bind.holdSeconds > 0.0f) {
+					char buf[32];
+					snprintf(buf, sizeof(buf), " (hold %.1fs)", bind.holdSeconds);
+					result += buf;
+				}
+				return result;
 			}
 			std::string result = std::string(bind.needCtrl ? "Ctrl+" : "") + (bind.needShift ? "Shift+" : "") + (bind.needAlt ? "Alt+" : "") + bind.keyName;
 			if (bind.holdSeconds > 0.0f) {
@@ -502,13 +508,68 @@ namespace RadarKeys {
 				for (USHORT k : bind.comboKeys) {
 					if (!RawInput::IsKeyHeldReal(k)) { allHeld = false; break; }
 				}
+				bool hasHold = bind.holdSeconds > 0.0f;
 
 				if (allHeld && !bind.comboActive) {
 					bind.comboActive = true;
-					DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " combo triggered");
-					LogActivity(CombinedDisplayName(bind) + " combo triggered");
-					FireBinding(bind);
-				} else if (!allHeld) {
+					bind.comboHoldFired = false;
+					bind.comboTapFired = false;
+					bind.comboPressTime = std::chrono::steady_clock::now();
+					bind.comboLastRepeatTime = bind.comboPressTime;
+
+					std::string label = CombinedDisplayName(bind);
+					DebuggerMenu::LogButtonPress(label + " pressed");
+					LogActivity(label + " pressed");
+
+					bool deferForOnRelease = !hasHold && bind.isInstant && bind.instantTriggerType == 1;
+					if (!hasHold && !deferForOnRelease) {
+						FireBinding(bind);
+						bind.comboTapFired = true;
+					}
+				}
+
+				if (bind.comboActive) {
+					if (hasHold && !bind.comboHoldFired) {
+						double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - bind.comboPressTime).count();
+						if (heldSeconds >= bind.holdSeconds) {
+							DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " held past threshold " + std::to_string(bind.holdSeconds) + "s");
+							LogActivity(CombinedDisplayName(bind) + " held past threshold " + std::to_string(bind.holdSeconds) + "s");
+							FireBinding(bind);
+							bind.comboHoldFired = true;
+							bind.comboLastRepeatTime = std::chrono::steady_clock::now();
+						}
+					}
+
+					bool repeatEligible = bind.isInstant && bind.instantTriggerType == 2 && (hasHold ? bind.comboHoldFired : true);
+					if (repeatEligible) {
+						double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - bind.comboLastRepeatTime).count();
+						if (sinceLastRepeat >= kRepeatIntervalSeconds) {
+							DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " repeat-fired");
+							LogActivity(CombinedDisplayName(bind) + " repeat-fired");
+							FireBinding(bind);
+							bind.comboLastRepeatTime = std::chrono::steady_clock::now();
+						}
+					}
+				}
+
+				if (!allHeld && bind.comboActive) {
+					if (!bind.comboHoldFired && !bind.comboTapFired) {
+						if (hasHold && bind.isInstant && bind.instantTriggerType != 2) {
+							double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - bind.comboPressTime).count();
+							if (heldSeconds < kNearMissHoldFraction * bind.holdSeconds) {
+								DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " released early (Instant)");
+								LogActivity(CombinedDisplayName(bind) + " released early (Instant)");
+								FireBinding(bind);
+							} else {
+								LogActivity(CombinedDisplayName(bind) + " released near hold threshold - Instant suppressed");
+							}
+						}
+						else if (!hasHold) {
+							DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " released (On Release)");
+							LogActivity(CombinedDisplayName(bind) + " released (On Release)");
+							FireBinding(bind);
+						}
+					}
 					bind.comboActive = false;
 				}
 			}
@@ -720,10 +781,17 @@ namespace RadarKeys {
 			LogActivity("Bound " + CombinedDisplayName(bindings.back()) + " (toggle: " + (isToggle ? "YES" : "NO") + ")");
 		}
 
-		void AddComboBinding(const std::vector<USHORT>& comboKeys, const std::string& pathOn, const std::string& funcTap) {
+		void AddComboBinding(const std::vector<USHORT>& comboKeys, bool isToggle, const std::string& pathOn, const std::string& pathOff, const std::string& funcOn, const std::string& funcOff, const std::string& funcTap, float holdSeconds, bool isInstant, int instantTriggerType) {
 			KeyBind b{};
 			b.comboKeys = comboKeys;
+			b.isToggle = isToggle;
 			b.scriptPathOn = pathOn;
+			b.scriptPathOff = pathOff;
+			b.holdSeconds = holdSeconds;
+			b.isInstant = isInstant;
+			b.instantTriggerType = instantTriggerType;
+			b.functionOn = funcOn;
+			b.functionOff = funcOff;
 			b.functionTap = funcTap;
 
 			bindings.push_back(b);
@@ -815,6 +883,8 @@ namespace RadarKeys {
 			comboHoldActive = false;
 		}
 
+		// All currently-held keys/buttons eligible to be part of a combo. Left click is
+		// excluded so clicking the capture window's own buttons can't be captured as a key.
 		std::vector<USHORT> ScanCurrentlyHeldKeys() {
 			std::vector<USHORT> held;
 			for (int i = 1; i < 256; i++) {
@@ -1072,7 +1142,7 @@ namespace RadarKeys {
 			}
 		
 			ImGui::BeginGroup();
-			if (!isAssigningMenuToggleKey && !captureIsCombo) {
+			if (!isAssigningMenuToggleKey) {
 				if (isAssigningModKey) ImGui::BeginDisabled();
 
 				ImGui::Checkbox("Toggle", &capturedToggleMode);
@@ -1346,7 +1416,14 @@ namespace RadarKeys {
 						if (editingBindingIndex != -1) {
 							KeyBind editedBind{};
 							editedBind.comboKeys = capturedComboKeys;
+							editedBind.isToggle = capturedToggleMode;
 							editedBind.scriptPathOn = finalPathOn;
+							editedBind.scriptPathOff = finalPathOff;
+							editedBind.holdSeconds = finalHoldSeconds;
+							editedBind.isInstant = capturedInstantMode;
+							editedBind.instantTriggerType = capturedInstantTriggerType;
+							editedBind.functionOn = finalFuncOn;
+							editedBind.functionOff = finalFuncOff;
 							editedBind.functionTap = finalFuncTap;
 
 							bindings[editingBindingIndex] = editedBind;
@@ -1354,7 +1431,7 @@ namespace RadarKeys {
 							MarkDisplayCacheDirty();
 							LogActivity("Edited combo binding -> " + CombinedDisplayName(editedBind));
 						} else {
-							AddComboBinding(capturedComboKeys, finalPathOn, finalFuncTap);
+							AddComboBinding(capturedComboKeys, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap, finalHoldSeconds, capturedInstantMode, capturedInstantTriggerType);
 						}
 					}
 					else if (editingBindingIndex != -1) {
@@ -1460,7 +1537,7 @@ namespace RadarKeys {
 			if (finalMinWidthFloor < 480.0f) {
 				finalMinWidthFloor = 480.0f;
 			}
-
+			
 			static float minWindowHeightFloor = 220.0f;
 			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, minWindowHeightFloor), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, minWindowHeightFloor), ImVec2(FLT_MAX, FLT_MAX));
