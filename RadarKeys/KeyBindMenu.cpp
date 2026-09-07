@@ -1045,7 +1045,7 @@ namespace RadarKeys {
 			else if (isAssigningModKey) {
 				ImGui::TextDisabled("Detected from the script:");
 				if (modKeyInfo.breakdownLines.empty()) {
-					ImGui::TextWrapped("(nothing observed yet - the script hasn't polled this key this session)");
+					ImGui::TextWrapped("(No Keys from any mods are queried by the core module.)");
 				} else {
 					for (const std::string& line : modKeyInfo.breakdownLines) {
 						ImGui::TextWrapped("%s", line.c_str());
@@ -1165,7 +1165,7 @@ namespace RadarKeys {
 			}
 
 			if (isAssigningModKey) {
-				ImGui::TextDisabled("Takes effect immediately, as long as the script re-checks its key every frame.");
+				ImGui::TextDisabled("This will immediately take effect once the frame updates after assigning.");
 			}
 			ImGui::End();
 		}
@@ -1293,13 +1293,13 @@ namespace RadarKeys {
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 
 				if (!rows.empty()) {
-					ImGui::TextDisabled("Exact name string to use from Lua - compare against what your script has assigned.");
+					ImGui::TextDisabled("Keys described from the mod script will put the information in the list.");
 				}
 
 				int removeIndex = -1;
 				ImGui::BeginChild("KeyBindingsList", ImVec2(0, listRemainingHeight), true);
 				if (rows.empty()) {
-					ImGui::TextDisabled("(none yet - a manual bind shows up here once added below, and a script's key shows up the first time it queries via RadarKeys.OnButtonDown/ButtonHeld/etc)");
+					ImGui::TextDisabled("(No Keys are assigned yet.)");
 				}
 				for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
 					UnifiedRow& row = rows[rowIdx];
@@ -1318,7 +1318,7 @@ namespace RadarKeys {
 						detailText = "-> " + row.info.scriptName + funcStr;
 					}
 					else {
-						detailText = "-> (undescribed - call RadarKeys.DescribeKey(...) to label this)";
+						detailText = "-> (Key is not yet described through RadarKeys module.)";
 					}
 
 					const float conflictBoxHeight = 34.0f;
@@ -1363,7 +1363,7 @@ namespace RadarKeys {
 						if (ImGui::IsItemHovered()) {
 							ImGui::SetTooltip(row.info.hasDescription
 								? "Another binding is using this same key - it's disabled until resolved.\nClick the key name to reassign this one."
-								: "Another binding is using this same key - it's disabled until resolved.\nThis entry has no script/function identity to reassign (never described via RadarKeys.DescribeKey); reassign the other one.");
+								: "Another binding is using this same key - it's disabled until resolved.\nUnable to reassign an override - Key is not yet described through RadarKeys module.");
 						}
 					}
 					else {
@@ -1447,7 +1447,7 @@ namespace RadarKeys {
 							ImGui::Button(NameForVKey(row.displayVKey).c_str(), ImVec2(130, buttonHeight));
 							ImGui::EndDisabled();
 							if (ImGui::IsItemHovered()) {
-								ImGui::SetTooltip("Can't reassign yet - this key hasn't been described via RadarKeys.DescribeKey(), so there's no script/function to save an override under.");
+								ImGui::SetTooltip("Unable to reassign an override - Key is not yet described through RadarKeys module.");
 							}
 						}
 						ImGui::PopStyleColor();
