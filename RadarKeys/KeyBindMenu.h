@@ -29,9 +29,9 @@ namespace RadarKeys {
 			std::string functionTap;  // instant tap / long press slot
 
 			std::vector<USHORT> comboKeys;
-			bool comboActive = false;
-			bool comboHoldFired = false;
-			bool comboTapFired = false;
+			bool comboActive = false;    // true while every key in comboKeys is currently held
+			bool comboHoldFired = false; // Long Press threshold already fired for this hold
+			bool comboTapFired = false;  // tap/press-time fire already happened for this hold
 			std::chrono::steady_clock::time_point comboPressTime;
 			std::chrono::steady_clock::time_point comboLastRepeatTime;
 
