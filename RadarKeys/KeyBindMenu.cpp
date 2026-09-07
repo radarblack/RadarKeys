@@ -898,7 +898,7 @@ namespace RadarKeys {
 		static std::vector<USHORT> capturedComboKeys;
 		static std::vector<USHORT> comboHoldKeys;
 		static std::chrono::steady_clock::time_point comboHoldStartTime;
-		static bool comboHoldActive = false
+		static bool comboHoldActive = false;
 		constexpr double kComboHoldSeconds = 2.0;
 
 		void ResetComboCaptureState() {
