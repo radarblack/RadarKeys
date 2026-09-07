@@ -9,48 +9,43 @@
 namespace RadarKeys {
 	namespace LuaKeyState {
 		using clock = std::chrono::steady_clock;
-
 		constexpr double kHoldTimeSeconds = 0.9;
 		constexpr double kRepeatRateSeconds = 0.85;
 		constexpr double kIncrementMultIncrementMult = 1.5;
 		constexpr double kMaxIncrementMult = 50.0;
 
 		struct KeyDescription {
-			std::string scriptName;
-			std::string functionName;
 			bool hasToggleState = false;
 			bool toggleEnabled = false;
 			bool touchedSinceSweep = true;
 			bool usesOnPress = false;
 			bool usesHoldTime = false;
-			double lastHoldSeconds = 0.0;
 			bool usesRepeat = false;
 			bool usesOnRelease = false;
+			double lastHoldSeconds = 0.0;
+			std::string scriptName;
+			std::string functionName;
 		};
 
 		struct KeyPollState {
 			bool registered = false;
-			RawInput::ActionHandle actionHandle = 0;
 			bool isPressed = false;
 			bool downEdgePending = false;
 			bool upEdgePending = false;
-
 			bool heldStartSet = false;
 			bool onHoldStartSet = false;
 			bool repeatStartSet = false;
-
+			bool pendingUsesOnPress = false;
+			bool pendingUsesHoldTime = false;
+			bool pendingUsesRepeat = false;
+			bool pendingUsesOnRelease = false;
+			double pendingLastHoldSeconds = 0.0;
+			double currentIncrementMult = 1.0;
 			clock::time_point heldStart{};
 			clock::time_point onHoldStart{};
 			clock::time_point repeatStart{};
-
-			double currentIncrementMult = 1.0;
 			std::vector<KeyDescription> descriptions;
-
-			bool pendingUsesOnPress = false;
-			bool pendingUsesHoldTime = false;
-			double pendingLastHoldSeconds = 0.0;
-			bool pendingUsesRepeat = false;
-			bool pendingUsesOnRelease = false;
+			RawInput::ActionHandle actionHandle = 0;
 		};
 
 		KeyPollState states[256];
