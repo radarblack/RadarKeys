@@ -8,6 +8,7 @@
 #include "HookUtils.h"
 #include "spdlog/spdlog.h"
 #include "imgui/imgui.h"
+
 #include <fstream>
 #include <filesystem>
 #include <map>
@@ -1349,6 +1350,8 @@ namespace RadarKeys {
 					else if (row.conflicted) {
 						ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
 						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
+						// Zero child padding so the label can be centered against the
+						// complete badge bounding box, both horizontally and vertically.
 						ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 						ImGui::BeginChild("ConflictBadge", ImVec2(60, buttonHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoInputs);
 						ImVec2 errorTextSize = ImGui::CalcTextSize("Error!");
