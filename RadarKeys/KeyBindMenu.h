@@ -26,6 +26,10 @@ namespace RadarKeys {
 			std::string functionOn;   // toggle ON slot
 			std::string functionOff;  // toggle OFF slot
 			std::string functionTap;  // instant tap / long press slot
+
+			std::vector<USHORT> comboKeys;
+			bool comboActive = false;
+			bool IsCombo() const { return comboKeys.size() >= 2; }
 		};
 		void Init(const std::string& defaultMenuKeyName);
 		void Draw(bool* p_open);
