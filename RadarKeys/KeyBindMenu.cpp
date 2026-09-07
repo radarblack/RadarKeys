@@ -366,14 +366,14 @@ namespace RadarKeys {
 
 			if (showCapturePrompt) {
 				for (USHORT vKey : activeBindVKeys) {
-					LuaKeyState::OnButtonDown(vKey);
-					LuaKeyState::OnButtonUp(vKey);
+					LuaKeyState::PhysicalOnButtonDown(vKey);
+					LuaKeyState::PhysicalOnButtonUp(vKey);
 				}
 				return;
 			}
 
 			for (USHORT vKey : activeBindVKeys) {
-				if (LuaKeyState::OnButtonDown(vKey)) {
+				if (LuaKeyState::PhysicalOnButtonDown(vKey)) {
 					bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
 					DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 					LogActivity(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
@@ -416,7 +416,7 @@ namespace RadarKeys {
 				const KeyBind* holdBind = FindMatchingBinding(vKey, pending.ctrlOnPressed, pending.shiftOnPressed, pending.altOnPressed, true);
 				const KeyBind* tapBind = FindMatchingBinding(vKey, pending.ctrlOnPressed, pending.shiftOnPressed, pending.altOnPressed, false);
 
-				if (!pending.holdFired && holdBind && LuaKeyState::OnButtonHoldTime(vKey, holdBind->holdSeconds)) {
+				if (!pending.holdFired && holdBind && LuaKeyState::PhysicalOnButtonHoldTime(vKey, holdBind->holdSeconds)) {
 					DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
 					LogActivity(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
 					FireBinding(*holdBind);
@@ -432,7 +432,7 @@ namespace RadarKeys {
 				}
 				if (repeatBind) {
 					double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.lastRepeatTime).count();
-					if (sinceLastRepeat > kRepeatIntervalSeconds) {
+					if (sinceLastRepeat >= kRepeatIntervalSeconds) {
 						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " repeat-fired");
 						LogActivity(NameForVKey(vKey) + " repeat-fired");
 						FireBinding(*repeatBind);
@@ -440,7 +440,7 @@ namespace RadarKeys {
 					}
 				}
 
-				if (LuaKeyState::OnButtonUp(vKey)) {
+				if (LuaKeyState::PhysicalOnButtonUp(vKey)) {
 					if (!pending.holdFired && !pending.tapFired) {
 						if (holdBind && holdBind->isInstant && holdBind->instantTriggerType != 2) {
 							double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.pressTime).count();
@@ -1349,10 +1349,12 @@ namespace RadarKeys {
 					else if (row.conflicted) {
 						ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
 						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
-						ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2.0f, ImGui::GetStyle().WindowPadding.y));
+						ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 						ImGui::BeginChild("ConflictBadge", ImVec2(60, buttonHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoInputs);
-						float textWidth = ImGui::CalcTextSize("Error!").x;
-						ImGui::SetCursorPosX((60.0f - textWidth) * 0.5f > 0.0f ? (60.0f - textWidth) * 0.5f : 0.0f);
+						ImVec2 errorTextSize = ImGui::CalcTextSize("Error!");
+						ImGui::SetCursorPos(ImVec2(
+							std::max(0.0f, (60.0f - errorTextSize.x) * 0.5f),
+							std::max(0.0f, (buttonHeight - errorTextSize.y) * 0.5f)));
 						ImGui::TextUnformatted("Error!");
 						ImGui::EndChild();
 						ImGui::PopStyleVar();
