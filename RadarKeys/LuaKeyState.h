@@ -9,8 +9,8 @@ namespace RadarKeys {
 		bool ButtonHeld(USHORT vKey, double holdSecondsOverride = -1.0);
 		bool OnButtonDown(USHORT vKey);
 		bool OnButtonUp(USHORT vKey);
-		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride = -1.0);
 		bool OnButtonRepeat(USHORT vKey);
+		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride = -1.0);
 		void ResetRepeat(USHORT vKey);
 		double GetRepeatMult(USHORT vKey);
 		bool PhysicalOnButtonDown(USHORT vKey);
