@@ -552,6 +552,12 @@ namespace RadarKeys {
 					}
 				}
 				else if (parts[0] == "BIND" && parts.size() >= 7) {
+					// The split() helper preserves empty fields, so validate the required
+					// structural fields explicitly before indexing them.
+					if (parts.size() < 8) {
+						spdlog::warn("KeyBindMenu::LoadBindings: skipping incomplete BIND line: {}", line);
+						continue;
+					}
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
 					if (vKey == -1) {
 						spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName);
