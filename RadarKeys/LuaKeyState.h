@@ -6,21 +6,21 @@
 namespace RadarKeys {
 	namespace LuaKeyState {
 		bool ButtonDown(USHORT vKey);
+		bool ButtonHeld(USHORT vKey, double holdSecondsOverride = -1.0);
 		bool OnButtonDown(USHORT vKey);
 		bool OnButtonUp(USHORT vKey);
+		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride = -1.0);
+		bool OnButtonRepeat(USHORT vKey);
+		void ResetRepeat(USHORT vKey);
+		double GetRepeatMult(USHORT vKey);
 		bool PhysicalOnButtonDown(USHORT vKey);
 		bool PhysicalOnButtonUp(USHORT vKey);
-		bool ButtonHeld(USHORT vKey, double holdSecondsOverride = -1.0);
-		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride = -1.0);
 		bool PhysicalOnButtonHoldTime(USHORT vKey, double holdSecondsOverride = -1.0);
-		bool OnButtonRepeat(USHORT vKey);
-		double GetRepeatMult(USHORT vKey);
-		void ResetRepeat(USHORT vKey);
-		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
 		void SweepStaleDescriptions();
-		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName);
 		void RetireIfUndescribed(USHORT vKey);
 		void SetSuppressedVKeys(const std::vector<USHORT>& vKeys);
+		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName);
+		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
 
 		struct TrackedKeyInfo {
 			USHORT vKey = 0;
