@@ -81,19 +81,26 @@ namespace RadarKeys {
 		void ProcessKey(PRAWINPUT pRaw) {
 			//spdlog::trace("ProcessKey");//DEBUG
 			USHORT vKey = pRaw->data.keyboard.VKey;
+			if (vKey >= vKeyMax) {
+				spdlog::warn("RawInput::ProcessKey: ignoring out-of-range VKey {}", vKey);
+				return;
+			}
+
 			USHORT flags = pRaw->data.keyboard.Flags;
 			USHORT oldFlags = currFlags[vKey];
+			const bool isBreak = (flags & RI_KEY_BREAK) != 0;
+			const bool wasBreak = (oldFlags & RI_KEY_BREAK) != 0;
 
 			BUTTONEVENT buttonEvent = BUTTONEVENT::UP;
-			if (flags == RI_KEY_MAKE && oldFlags == RI_KEY_BREAK) {//OnKeyDown
+			if (!isBreak && wasBreak) {//OnKeyDown
 				buttonEvent = BUTTONEVENT::ONDOWN;
 				realStateHeld[vKey] = true; // Update tracking table
 			}
-			else if (flags == RI_KEY_BREAK && oldFlags == RI_KEY_MAKE) {//OnKeyUp
+			else if (isBreak && !wasBreak) {//OnKeyUp
 				buttonEvent = BUTTONEVENT::ONUP;
 				realStateHeld[vKey] = false; // Update tracking table
 			}
-			else if (flags == RI_KEY_MAKE && oldFlags == RI_KEY_MAKE) {//Held
+			else if (!isBreak && !wasBreak) {//Held
 				buttonEvent = BUTTONEVENT::HELD;
 			}
 			//else up, which you shouldnt hit
@@ -223,7 +230,10 @@ namespace RadarKeys {
 
 
 		ActionHandle RegisterAction(USHORT vKey, ButtonAction action) {
-			assert(vKey > 0 && vKey < vKeyMax);
+			if (vKey == 0 || vKey >= vKeyMax || !action) {
+				spdlog::warn("RawInput::RegisterAction: invalid VKey {}", vKey);
+				return 0;
+			}
 			spdlog::debug("RawInput RegisterAction for vKey:{}", vKey);
 			if (buttonActions[vKey] == nullptr) {
 				buttonActions[vKey] = new std::list<std::pair<ActionHandle, ButtonAction>>();
@@ -235,6 +245,9 @@ namespace RadarKeys {
 		}//RegisterAction
 
 		void UnRegisterAction(USHORT vKey) {
+			if (vKey >= vKeyMax) {
+				return;
+			}
 			if (buttonActions[vKey] == nullptr) {
 				spdlog::warn("RawInput UnRegisterAction: No actions for vKey {}", vKey);
 				return;
@@ -247,6 +260,9 @@ namespace RadarKeys {
 		}//UnRegisterAction
 
 		void UnRegisterAction(USHORT vKey, ActionHandle handle) {
+			if (vKey >= vKeyMax || handle == 0) {
+				return;
+			}
 			std::list<std::pair<ActionHandle, ButtonAction>>* actions = buttonActions[vKey];
 			if (actions == nullptr) {
 				spdlog::warn("RawInput UnRegisterAction: No actions for vKey {}", vKey);
@@ -267,7 +283,7 @@ namespace RadarKeys {
 		}//UnRegisterAction (handle)
 
 		bool IsKeyDown(USHORT vKey) {
-			return currFlags[vKey] == RI_KEY_MAKE;
+			return vKey < vKeyMax && !((currFlags[vKey] & RI_KEY_BREAK) != 0);
 		}//IsKeyDown
 
 		//DEBUG
@@ -412,13 +428,20 @@ namespace RadarKeys {
 				PRAWINPUT pRaw = (PRAWINPUT)lpb;
 				if (pRaw->header.dwType == RIM_TYPEKEYBOARD) {
 					USHORT vKey = pRaw->data.keyboard.VKey;
+					if (vKey >= vKeyMax) {
+						delete[] lpb;
+						return true;
+					}
+
+					// Always update RadarKeys' internal state, including key-up events,
+					// before deciding whether the game itself should receive the input.
+					// Otherwise blocking the game can leave realStateHeld[] stuck true.
+					if (!ignore[vKey]) {
+						ProcessKey(pRaw);
+					}
 					if (blockGameKeys[vKey]) {
 						delete[] lpb;
 						return false;
-					}
-
-					if (!ignore[vKey]) {
-						ProcessKey(pRaw);
 					}
 				}
 				else if (pRaw->header.dwType == RIM_TYPEMOUSE) {
