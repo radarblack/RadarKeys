@@ -44,12 +44,24 @@ namespace RadarKeys {
 
 		void CreateRenderTarget() {
 			CleanupRenderTarget();
+			if (!d3d11Hook || !d3d11Hook->get_swap_chain() || !d3d11Hook->get_device()) {
+				spdlog::warn("CreateRenderTarget: D3D11 hook/device/swap chain unavailable");
+				return;
+			}
 
 			ID3D11Texture2D* backBuffer{ nullptr };
-			if (d3d11Hook->get_swap_chain()->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&backBuffer) == S_OK) {
-				d3d11Hook->get_device()->CreateRenderTargetView(backBuffer, NULL, &mainRenderTargetView);
-				backBuffer->Release();
+			HRESULT hr = d3d11Hook->get_swap_chain()->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&backBuffer);
+			if (FAILED(hr) || !backBuffer) {
+				spdlog::warn("CreateRenderTarget: GetBuffer failed: 0x{:08X}", static_cast<unsigned>(hr));
+				return;
 			}
+
+			hr = d3d11Hook->get_device()->CreateRenderTargetView(backBuffer, nullptr, &mainRenderTargetView);
+		backBuffer->Release();
+		if (FAILED(hr)) {
+			mainRenderTargetView = nullptr;
+			spdlog::warn("CreateRenderTarget: CreateRenderTargetView failed: 0x{:08X}", static_cast<unsigned>(hr));
+		}
 		}
 
 		bool OnMessage(HWND wnd, UINT message, WPARAM w_param, LPARAM l_param) {
