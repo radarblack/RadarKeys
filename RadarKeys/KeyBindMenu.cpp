@@ -1439,7 +1439,7 @@ namespace RadarKeys {
 								openReassignPrompt();
 							}
 							if (ImGui::IsItemHovered()) {
-								ImGui::SetTooltip("Click to reassign this key.\nSaved to the shared conf file - takes effect immediately.");
+								ImGui::SetTooltip("Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder");
 							}
 						}
 						else {
