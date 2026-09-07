@@ -1354,8 +1354,8 @@ namespace RadarKeys {
 						ImGui::BeginChild("ConflictBadge", ImVec2(60, buttonHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoInputs);
 						ImVec2 errorTextSize = ImGui::CalcTextSize("Error!");
 						ImGui::SetCursorPos(ImVec2(
-							std::max(0.0f, (60.0f - errorTextSize.x) * 0.5f),
-							std::max(0.0f, (buttonHeight - errorTextSize.y) * 0.5f)));
+						    (std::max)(0.0f, (60.0f - errorTextSize.x) * 0.5f),
+						    (std::max)(0.0f, (buttonHeight - errorTextSize.y) * 0.5f)));
 						ImGui::TextUnformatted("Error!");
 						ImGui::EndChild();
 						ImGui::PopStyleVar();
