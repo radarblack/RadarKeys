@@ -8,7 +8,6 @@
 #include "HookUtils.h"
 #include "spdlog/spdlog.h"
 #include "imgui/imgui.h"
-
 #include <fstream>
 #include <filesystem>
 #include <map>
@@ -552,8 +551,6 @@ namespace RadarKeys {
 					}
 				}
 				else if (parts[0] == "BIND" && parts.size() >= 7) {
-					// The split() helper preserves empty fields, so validate the required
-					// structural fields explicitly before indexing them.
 					if (parts.size() < 8) {
 						spdlog::warn("KeyBindMenu::LoadBindings: skipping incomplete BIND line: {}", line);
 						continue;
@@ -1224,8 +1221,9 @@ namespace RadarKeys {
 				finalMinWidthFloor = 480.0f;
 			}
 
-			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, 220), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, 220), ImVec2(FLT_MAX, FLT_MAX));
+			static float minWindowHeightFloor = 220.0f;
+			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, minWindowHeightFloor), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, minWindowHeightFloor), ImVec2(FLT_MAX, FLT_MAX));
 
 			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
 			if (ImGui::Button("Debugger")) {
@@ -1243,11 +1241,14 @@ namespace RadarKeys {
 			ImGui::Separator();
 
 			ImGui::Text("Key Bindings");
+			const float kListMinHeight = 150.0f;
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float footerHeight = 45.0f;
-			float listRemainingHeight = ImGui::GetWindowHeight() - ImGui::GetCursorPosY() - ImGui::GetTextLineHeightWithSpacing() - footerHeight - paddingY;
-			if (listRemainingHeight < 150.0f) listRemainingHeight = 150.0f;
+			float cursorYBeforeList = ImGui::GetCursorPosY();
+			float listRemainingHeight = ImGui::GetWindowHeight() - cursorYBeforeList - ImGui::GetTextLineHeightWithSpacing() - footerHeight - paddingY;
+			if (listRemainingHeight < kListMinHeight) listRemainingHeight = kListMinHeight;
+			minWindowHeightFloor = cursorYBeforeList + ImGui::GetTextLineHeightWithSpacing() + footerHeight + paddingY + kListMinHeight;
 
 			{
 				LuaKeyState::SweepStaleDescriptions();
