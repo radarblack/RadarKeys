@@ -8,7 +8,6 @@
 #include "HookUtils.h"
 #include "spdlog/spdlog.h"
 #include "imgui/imgui.h"
-
 #include <fstream>
 #include <filesystem>
 #include <map>
