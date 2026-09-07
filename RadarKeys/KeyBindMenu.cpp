@@ -206,7 +206,8 @@ namespace RadarKeys {
 			{"Ctrl", VK_CONTROL}, {"Shift", VK_SHIFT}, {"Alt", VK_MENU},
 			{"Mouse Wheel", VK_MBUTTON},
 			{"Mouse 4", VK_XBUTTON1},
-			{"Mouse 5", VK_XBUTTON2}
+			{"Mouse 5", VK_XBUTTON2},
+			{"Right Click", VK_RBUTTON}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
@@ -381,6 +382,25 @@ namespace RadarKeys {
 			return (resolved > 0) ? (USHORT)resolved : info.vKey;
 		}
 
+		bool IsVKeySuppressedByActiveCombo(USHORT vKey) {
+			for (const auto& bind : bindings) {
+				if (!bind.IsCombo()) continue;
+
+				bool isMember = false;
+				for (USHORT k : bind.comboKeys) {
+					if (k == vKey) { isMember = true; break; }
+				}
+				if (!isMember) continue;
+
+				bool allHeld = true;
+				for (USHORT k : bind.comboKeys) {
+					if (!RawInput::IsKeyHeldReal(k)) { allHeld = false; break; }
+				}
+				if (allHeld) return true;
+			}
+			return false;
+		}
+
 		std::vector<USHORT> ComputeConflictedVKeys() {
 			std::unordered_set<USHORT> manualVKeys;
 			for (const auto& bind : bindings) {
@@ -411,6 +431,8 @@ namespace RadarKeys {
 			}
 
 			for (USHORT vKey : activeBindVKeys) {
+				bool suppressedByCombo = IsVKeySuppressedByActiveCombo(vKey);
+
 				if (LuaKeyState::PhysicalOnButtonDown(vKey)) {
 					bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
 					DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
@@ -430,9 +452,11 @@ namespace RadarKeys {
 					const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
 					bool deferForOnRelease = toRun && toRun->isInstant && toRun->instantTriggerType == 1;
 					bool firedImmediately = false;
-					if (toRun && !hasHoldOptionOnKey && !deferForOnRelease) {
+					if (toRun && !hasHoldOptionOnKey && !deferForOnRelease && !suppressedByCombo) {
 						FireBinding(*toRun);
 						firedImmediately = true;
+					} else if (toRun && suppressedByCombo) {
+						LogActivity(NameForVKey(vKey) + " press suppressed - part of an active Multi-Key Combo");
 					}
 
 					PendingPress pending;
@@ -454,7 +478,7 @@ namespace RadarKeys {
 				const KeyBind* holdBind = FindMatchingBinding(vKey, pending.ctrlOnPressed, pending.shiftOnPressed, pending.altOnPressed, true);
 				const KeyBind* tapBind = FindMatchingBinding(vKey, pending.ctrlOnPressed, pending.shiftOnPressed, pending.altOnPressed, false);
 
-				if (!pending.holdFired && holdBind && LuaKeyState::PhysicalOnButtonHoldTime(vKey, holdBind->holdSeconds)) {
+				if (!suppressedByCombo && !pending.holdFired && holdBind && LuaKeyState::PhysicalOnButtonHoldTime(vKey, holdBind->holdSeconds)) {
 					DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
 					LogActivity(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
 					FireBinding(*holdBind);
@@ -468,7 +492,7 @@ namespace RadarKeys {
 				} else if (!holdBind && tapBind && tapBind->isInstant && tapBind->instantTriggerType == 2) {
 					repeatBind = tapBind;
 				}
-				if (repeatBind) {
+				if (repeatBind && !suppressedByCombo) {
 					double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.lastRepeatTime).count();
 					if (sinceLastRepeat >= kRepeatIntervalSeconds) {
 						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " repeat-fired");
@@ -479,7 +503,7 @@ namespace RadarKeys {
 				}
 
 				if (LuaKeyState::PhysicalOnButtonUp(vKey)) {
-					if (!pending.holdFired && !pending.tapFired) {
+					if (!pending.holdFired && !pending.tapFired && !suppressedByCombo) {
 						if (holdBind && holdBind->isInstant && holdBind->instantTriggerType != 2) {
 							double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.pressTime).count();
 							if (heldSeconds < kNearMissHoldFraction * holdBind->holdSeconds) {
@@ -874,7 +898,7 @@ namespace RadarKeys {
 		static std::vector<USHORT> capturedComboKeys;
 		static std::vector<USHORT> comboHoldKeys;
 		static std::chrono::steady_clock::time_point comboHoldStartTime;
-		static bool comboHoldActive = false;
+		static bool comboHoldActive = false
 		constexpr double kComboHoldSeconds = 2.0;
 
 		void ResetComboCaptureState() {
@@ -883,8 +907,6 @@ namespace RadarKeys {
 			comboHoldActive = false;
 		}
 
-		// All currently-held keys/buttons eligible to be part of a combo. Left click is
-		// excluded so clicking the capture window's own buttons can't be captured as a key.
 		std::vector<USHORT> ScanCurrentlyHeldKeys() {
 			std::vector<USHORT> held;
 			for (int i = 1; i < 256; i++) {
@@ -1102,38 +1124,45 @@ namespace RadarKeys {
 			} else {
 				UpdateComboCapture();
 
-				ImGui::BeginChild("ComboKeyDisplayFrame", ImVec2(210, 95), true, ImGuiWindowFlags_NoScrollbar);
+				ImGui::BeginChild("ComboKeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 				auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
-				const char* header = "Keys (2-3)";
-				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(header).x) * 0.5f); ImGui::Text("%s", header); ImGui::Separator();
-				float lowerBoxTopY = ImGui::GetCursorPosY();
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Keys").x) * 0.5f); ImGui::Text(" Keys"); ImGui::Separator();
+				float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 
-				if (!capturedComboKeys.empty()) {
-					std::string names = ComboKeysDisplayName(capturedComboKeys);
-					ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(names.c_str()).x) * 0.5f);
-					ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s", names.c_str());
-					ImGui::TextDisabled("Captured");
-				} else if (comboHoldActive) {
-					std::string names = ComboKeysDisplayName(comboHoldKeys);
-					ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(names.c_str()).x) * 0.5f);
-					ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "%s", names.c_str());
-
-					double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - comboHoldStartTime).count();
-					float progress = (float)(std::min)(heldSeconds / kComboHoldSeconds, 1.0);
-					ImGui::ProgressBar(progress, ImVec2(availWidth - 4.0f, 0.0f));
-					ImGui::Text("Hold %.1f / %.1fs", heldSeconds, kComboHoldSeconds);
+				if (capturedComboKeys.empty() && !comboHoldActive) {
+					float startVerticalY = lowerBoxTopY + ((lowerBoxRemainingHeight - (ImGui::GetTextLineHeightWithSpacing() * 2.0f)) * 0.5f);
+					ImGui::SetCursorPosY(startVerticalY);
+					ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("HOLD").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "HOLD");
+					ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("2-3 KEYS").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "2-3 KEYS");
 				} else {
-					ImGui::SetCursorPosY(lowerBoxTopY + 10.0f);
-					ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), " Hold 2 or 3");
-					ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), " keys down..");
+					bool isFinal = !capturedComboKeys.empty();
+					const std::vector<USHORT>& shownKeys = isFinal ? capturedComboKeys : comboHoldKeys;
+					std::string names = ComboKeysDisplayName(shownKeys);
+
+					ImGui::SetWindowFontScale(0.8f);
+					float textHeight = ImGui::CalcTextSize(names.c_str(), nullptr, false, availWidth).y;
+					float reserveForBar = isFinal ? 0.0f : 12.0f;
+					ImGui::SetCursorPosY(lowerBoxTopY + (std::max)(0.0f, (lowerBoxRemainingHeight - textHeight - reserveForBar) * 0.5f));
+					ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + availWidth);
+					ImGui::PushStyleColor(ImGuiCol_Text, isFinal ? ImVec4(0.2f, 1.0f, 0.2f, 1.0f) : ImVec4(1.0f, 0.85f, 0.2f, 1.0f));
+					ImGui::TextWrapped("%s", names.c_str());
+					ImGui::PopStyleColor();
+					ImGui::PopTextWrapPos();
+					ImGui::SetWindowFontScale(1.0f);
+
+					if (!isFinal) {
+						double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - comboHoldStartTime).count();
+						float progress = (float)(std::min)(heldSeconds / kComboHoldSeconds, 1.0);
+						ImGui::ProgressBar(progress, ImVec2(availWidth - 4.0f, 8.0f), "");
+					}
 				}
-				ImGui::EndChild(); ImGui::SameLine();
+				ImGui::EndChild();
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.", kComboHoldSeconds);
+				}
+				ImGui::SameLine();
 
 				ImGui::BeginGroup();
-				ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 115.0f);
-				ImGui::TextDisabled("Hold every key in the combo for %.1fs. Releasing any key early cancels it.", kComboHoldSeconds);
-				ImGui::PopTextWrapPos();
-
 				if (ImGui::Button("Reset", ImVec2(55, 22))) {
 					ResetComboCaptureState();
 					LogActivity("Multi-key combo has been reset");
@@ -1425,7 +1454,6 @@ namespace RadarKeys {
 							editedBind.functionOn = finalFuncOn;
 							editedBind.functionOff = finalFuncOff;
 							editedBind.functionTap = finalFuncTap;
-
 							bindings[editingBindingIndex] = editedBind;
 							SaveBindings();
 							MarkDisplayCacheDirty();
@@ -1565,8 +1593,7 @@ namespace RadarKeys {
 			float cursorYBeforeList = ImGui::GetCursorPosY();
 			float listRemainingHeight = ImGui::GetWindowHeight() - cursorYBeforeList - ImGui::GetTextLineHeightWithSpacing() - footerHeight - paddingY;
 			if (listRemainingHeight < kListMinHeight) listRemainingHeight = kListMinHeight;
-			minWindowHeightFloor = cursorYBeforeList + ImGui::GetTextLineHeightWithSpacing() + footerHeight + paddingY + kListMinHeight;
-
+				minWindowHeightFloor = cursorYBeforeList + ImGui::GetTextLineHeightWithSpacing() + footerHeight + paddingY + kListMinHeight;
 			{
 				LuaKeyState::SweepStaleDescriptions();
 				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
