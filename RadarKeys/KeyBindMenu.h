@@ -3,6 +3,7 @@
 #include "RawInput.h"
 #include <string>
 #include <vector>
+#include <chrono>
 
 namespace RadarKeys {
 	extern bool showCapturePrompt;
@@ -29,6 +30,11 @@ namespace RadarKeys {
 
 			std::vector<USHORT> comboKeys;
 			bool comboActive = false;
+			bool comboHoldFired = false;
+			bool comboTapFired = false;
+			std::chrono::steady_clock::time_point comboPressTime;
+			std::chrono::steady_clock::time_point comboLastRepeatTime;
+
 			bool IsCombo() const { return comboKeys.size() >= 2; }
 		};
 		void Init(const std::string& defaultMenuKeyName);
