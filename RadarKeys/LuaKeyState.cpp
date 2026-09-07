@@ -225,7 +225,7 @@ namespace RadarKeys {
 			KeyPollState& s = states[vKey];
 			if (s.isPressed && s.heldStartSet) {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.heldStart).count();
-				return elapsed > heldHoldTime;
+				return elapsed >= heldHoldTime;
 			}
 			return false;
 		}
@@ -246,7 +246,7 @@ namespace RadarKeys {
 			}
 			if (s.isPressed && s.onHoldStartSet) {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.onHoldStart).count();
-				if (elapsed > holdTime) {
+				if (elapsed >= holdTime) {
 					s.onHoldStartSet = false;
 					return true;
 				}
@@ -273,7 +273,7 @@ namespace RadarKeys {
 			}
 			if (s.repeatStartSet) {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.repeatStart).count();
-				if (elapsed > kRepeatRateSeconds) {
+				if (elapsed >= kRepeatRateSeconds) {
 					s.repeatStart = clock::now();
 					s.currentIncrementMult *= kIncrementMultIncrementMult;
 					if (s.currentIncrementMult > kMaxIncrementMult) {
@@ -305,6 +305,7 @@ namespace RadarKeys {
 			s.heldStartSet = false;
 			s.onHoldStartSet = false;
 			s.repeatStartSet = false;
+			s.currentIncrementMult = 1.0;
 		}
 
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState) {
