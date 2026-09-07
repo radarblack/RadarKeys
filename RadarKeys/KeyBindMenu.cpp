@@ -243,8 +243,8 @@ namespace RadarKeys {
 		USHORT menuToggleVKey = VK_F7;
 		RawInput::ActionHandle menuToggleHandle = 0;
 		bool menuOpen = false;
-		std::unordered_set<USHORT> activeBindVKeys;
 
+		std::unordered_set<USHORT> activeBindVKeys;
 		void OnMenuToggleKeyPressed(RawInput::BUTTONEVENT buttonEvent) {
 			if (buttonEvent != RawInput::BUTTONEVENT::ONDOWN) {
 				return;
@@ -282,30 +282,30 @@ namespace RadarKeys {
 			bool shiftOnPressed = false;
 			bool altOnPressed = false;
 			bool holdFired = false;
+			bool tapFired = false;
 			std::chrono::steady_clock::time_point pressTime;
-			std::chrono::steady_clock::time_point lastHoldRepeatTime;
+			std::chrono::steady_clock::time_point lastRepeatTime;
 		};
 		std::map<USHORT, PendingPress> pendingPresses;
 
-		constexpr double kHoldRepeatIntervalSeconds = 0.3;
+		constexpr double kRepeatIntervalSeconds = 0.3;
 		constexpr double kNearMissHoldFraction = 0.8;
 		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld, bool preferHold) {
-			const KeyBind* exactMatch = nullptr;
 			const KeyBind* plainFallbackMatch = nullptr;
 
 			for (const auto& bind : bindings) {
 				if (bind.vKey != vKey) continue;
+				bool categoryMatches = preferHold ? (bind.holdSeconds > 0.0f) : (bind.holdSeconds <= 0.0f);
+				if (!categoryMatches) continue;
+
 				if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
-					if (preferHold && bind.holdSeconds > 0.0f) return &bind;
-					if (!preferHold && bind.holdSeconds <= 0.0f) return &bind;
-					exactMatch = &bind;
+					return &bind;
 				}
 				if (!bind.needCtrl && !bind.needShift && !bind.needAlt) {
-					if (preferHold && bind.holdSeconds > 0.0f) plainFallbackMatch = &bind;
-					if (!preferHold && bind.holdSeconds <= 0.0f) plainFallbackMatch = &bind;
+					plainFallbackMatch = &bind;
 				}
 			}
-			return exactMatch ? exactMatch : plainFallbackMatch;
+			return plainFallbackMatch;
 		}
 
 		void FireBinding(const KeyBind& bind) {
@@ -391,17 +391,21 @@ namespace RadarKeys {
 					}
 
 					const KeyBind* toRun = FindMatchingBinding(vKey, ctrlHeld, shiftHeld, altHeld, false);
-					bool deferForInstantTiming = toRun && toRun->isInstant && toRun->instantTriggerType != 0;
-					if (toRun && !hasHoldOptionOnKey && !deferForInstantTiming) {
+					bool deferForOnRelease = toRun && toRun->isInstant && toRun->instantTriggerType == 1;
+					bool firedImmediately = false;
+					if (toRun && !hasHoldOptionOnKey && !deferForOnRelease) {
 						FireBinding(*toRun);
-					} else {
-						PendingPress pending;
-						pending.ctrlOnPressed = ctrlHeld;
-						pending.shiftOnPressed = shiftHeld;
-						pending.altOnPressed = altHeld;
-						pending.pressTime = std::chrono::steady_clock::now();
-						pendingPresses[vKey] = pending;
+						firedImmediately = true;
 					}
+
+					PendingPress pending;
+					pending.ctrlOnPressed = ctrlHeld;
+					pending.shiftOnPressed = shiftHeld;
+					pending.altOnPressed = altHeld;
+					pending.pressTime = std::chrono::steady_clock::now();
+					pending.lastRepeatTime = pending.pressTime;
+					pending.tapFired = firedImmediately;
+					pendingPresses[vKey] = pending;
 				}
 
 				auto pendingIt = pendingPresses.find(vKey);
@@ -413,33 +417,32 @@ namespace RadarKeys {
 				const KeyBind* holdBind = FindMatchingBinding(vKey, pending.ctrlOnPressed, pending.shiftOnPressed, pending.altOnPressed, true);
 				const KeyBind* tapBind = FindMatchingBinding(vKey, pending.ctrlOnPressed, pending.shiftOnPressed, pending.altOnPressed, false);
 
-				if (!pending.holdFired && holdBind && holdBind->holdSeconds > 0.0f && LuaKeyState::OnButtonHoldTime(vKey, holdBind->holdSeconds)) {
+				if (!pending.holdFired && holdBind && LuaKeyState::OnButtonHoldTime(vKey, holdBind->holdSeconds)) {
 					DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
 					LogActivity(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
 					FireBinding(*holdBind);
 					pending.holdFired = true;
-					pending.lastHoldRepeatTime = std::chrono::steady_clock::now();
+					pending.lastRepeatTime = std::chrono::steady_clock::now();
 				}
 
+				const KeyBind* repeatBind = nullptr;
 				if (pending.holdFired && holdBind && holdBind->isInstant && holdBind->instantTriggerType == 2) {
-					double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.lastHoldRepeatTime).count();
-					if (sinceLastRepeat > kHoldRepeatIntervalSeconds) {
-						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " repeat-fired (post-hold)");
-						LogActivity(NameForVKey(vKey) + " repeat-fired (post-hold)");
-						FireBinding(*holdBind);
-						pending.lastHoldRepeatTime = std::chrono::steady_clock::now();
+					repeatBind = holdBind;
+				} else if (!holdBind && tapBind && tapBind->isInstant && tapBind->instantTriggerType == 2) {
+					repeatBind = tapBind;
+				}
+				if (repeatBind) {
+					double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.lastRepeatTime).count();
+					if (sinceLastRepeat > kRepeatIntervalSeconds) {
+						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " repeat-fired");
+						LogActivity(NameForVKey(vKey) + " repeat-fired");
+						FireBinding(*repeatBind);
+						pending.lastRepeatTime = std::chrono::steady_clock::now();
 					}
 				}
 
-				bool tapIsRepeat = tapBind && tapBind->holdSeconds <= 0.0f && tapBind->isInstant && tapBind->instantTriggerType == 2;
-				if (tapIsRepeat && LuaKeyState::OnButtonRepeat(vKey)) {
-					DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " repeat-fired");
-					LogActivity(NameForVKey(vKey) + " repeat-fired");
-					FireBinding(*tapBind);
-				}
-
 				if (LuaKeyState::OnButtonUp(vKey)) {
-					if (!pending.holdFired) {
+					if (!pending.holdFired && !pending.tapFired) {
 						if (holdBind && holdBind->isInstant && holdBind->instantTriggerType != 2) {
 							double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.pressTime).count();
 							if (heldSeconds < kNearMissHoldFraction * holdBind->holdSeconds) {
@@ -450,7 +453,7 @@ namespace RadarKeys {
 								LogActivity(NameForVKey(vKey) + " released near hold threshold - Instant suppressed");
 							}
 						}
-						else if (tapBind && tapBind->holdSeconds <= 0.0f && !tapIsRepeat) {
+						else if (tapBind && tapBind->holdSeconds <= 0.0f && !(tapBind->isInstant && tapBind->instantTriggerType == 2)) {
 							std::string reason = (tapBind->isInstant && tapBind->instantTriggerType == 1) ? "released (On Release)" : "tapped cleanly (Hold bypassed)";
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " " + reason);
 							LogActivity(NameForVKey(vKey) + " " + reason);
@@ -503,7 +506,6 @@ namespace RadarKeys {
 				}
 				outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "\n";
 			}
-
 			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
 				outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "\n";
 			}
@@ -690,7 +692,7 @@ namespace RadarKeys {
 		static bool capturedToggleMode = false;
 		static bool capturedLongPressMode = false;
 		static bool capturedInstantMode = false;
-		static int capturedInstantTriggerType = 0; // 0 = On Press, 1 = On Release, 2 = Repeat
+		static int capturedInstantTriggerType = 0;
 		static bool capturedHasFuncOn = false;
 		static bool capturedHasFuncOff = false;
 		static int capturedToggleType = 0; 
@@ -704,7 +706,7 @@ namespace RadarKeys {
 			bool anyLongPress = false;
 			double longPressSeconds = 0.0;
 			bool anyInstant = false;
-			int instantType = 0; // 0 = On Press, 1 = On Release, 2 = Repeat
+			int instantType = 0;
 			std::vector<std::string> breakdownLines;
 		};
 
@@ -1251,125 +1253,181 @@ namespace RadarKeys {
 				std::vector<USHORT> conflictedList = ComputeConflictedVKeys();
 				std::unordered_set<USHORT> conflictedVKeys(conflictedList.begin(), conflictedList.end());
 
-				struct TrackedRow {
+				struct UnifiedRow {
+					bool isManual = false;
+					int bindIndex = -1;
 					LuaKeyState::TrackedKeyInfo info;
-					bool conflicted;
-					USHORT displayVKey;
+					bool conflicted = false;
+					USHORT displayVKey = 0;
 				};
-				std::vector<TrackedRow> rows;
-				rows.reserve(trackedKeys.size());
+				std::vector<UnifiedRow> rows;
+				rows.reserve(trackedKeys.size() + bindings.size());
+
 				for (LuaKeyState::TrackedKeyInfo& info : trackedKeys) {
 					if (!info.hasDescription && manualBoundVKeys.count(info.vKey) > 0) {
 						continue;
 					}
 					USHORT displayVKey = ResolveDisplayVKey(info);
 					bool conflicted = conflictedVKeys.count(displayVKey) > 0;
-					rows.push_back(TrackedRow{ std::move(info), conflicted, displayVKey });
+					UnifiedRow row;
+					row.isManual = false;
+					row.info = std::move(info);
+					row.conflicted = conflicted;
+					row.displayVKey = displayVKey;
+					rows.push_back(std::move(row));
 				}
-				std::stable_partition(rows.begin(), rows.end(), [](const TrackedRow& r) { return r.conflicted; });
+				for (int i = 0; i < (int)bindings.size(); i++) {
+					UnifiedRow row;
+					row.isManual = true;
+					row.bindIndex = i;
+					row.conflicted = conflictedVKeys.count(bindings[i].vKey) > 0;
+					row.displayVKey = bindings[i].vKey;
+					rows.push_back(std::move(row));
+				}
+				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 
+				if (!rows.empty()) {
+					ImGui::TextDisabled("Exact name string to use from Lua - compare against what your script has assigned.");
+				}
+
+				int removeIndex = -1;
 				ImGui::BeginChild("KeyBindingsList", ImVec2(0, listRemainingHeight), true);
-				ImGui::TextDisabled("From scripts:");
-				ImGui::PushID("ModKeyRows");
 				if (rows.empty()) {
-					ImGui::TextDisabled("(none yet - a key shows up here the first time a script queries it via RadarKeys.OnButtonDown/ButtonHeld/etc)");
+					ImGui::TextDisabled("(none yet - a manual bind shows up here once added below, and a script's key shows up the first time it queries via RadarKeys.OnButtonDown/ButtonHeld/etc)");
 				}
-				else {
-					for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
-						const LuaKeyState::TrackedKeyInfo& info = rows[rowIdx].info;
-						bool conflicted = rows[rowIdx].conflicted;
-						USHORT displayVKey = rows[rowIdx].displayVKey;
+				for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
+					UnifiedRow& row = rows[rowIdx];
+					ImGui::PushID((int)rowIdx);
+					ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
+					float rowTopY = ImGui::GetCursorPosY();
+					float buttonHeight = 20.0f;
+					const float keyColumnX = 250.0f;
 
-						ImGui::PushID((int)rowIdx);
-						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
-						float rowTopY = ImGui::GetCursorPosY();
-						float buttonHeight = 20.0f;
-						const float keyColumnX = 250.0f;
+					std::string detailText;
+					if (row.isManual) {
+						detailText = displayCache[row.bindIndex].detailText;
+					}
+					else if (row.info.hasDescription) {
+						std::string funcStr = row.info.functionName.empty() ? "" : " [" + row.info.functionName + "]";
+						detailText = "-> " + row.info.scriptName + funcStr;
+					}
+					else {
+						detailText = "-> (undescribed - call RadarKeys.DescribeKey(...) to label this)";
+					}
 
-						std::string detailText;
-						if (info.hasDescription) {
-							std::string funcStr = info.functionName.empty() ? "" : " [" + info.functionName + "]";
-							detailText = "-> " + info.scriptName + funcStr;
+					const float conflictBoxHeight = 34.0f;
+					ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
+					ImGui::AlignTextToFramePadding();
+					ImGui::BeginGroup();
+					if (row.conflicted) {
+						ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
+						ImGui::BeginChild("ConflictDetailBox", ImVec2(0, conflictBoxHeight), true);
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+						ImGui::TextWrapped("%s", detailText.c_str());
+						ImGui::PopStyleColor();
+						ImGui::EndChild();
+						ImGui::PopStyleColor();
+					}
+					else {
+						ImGui::TextWrapped("%s", detailText.c_str());
+					}
+					ImGui::EndGroup();
+
+					float detailTextHeight = ImGui::GetItemRectSize().y;
+					float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
+					float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
+
+					ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
+					if (row.isManual) {
+						if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = row.bindIndex;
+					}
+					else if (row.conflicted) {
+						ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
+						ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2.0f, ImGui::GetStyle().WindowPadding.y));
+						ImGui::BeginChild("ConflictBadge", ImVec2(60, buttonHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoInputs);
+						float textWidth = ImGui::CalcTextSize("Error!").x;
+						ImGui::SetCursorPosX((60.0f - textWidth) * 0.5f > 0.0f ? (60.0f - textWidth) * 0.5f : 0.0f);
+						ImGui::TextUnformatted("Error!");
+						ImGui::EndChild();
+						ImGui::PopStyleVar();
+						ImGui::PopStyleColor(2);
+						if (ImGui::IsItemHovered()) {
+							ImGui::SetTooltip(row.info.hasDescription
+								? "Another binding is using this same key - it's disabled until resolved.\nClick the key name to reassign this one."
+								: "Another binding is using this same key - it's disabled until resolved.\nThis entry has no script/function identity to reassign (never described via RadarKeys.DescribeKey); reassign the other one.");
 						}
-						else {
-							detailText = "-> (undescribed - call RadarKeys.DescribeKey(...) to label this)";
-						}
+					}
+					else {
+						ImGui::BeginDisabled();
+						ImGui::Button("Script", ImVec2(55, buttonHeight));
+						ImGui::EndDisabled();
+					}
+					ImGui::SameLine();
 
-						const float conflictBoxHeight = 34.0f;
-						ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
-						ImGui::AlignTextToFramePadding();
-						ImGui::BeginGroup();
-						if (conflicted) {
-							ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
-							ImGui::BeginChild("ConflictDetailBox", ImVec2(0, conflictBoxHeight), true);
-							ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
-							ImGui::TextWrapped("%s", detailText.c_str());
-							ImGui::PopStyleColor();
-							ImGui::EndChild();
-							ImGui::PopStyleColor();
-						}
-						else {
-							ImGui::TextWrapped("%s", detailText.c_str());
-						}
-						ImGui::EndGroup();
+					if (row.isManual) {
+						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
+						if (ImGui::Button(itemLabel.c_str(), ImVec2(130, buttonHeight))) {
+							int i = row.bindIndex;
+							editingBindingIndex = i;
+							capturedVKey = bindings[i].vKey;
+							capturedCtrl = bindings[i].needCtrl;
+							capturedShift = bindings[i].needShift;
+							capturedAlt = bindings[i].needAlt;
+							capturedToggleMode = bindings[i].isToggle;
+							capturedLongPressMode = (bindings[i].holdSeconds > 0.0f);
+							capturedHoldSeconds = bindings[i].holdSeconds;
+							capturedInstantMode = bindings[i].isInstant;
+							capturedInstantTriggerType = bindings[i].instantTriggerType;
+							capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
+							capturedHasFuncOff = !bindings[i].functionOff.empty();
 
-						float detailTextHeight = ImGui::GetItemRectSize().y;
-						float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
-						float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
+							snprintf(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), "%s", bindings[i].scriptPathOn.c_str());
+							snprintf(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), "%s", bindings[i].scriptPathOff.c_str());
+							snprintf(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), "%s", bindings[i].functionOn.c_str());
+							snprintf(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), "%s", bindings[i].functionOff.c_str());
+							snprintf(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), "%s", bindings[i].functionTap.c_str());
 
+							if (bindings[i].isToggle) {
+								capturedToggleType = (bindings[i].scriptPathOn == bindings[i].scriptPathOff) ? 0 : 1;
+							} else {
+								capturedToggleType = 0;
+							}
+
+							showCapturePrompt = true;
+							requestCaptureFocus = true;
+							LogActivity("Key Assignment Edit Prompt opened " + itemLabel);
+						}
+					}
+					else {
 						ImVec4 keyNameColor;
-						bool displayKeyPressed = (displayVKey == info.vKey) ? info.isPressed : RawInput::IsKeyHeldReal(displayVKey);
-						if (info.hasToggleState) {
-							keyNameColor = info.toggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
+						bool displayKeyPressed = (row.displayVKey == row.info.vKey) ? row.info.isPressed : RawInput::IsKeyHeldReal(row.displayVKey);
+						if (row.info.hasToggleState) {
+							keyNameColor = row.info.toggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
 						}
 						else {
 							keyNameColor = displayKeyPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 						}
 
-						auto openReassignPrompt = [&info]() {
-						    modKeyCaptureScriptName = info.scriptName;
-						    modKeyCaptureFunctionName = info.functionName;
-						    capturedVKey = 0;
-						    capturedCtrl = capturedShift = capturedAlt = false;
-						    capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
-						    capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
-						    capturedHasFuncOn = capturedHasFuncOff = false;
-						    capturedToggleType = 0;
-						    editingBindingIndex = -1;
-						    isAssigningMenuToggleKey = false;
-						    isAssigningModKey = true;
-					    requestCaptureFocus = true;
-						    showCapturePrompt = true;
+						auto openReassignPrompt = [&row]() {
+							modKeyCaptureScriptName = row.info.scriptName;
+							modKeyCaptureFunctionName = row.info.functionName;
+							capturedVKey = 0;
+							capturedCtrl = capturedShift = capturedAlt = false;
+							capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
+							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
+							capturedHasFuncOn = capturedHasFuncOff = false;
+							capturedToggleType = 0;
+							editingBindingIndex = -1;
+							isAssigningMenuToggleKey = false;
+							isAssigningModKey = true;
+							requestCaptureFocus = true;
+							showCapturePrompt = true;
 						};
 
-						ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
-						if (conflicted) {
-							ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
-							ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
-							ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2.0f, ImGui::GetStyle().WindowPadding.y));
-							ImGui::BeginChild("ConflictBadge", ImVec2(60, buttonHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoInputs);
-							float textWidth = ImGui::CalcTextSize("Error!").x;
-							ImGui::SetCursorPosX((60.0f - textWidth) * 0.5f > 0.0f ? (60.0f - textWidth) * 0.5f : 0.0f);
-							ImGui::TextUnformatted("Error!");
-							ImGui::EndChild();
-							ImGui::PopStyleVar();
-							ImGui::PopStyleColor(2);
-							if (ImGui::IsItemHovered()) {
-								ImGui::SetTooltip(info.hasDescription
-									? "Another binding is using this same key - it's disabled until resolved.\nClick the key name to reassign this one."
-									: "Another binding is using this same key - it's disabled until resolved.\nThis entry has no script/function identity to reassign (never described via RadarKeys.DescribeKey); reassign the other one.");
-							}
-						}
-						else {
-							ImGui::BeginDisabled();
-							ImGui::Button("Script", ImVec2(55, buttonHeight));
-							ImGui::EndDisabled();
-						}
-						ImGui::SameLine();
-
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
-						if (info.hasDescription) {
-							if (ImGui::Button(NameForVKey(displayVKey).c_str(), ImVec2(130, buttonHeight))) {
+						if (row.info.hasDescription) {
+							if (ImGui::Button(NameForVKey(row.displayVKey).c_str(), ImVec2(130, buttonHeight))) {
 								openReassignPrompt();
 							}
 							if (ImGui::IsItemHovered()) {
@@ -1378,89 +1436,22 @@ namespace RadarKeys {
 						}
 						else {
 							ImGui::BeginDisabled();
-							ImGui::Button(NameForVKey(displayVKey).c_str(), ImVec2(130, buttonHeight));
+							ImGui::Button(NameForVKey(row.displayVKey).c_str(), ImVec2(130, buttonHeight));
 							ImGui::EndDisabled();
 							if (ImGui::IsItemHovered()) {
 								ImGui::SetTooltip("Can't reassign yet - this key hasn't been described via RadarKeys.DescribeKey(), so there's no script/function to save an override under.");
 							}
 						}
 						ImGui::PopStyleColor();
-
-						ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
-						ImGui::PopID(); ImGui::Separator();
 					}
+
+					ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
+					ImGui::PopID(); ImGui::Separator();
 				}
-				ImGui::PopID();
-			ImGui::TextDisabled("Exact name string to use from Lua - compare against what your script has assigned.");
+				ImGui::EndChild();
+
+				if (removeIndex != -1) RemoveBinding(removeIndex);
 			}
-
-			ImGui::Separator();
-			ImGui::TextDisabled("Manual binds:");
-			ImGui::PushID("ManualBindRows");
-			int removeIndex = -1;
-			if (bindings.empty()) {
-				ImGui::TextDisabled("(none yet - use \"Add New Binding...\" below)");
-			}
-			for (int i = 0; i < (int)bindings.size(); i++) {
-				ImGui::PushID(i);
-				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
-				float rowTopY = ImGui::GetCursorPosY();
-				float buttonHeight = 20.0f;
-				const float keyColumnX = 250.0f;
-
-				ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
-				ImGui::AlignTextToFramePadding();
-				ImGui::BeginGroup();
-				ImGui::TextWrapped("%s", displayCache[i].detailText.c_str());
-				ImGui::EndGroup();
-
-				float detailTextHeight = ImGui::GetItemRectSize().y;
-				float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
-				float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
-
-				ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
-				if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = i;
-				ImGui::SameLine(); 
-
-				const std::string& itemLabel = displayCache[i].itemLabel;
-				if (ImGui::Button(itemLabel.c_str(), ImVec2(130, buttonHeight))) {
-					editingBindingIndex = i;
-					capturedVKey = bindings[i].vKey;
-					capturedCtrl = bindings[i].needCtrl;
-					capturedShift = bindings[i].needShift;
-					capturedAlt = bindings[i].needAlt;
-					capturedToggleMode = bindings[i].isToggle;
-					capturedLongPressMode = (bindings[i].holdSeconds > 0.0f);
-					capturedHoldSeconds = bindings[i].holdSeconds;
-					capturedInstantMode = bindings[i].isInstant;
-					capturedInstantTriggerType = bindings[i].instantTriggerType;
-					capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
-					capturedHasFuncOff = !bindings[i].functionOff.empty();
-					
-					snprintf(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), "%s", bindings[i].scriptPathOn.c_str());
-					snprintf(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), "%s", bindings[i].scriptPathOff.c_str());
-					snprintf(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), "%s", bindings[i].functionOn.c_str());
-					snprintf(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), "%s", bindings[i].functionOff.c_str());
-					snprintf(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), "%s", bindings[i].functionTap.c_str());
-					
-					if (bindings[i].isToggle) {
-						capturedToggleType = (bindings[i].scriptPathOn == bindings[i].scriptPathOff) ? 0 : 1;
-					} else {
-						capturedToggleType = 0;
-					}
-					
-					showCapturePrompt = true;
-					requestCaptureFocus = true;
-					LogActivity("Key Assignment Edit Prompt opened " + itemLabel);
-				}
-
-				ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
-				ImGui::PopID(); ImGui::Separator();
-			}
-			ImGui::PopID();
-			ImGui::EndChild();
-
-			if (removeIndex != -1) RemoveBinding(removeIndex);
 			float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 35.0f; 
 			ImGui::SetCursorPosY(bottomControlPanelY);
 			
