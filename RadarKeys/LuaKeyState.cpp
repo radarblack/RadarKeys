@@ -172,6 +172,23 @@ namespace RadarKeys {
 			return RawInput::IsKeyHeldReal(vKey);
 		}
 
+		bool PhysicalOnButtonDown(USHORT vKey) {
+			if (!ValidVKey(vKey)) {
+				return false;
+			}
+			EnsureTracked(vKey);
+			KeyPollState& s = states[vKey];
+			if (IsSuppressed(vKey)) {
+				s.downEdgePending = false;
+				return false;
+			}
+			if (s.downEdgePending) {
+				s.downEdgePending = false;
+				return true;
+			}
+			return false;
+		}
+
 		bool OnButtonDown(USHORT vKey) {
 			if (!ValidVKey(vKey)) {
 				return false;
@@ -186,6 +203,23 @@ namespace RadarKeys {
 			}
 			if (s.downEdgePending) {
 				s.downEdgePending = false;
+				return true;
+			}
+			return false;
+		}
+
+		bool PhysicalOnButtonUp(USHORT vKey) {
+			if (!ValidVKey(vKey)) {
+				return false;
+			}
+			EnsureTracked(vKey);
+			KeyPollState& s = states[vKey];
+			if (IsSuppressed(vKey)) {
+				s.upEdgePending = false;
+				return false;
+			}
+			if (s.upEdgePending) {
+				s.upEdgePending = false;
 				return true;
 			}
 			return false;
@@ -226,6 +260,27 @@ namespace RadarKeys {
 			if (s.isPressed && s.heldStartSet) {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.heldStart).count();
 				return elapsed >= heldHoldTime;
+			}
+			return false;
+		}
+
+		bool PhysicalOnButtonHoldTime(USHORT vKey, double holdSecondsOverride) {
+			if (!ValidVKey(vKey)) {
+				return false;
+			}
+			EnsureTracked(vKey);
+			KeyPollState& s = states[vKey];
+			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			if (IsSuppressed(vKey)) {
+				s.onHoldStartSet = false;
+				return false;
+			}
+			if (s.isPressed && s.onHoldStartSet) {
+				double elapsed = std::chrono::duration<double>(clock::now() - s.onHoldStart).count();
+				if (elapsed >= holdTime) {
+					s.onHoldStartSet = false;
+					return true;
+				}
 			}
 			return false;
 		}
@@ -391,7 +446,6 @@ namespace RadarKeys {
 				movedDesc.touchedSinceSweep = true;
 				newState.descriptions.push_back(std::move(movedDesc));
 				oldState.descriptions.erase(it);
-				redirectTarget[oldVKey] = newVKey;
 				RetireIfUndescribed(oldVKey);
 			}
 		}
