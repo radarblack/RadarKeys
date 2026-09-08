@@ -58,6 +58,10 @@ namespace RadarKeys {
 			std::string functionName;
 			bool hasToggleState = false;
 			bool toggleEnabled = false;
+			bool usesOnPress = false;
+			bool usesHoldTime = false;
+			bool usesRepeat = false;
+			bool usesOnRelease = false;
 		};
 		std::vector<TrackedComboKeyInfo> GetTrackedComboKeyInfo();
 	}
