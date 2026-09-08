@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <cctype>
 #include <cmath>
+#include <sstream>
 
 namespace RadarKeys {
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
