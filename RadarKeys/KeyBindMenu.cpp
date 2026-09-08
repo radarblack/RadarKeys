@@ -1161,7 +1161,8 @@ namespace RadarKeys {
 
 				ImGui::BeginChild("ComboKeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 				auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
-				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("  Keys").x) * 0.5f); ImGui::TextUnformatted("  Keys"); ImGui::Separator();
+				const float contentStartX = ImGui::GetCursorPosX();
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Keys").x) * 0.5f); ImGui::TextUnformatted("Keys"); ImGui::Separator();
 				float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 
 				if (capturedComboKeys.empty() && !comboHoldActive) {
@@ -1172,7 +1173,7 @@ namespace RadarKeys {
 					std::string names = ComboKeysDisplayName(shownKeys);
 
 					ImGui::SetWindowFontScale(0.8f);
-					
+
 					std::vector<std::string> displayLines;
 					std::string currentLine;
 					std::string token;
@@ -1181,7 +1182,7 @@ namespace RadarKeys {
 						char c = atEnd ? '\0' : names[i];
 						if (c == ' ' || atEnd) {
 							if (!token.empty()) {
-								std::string candidate = currentLine.empty() ? token : currentLine + "   " + token;
+								std::string candidate = currentLine.empty() ? token : currentLine + " " + token;
 								if (!currentLine.empty() && ImGui::CalcTextSize(candidate.c_str()).x > availWidth) {
 									displayLines.push_back(currentLine);
 									currentLine = token;
@@ -1205,7 +1206,7 @@ namespace RadarKeys {
 					ImGui::PushStyleColor(ImGuiCol_Text, isFinal ? ImVec4(0.2f, 1.0f, 0.2f, 1.0f) : ImVec4(1.0f, 0.85f, 0.2f, 1.0f));
 					for (const std::string& line : displayLines) {
 						float lineWidth = ImGui::CalcTextSize(line.c_str()).x;
-						ImGui::SetCursorPosX((std::max)(0.0f, (availWidth - lineWidth) * 0.5f));
+						ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - lineWidth) * 0.5f));
 						ImGui::TextUnformatted(line.c_str());
 					}
 					ImGui::PopStyleColor();
