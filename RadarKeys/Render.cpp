@@ -77,6 +77,7 @@ namespace RadarKeys {
 				// Windows Input API...
 				if (GetRawInputData((HRAWINPUT)l_param, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER)) != (UINT)-1) {
 					if (raw.header.dwType == RIM_TYPEMOUSE) {
+						RawInput::ProcessMouseButtons(&raw);
 						return false;
 					}
 				}
