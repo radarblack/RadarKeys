@@ -25,8 +25,44 @@ _G.RadarKeys_Core = this
     RK.ResetRepeat(name)      -- clears hold/repeat timers for that key
 
   Example - prone directly on Numpad7 instead of requiring a TOGGLE_LIGHT button-mask entry using the Shortcut.lua mod:
-    if RK.OnButtonDown("X") then prone() end
+    if RK.OnButtonDown("Numpad 7") then prone() end
 ]]
+
+local function ResolveFunction(functionExpr)
+  if type(functionExpr) ~= "string" or functionExpr == "" then
+    return nil
+  end
+
+  local simpleName = string.match(functionExpr, "^[%a_][%w_]*$")
+  if simpleName then
+    local fn = rawget(_G, simpleName)
+    if type(fn) == "function" then
+      return fn
+    end
+    return nil
+  end
+
+  this._functionResolvers = this._functionResolvers or {}
+  local resolver = this._functionResolvers[functionExpr]
+  if resolver == nil then
+    local chunk, err = loadstring("return "..functionExpr)
+    if not chunk then
+      InfCore.Log(tostring(err))
+      this._functionResolvers[functionExpr] = false
+      return nil
+    end
+    resolver = chunk
+    this._functionResolvers[functionExpr] = resolver
+  elseif resolver == false then
+    return nil
+  end
+
+  local ok, fn = pcall(resolver)
+  if ok and type(fn) == "function" then
+    return fn
+  end
+  return nil
+end
 
 local function RunDoScript(luaExpr)
   InfCore.Log("RadarKeys DoScript:"..luaExpr)
@@ -59,6 +95,22 @@ function this.Update()
     local cmd=parts[1]
     if cmd=="DoScript" then
       RunDoScript(parts[2])
+    elseif cmd=="CallFunction" then
+      local functionExpr=parts[2]
+      local scriptPath=parts[3]
+      local fn=ResolveFunction(functionExpr)
+      if fn then
+        local okCall, callErr=pcall(fn)
+        if not okCall then
+          InfCore.Log(tostring(callErr))
+        end
+      else
+        if scriptPath and scriptPath~="" then
+          RunDoScript("local f=loadfile([["..scriptPath.."]]); if f then f(); local fn="..tostring(functionExpr).."; if type(fn)=="function" then fn(); end end")
+        else
+          InfCore.Log("RadarKeys_Core: function not found: "..tostring(functionExpr))
+        end
+      end
     else
       InfCore.Log("RadarKeys_Core: unknown command '"..tostring(cmd).."'")
     end
