@@ -733,7 +733,6 @@ namespace RadarKeys {
 				}
 				USHORT vKey = static_cast<USHORT>(vKeyInt);
 				bool isPressed = RawInput::IsKeyHeldReal(vKey);
-
 				if (s.descriptions.empty()) {
 					continue;
 				}
