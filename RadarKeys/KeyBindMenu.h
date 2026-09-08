@@ -16,22 +16,24 @@ namespace RadarKeys {
 			bool needAlt;
 			std::string keyName;
 			bool isToggle = false;
-			std::string scriptPathOn;  // for toggle On
-			std::string scriptPathOff; // for toggle Off
-			mutable bool toggleState = false; // checks toggle state
+			std::string scriptPathOn;
+			std::string scriptPathOff;
+			mutable bool toggleState = false;
 			float holdSeconds = 0.0f;
 			bool isInstant = false;
 			int instantTriggerType = 0;
+			float repeatAccelMult = 1.0f; 
+			double runtimeRepeatSpeedMult = 1.0;
 
 			// lua script pass
-			std::string functionOn;   // toggle ON slot
-			std::string functionOff;  // toggle OFF slot
-			std::string functionTap;  // instant tap / long press slot
+			std::string functionOn;
+			std::string functionOff;
+			std::string functionTap;
 
 			std::vector<USHORT> comboKeys;
-			bool comboActive = false;    // true while every key in comboKeys is currently held
-			bool comboHoldFired = false; // Long Press threshold already fired for this hold
-			bool comboTapFired = false;  // tap/press-time fire already happened for this hold
+			bool comboActive = false;
+			bool comboHoldFired = false;
+			bool comboTapFired = false;
 			std::chrono::steady_clock::time_point comboPressTime;
 			std::chrono::steady_clock::time_point comboLastRepeatTime;
 
@@ -46,6 +48,8 @@ namespace RadarKeys {
 
 		std::string NameForVKey(USHORT vKey);
 		int VKeyForName(const std::string& name);
+
+		std::vector<USHORT> ParseComboKeyNames(const std::string& raw);
 
 		extern std::vector<KeyBind> bindings;
 		extern bool menuOpen;
