@@ -188,6 +188,7 @@ namespace RadarKeys {
 			{"M", 'M'}, {"N", 'N'}, {"O", 'O'}, {"P", 'P'}, {"Q", 'Q'}, {"R", 'R'},
 			{"S", 'S'}, {"T", 'T'}, {"U", 'U'}, {"V", 'V'}, {"W", 'W'}, {"X", 'X'},
 			{"Y", 'Y'}, {"Z", 'Z'},
+
 			{"0", '0'}, {"1", '1'}, {"2", '2'}, {"3", '3'}, {"4", '4'},
 			{"5", '5'}, {"6", '6'}, {"7", '7'}, {"8", '8'}, {"9", '9'},
 
@@ -928,9 +929,9 @@ namespace RadarKeys {
 
 		std::vector<USHORT> ScanCurrentlyHeldKeys() {
 			std::vector<USHORT> held;
-			for (int i = 1; i < 256; i++) {
-				if (i == VK_LBUTTON) continue;
-				if (RawInput::IsKeyHeldReal((USHORT)i)) held.push_back((USHORT)i);
+			for (int i = 0; i < vkNameTableCount; i++) {
+				USHORT vk = vkNameTable[i].vKey;
+				if (RawInput::IsKeyHeldReal(vk)) held.push_back(vk);
 			}
 			return held;
 		}
@@ -969,6 +970,21 @@ namespace RadarKeys {
 				comboHoldActive = false;
 				comboHoldKeys.clear();
 				LogActivity("Multi-key combo captured: " + ComboKeysDisplayName(capturedComboKeys));
+			}
+		}
+
+		void DrawCenteredPlaceholder(float areaWidth, float top, float areaHeight, ImVec4 color, const char* line1, const char* line2 = nullptr) {
+			float lineHeight = ImGui::GetTextLineHeight();
+			float lineSpacing = ImGui::GetStyle().ItemSpacing.y;
+			int lineCount = line2 ? 2 : 1;
+			float blockHeight = lineHeight * lineCount + lineSpacing * (lineCount - 1);
+
+			ImGui::SetCursorPosY(top + (std::max)(0.0f, (areaHeight - blockHeight) * 0.5f));
+			ImGui::SetCursorPosX((std::max)(0.0f, (areaWidth - ImGui::CalcTextSize(line1).x) * 0.5f));
+			ImGui::TextColored(color, "%s", line1);
+			if (line2) {
+				ImGui::SetCursorPosX((std::max)(0.0f, (areaWidth - ImGui::CalcTextSize(line2).x) * 0.5f));
+				ImGui::TextColored(color, "%s", line2);
 			}
 		}
 
@@ -1149,10 +1165,7 @@ namespace RadarKeys {
 				float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 
 				if (capturedComboKeys.empty() && !comboHoldActive) {
-					float startVerticalY = lowerBoxTopY + ((lowerBoxRemainingHeight - (ImGui::GetTextLineHeightWithSpacing() * 2.0f)) * 0.5f);
-					ImGui::SetCursorPosY(startVerticalY);
-					ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("HOLD").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "HOLD");
-					ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("2-3 KEYS").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "2-3 KEYS");
+					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "HOLD", "2-3 KEYS");
 				} else {
 					bool isFinal = !capturedComboKeys.empty();
 					const std::vector<USHORT>& shownKeys = isFinal ? capturedComboKeys : comboHoldKeys;
@@ -1218,21 +1231,18 @@ namespace RadarKeys {
 				}
 			}
 			
-			bool comboAvailable = true;
+			bool comboAvailable = false;
 			if (captureIsCombo) {
-				if (capturedComboKeys.empty()) {
-					comboAvailable = false;
-				} else {
+				if (!capturedComboKeys.empty()) {
 					comboAvailable = IsMultiKeyComboAvailable(capturedComboKeys, editingBindingIndex);
 				}
 			}
 			else if (capturedVKey != 0) {
 				if (isAssigningModKey) {
+					comboAvailable = true;
 				}
 				else if (isAssigningMenuToggleKey) {
-					if (capturedVKey == VK_F2 || capturedVKey == VK_F3 || capturedVKey == VK_ESCAPE) {
-						comboAvailable = false;
-					}
+					comboAvailable = !(capturedVKey == VK_F2 || capturedVKey == VK_F3 || capturedVKey == VK_ESCAPE);
 				} 
 				else if (editingBindingIndex != -1) {
 					static int lastCheckedIndex = -1;
@@ -1242,12 +1252,14 @@ namespace RadarKeys {
 						lastCheckedIndex = editingBindingIndex;
 					}
 
-					if (IsReservedVKey(capturedVKey)) comboAvailable = false;
-					for (int i = 0; i < (int)bindings.size(); i++) {
-						if (i == editingBindingIndex) continue;
-						const auto& b = bindings[i];
-						if (b.vKey == capturedVKey && b.needCtrl == capturedCtrl && b.needShift == capturedShift && b.needAlt == capturedAlt) {
-							if (b.holdSeconds == capturedHoldSeconds || ((capturedHoldSeconds > 0.0f) == (b.holdSeconds > 0.0f))) comboAvailable = false;
+					comboAvailable = !IsReservedVKey(capturedVKey);
+					if (comboAvailable) {
+						for (int i = 0; i < (int)bindings.size(); i++) {
+							if (i == editingBindingIndex) continue;
+							const auto& b = bindings[i];
+							if (b.vKey == capturedVKey && b.needCtrl == capturedCtrl && b.needShift == capturedShift && b.needAlt == capturedAlt) {
+								if (b.holdSeconds == capturedHoldSeconds || ((capturedHoldSeconds > 0.0f) == (b.holdSeconds > 0.0f))) { comboAvailable = false; break; }
+							}
 						}
 					}
 				} else {
@@ -1587,7 +1599,6 @@ namespace RadarKeys {
 			}
 
 			static float minWindowHeightFloor = 220.0f;
-
 			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, minWindowHeightFloor), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, minWindowHeightFloor), ImVec2(FLT_MAX, FLT_MAX));
 
