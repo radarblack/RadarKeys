@@ -98,24 +98,12 @@ namespace RadarKeys {
 	}
 
 	static std::vector<USHORT> ResolveKeyListArg(lua_State* L) {
-		std::vector<USHORT> result;
 		const char* raw = LuaToString(L, 1);
-		if (!raw) return result;
-		std::string input = raw;
-		std::stringstream ss(input);
-		std::string part;
-		while (std::getline(ss, part, '+')) {
-			while (!part.empty() && std::isspace((unsigned char)part.front())) part.erase(part.begin());
-			while (!part.empty() && std::isspace((unsigned char)part.back())) part.pop_back();
-			int vKey = KeyBindMenu::VKeyForName(part);
-			if (vKey < 0) {
-				spdlog::warn("RadarKeys combo query: unrecognized key name '{}'", part);
-				result.clear();
-				return result;
-			}
-			result.push_back((USHORT)vKey);
+		if (!raw) return {};
+		std::vector<USHORT> result = KeyBindMenu::ParseComboKeyNames(raw);
+		if (result.empty()) {
+			spdlog::warn("RadarKeys combo query: unrecognized or malformed combo string '{}'", raw);
 		}
-		if (result.size() < 2 || result.size() > 3) result.clear();
 		return result;
 	}
 
@@ -198,13 +186,28 @@ namespace RadarKeys {
 	}
 
 	static int l_DescribeKey(lua_State* L) {
+		const char* scriptName = LuaToString(L, 2);
+		const char* functionName = LuaToString(L, 3);
+		const char* toggleState = LuaToString(L, 4);
+
+		if (ArgIsCombo(L)) {
+			std::vector<USHORT> vKeys = ResolveKeyListArg(L);
+			if (vKeys.empty()) {
+				return 0;
+			}
+			LuaKeyState::DescribeComboKey(
+				vKeys,
+				scriptName ? scriptName : "",
+				functionName ? functionName : "",
+				toggleState ? toggleState : ""
+			);
+			return 0;
+		}
+
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
 		if (vKey < 0) {
 			return 0;
 		}
-		const char* scriptName = LuaToString(L, 2);
-		const char* functionName = LuaToString(L, 3);
-		const char* toggleState = LuaToString(L, 4);
 		LuaKeyState::DescribeKey(
 			(USHORT)vKey,
 			scriptName ? scriptName : "",
@@ -238,18 +241,18 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 	luaL_Reg radarkeys_funcs[] = {
 		{ "MenuMessage", RadarKeys::l_MenuMessage },
 		{ "GetMenuMessages", RadarKeys::l_GetMenuMessages },
-		{ "ButtonDown", RadarKeys::l_ButtonDown },
+		{ "IsButtonDown", RadarKeys::l_ButtonDown },
 		{ "OnButtonDown", RadarKeys::l_OnButtonDown },
 		{ "OnButtonUp", RadarKeys::l_OnButtonUp },
-		{ "ButtonHeld", RadarKeys::l_ButtonHeld },
+		{ "IsButtonHeld", RadarKeys::l_ButtonHeld },
 		{ "OnButtonHoldTime", RadarKeys::l_OnButtonHoldTime },
 		{ "OnButtonRepeat", RadarKeys::l_OnButtonRepeat },
 		{ "GetRepeatMult", RadarKeys::l_GetRepeatMult },
 		{ "ResetRepeat", RadarKeys::l_ResetRepeat },
-		{ "ComboButtonDown", RadarKeys::l_ButtonDown },
+		{ "IsComboButtonDown", RadarKeys::l_ButtonDown },
 		{ "OnComboButtonDown", RadarKeys::l_OnButtonDown },
 		{ "OnComboButtonUp", RadarKeys::l_OnButtonUp },
-		{ "ComboButtonHeld", RadarKeys::l_ButtonHeld },
+		{ "IsComboButtonHeld", RadarKeys::l_ButtonHeld },
 		{ "OnComboButtonHoldTime", RadarKeys::l_OnButtonHoldTime },
 		{ "OnComboButtonRepeat", RadarKeys::l_OnButtonRepeat },
 		{ "GetComboRepeatMult", RadarKeys::l_GetRepeatMult },
