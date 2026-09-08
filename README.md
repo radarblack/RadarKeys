@@ -60,6 +60,9 @@ To use an assigned script:
              - Redesigned process of tracking keys between LUA and manual key binds
              - Added variations of "Instant" Trigger: On Press/On Release/Repeat - aligned with the InfiniteHeaven input reading mechanism
              - Major and minor bug squashes on the UI and between the overall cog wheels
+[09/09/2026] - Added a LUA function caching method to the RadarKeys_Core.lua to improve the manual key bind interaction
+             - Extended the conflict detection process to the key assignment process
+             - Improved button detection handling and logic
 ```
 ## Plans ahead
 - [x] ~~Address some of the immediate UI concerns (misspells, formatting, and spacing, etc.)~~
