@@ -496,7 +496,6 @@ namespace RadarKeys {
 			for (USHORT k : comboKeys) {
 				if (IsReservedVKey(k)) return false;
 			}
-
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				if (i == editingIndex) continue;
 				const KeyBind& b = bindings[i];
@@ -574,7 +573,7 @@ namespace RadarKeys {
 
 			if (DebuggerMenu::LogScriptAttempt(targetPath)) {
 				if (!targetFunc.empty()) {
-					std::string luaPayload = "DoScript|local f = loadfile([[" + targetPath + "]]); if f then f(); if " + targetFunc + " then " + targetFunc + "(); end end";
+					std::string luaPayload = "CallFunction|" + targetFunc + "|" + targetPath;
 					LuaBridge::QueueMessageIn(luaPayload);
 					LogActivity("Fired script " + targetPath + " [" + targetFunc + "]");
 				} else {
@@ -614,7 +613,6 @@ namespace RadarKeys {
 				}
 				if (allHeld) return true;
 			}
-
 			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
 				if (!info.isPressed) continue;
 				for (USHORT k : info.activeKeys) {
@@ -627,7 +625,6 @@ namespace RadarKeys {
 
 		std::vector<USHORT> ComputeConflictedVKeys() {
 			std::unordered_set<USHORT> conflicted;
-
 			for (const auto& bind : bindings) {
 				if (!bind.IsCombo()) continue;
 				bool allHeld = true;
