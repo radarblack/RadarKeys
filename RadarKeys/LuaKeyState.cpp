@@ -378,26 +378,60 @@ namespace RadarKeys {
 				std::adjacent_find(keys.begin(), keys.end()) == keys.end();
 		}
 
-		bool ComboAllHeld(const std::vector<USHORT>& vKeys) {
-			if (!ValidCombo(vKeys)) return false;
+		std::map<std::string, std::vector<USHORT>> comboRedirectTarget;
+		std::vector<USHORT> ResolveActiveCombo(const std::vector<USHORT>& vKeys) {
+			auto it = comboRedirectTarget.find(ComboStateKey(vKeys));
+			if (it != comboRedirectTarget.end() && ValidCombo(it->second)) {
+				return it->second;
+			}
+			return vKeys;
+		}
+
+		void UpdateRedirectForComboIdentity(const std::vector<USHORT>& nativeVKeys, const std::string& scriptName, const std::string& functionName) {
+			std::string nativeKey = ComboStateKey(nativeVKeys);
+			std::string overrideName = ModKeyBindings::GetOverride(scriptName, functionName);
+			if (overrideName.empty()) {
+				comboRedirectTarget.erase(nativeKey);
+				return;
+			}
+			std::vector<USHORT> resolved = KeyBindMenu::ParseComboKeyNames(overrideName);
+			if (resolved.empty() || !ValidCombo(resolved) || ComboStateKey(resolved) == nativeKey) {
+				comboRedirectTarget.erase(nativeKey);
+				return;
+			}
+			comboRedirectTarget[nativeKey] = resolved;
+		}
+
+		bool RawComboAllHeld(const std::vector<USHORT>& vKeys) {
 			for (USHORT vKey : vKeys) {
 				if (!RawInput::IsKeyHeldReal(vKey)) return false;
 			}
 			return true;
 		}
 
+		bool ComboAllHeld(const std::vector<USHORT>& vKeys) {
+			if (!ValidCombo(vKeys)) return false;
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active)) return false;
+			return RawComboAllHeld(active);
+		}
+
 		bool ComboButtonDown(const std::vector<USHORT>& vKeys) {
 			if (!ValidCombo(vKeys)) return false;
-			for (USHORT vKey : vKeys) EnsureTracked(vKey);
-			return ComboAllHeld(vKeys);
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active)) return false;
+			for (USHORT vKey : active) EnsureTracked(vKey);
+			return RawComboAllHeld(active);
 		}
 
 		bool OnComboButtonDown(const std::vector<USHORT>& vKeys) {
 			if (!ValidCombo(vKeys)) return false;
-			for (USHORT vKey : vKeys) EnsureTracked(vKey);
-			std::string stateKey = ComboStateKey(vKeys);
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active)) return false;
+			for (USHORT vKey : active) EnsureTracked(vKey);
+			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
-			bool allHeld = ComboAllHeld(vKeys);
+			bool allHeld = RawComboAllHeld(active);
 			if (allHeld && !state.active) {
 				state.active = true;
 				state.holdStartSet = true;
@@ -418,9 +452,11 @@ namespace RadarKeys {
 
 		bool OnComboButtonUp(const std::vector<USHORT>& vKeys) {
 			if (!ValidCombo(vKeys)) return false;
-			std::string stateKey = ComboStateKey(vKeys);
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active)) return false;
+			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
-			bool allHeld = ComboAllHeld(vKeys);
+			bool allHeld = RawComboAllHeld(active);
 			if (state.active && !allHeld) {
 				state.active = false;
 				state.holdStartSet = false;
@@ -432,8 +468,10 @@ namespace RadarKeys {
 		}
 
 		bool ComboButtonHeld(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
-			if (!ValidCombo(vKeys) || !ComboAllHeld(vKeys)) return false;
-			std::string stateKey = ComboStateKey(vKeys);
+			if (!ValidCombo(vKeys)) return false;
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active) || !RawComboAllHeld(active)) return false;
+			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			if (!state.active) {
 				state.active = true;
@@ -445,8 +483,10 @@ namespace RadarKeys {
 		}
 
 		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
-			if (!ValidCombo(vKeys) || !ComboAllHeld(vKeys)) return false;
-			std::string stateKey = ComboStateKey(vKeys);
+			if (!ValidCombo(vKeys)) return false;
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active) || !RawComboAllHeld(active)) return false;
+			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			if (!state.active) {
 				state.active = true;
@@ -462,8 +502,10 @@ namespace RadarKeys {
 		}
 
 		bool OnComboButtonRepeat(const std::vector<USHORT>& vKeys) {
-			if (!ValidCombo(vKeys) || !ComboAllHeld(vKeys)) return false;
-			std::string stateKey = ComboStateKey(vKeys);
+			if (!ValidCombo(vKeys)) return false;
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active) || !RawComboAllHeld(active)) return false;
+			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			if (!state.active) return false;
 			if (state.repeatStartSet && std::chrono::duration<double>(clock::now() - state.repeatStart).count() >= kRepeatRateSeconds) {
@@ -477,16 +519,74 @@ namespace RadarKeys {
 
 		double GetComboRepeatMult(const std::vector<USHORT>& vKeys) {
 			if (!ValidCombo(vKeys)) return 1.0;
-			auto it = comboStates.find(ComboStateKey(vKeys));
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active)) return 1.0;
+			auto it = comboStates.find(ComboStateKey(active));
 			return it == comboStates.end() ? 1.0 : it->second.currentIncrementMult;
 		}
 
 		void ResetComboRepeat(const std::vector<USHORT>& vKeys) {
 			if (!ValidCombo(vKeys)) return;
-			ComboPollState& state = comboStates[ComboStateKey(vKeys)];
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active)) return;
+			ComboPollState& state = comboStates[ComboStateKey(active)];
 			state.holdStartSet = false;
 			state.repeatStartSet = false;
 			state.currentIncrementMult = 1.0;
+		}
+
+		struct ComboKeyDescription {
+			bool hasToggleState = false;
+			bool toggleEnabled = false;
+			bool touchedSinceSweep = true;
+			std::vector<USHORT> nativeKeys;
+			std::string scriptName;
+			std::string functionName;
+		};
+		std::map<std::string, ComboKeyDescription> comboDescriptions;
+
+		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState) {
+			if (!ValidCombo(vKeys)) {
+				return;
+			}
+			UpdateRedirectForComboIdentity(vKeys, scriptName, functionName);
+			std::string identity = scriptName + "\x1f" + functionName;
+			ComboKeyDescription& d = comboDescriptions[identity];
+			d.nativeKeys = vKeys;
+			d.scriptName = scriptName;
+			d.functionName = functionName;
+			d.hasToggleState = (toggleState == "on" || toggleState == "off");
+			d.toggleEnabled = (toggleState == "on");
+			d.touchedSinceSweep = true;
+		}
+
+		void SweepStaleComboDescriptions() {
+			for (auto it = comboDescriptions.begin(); it != comboDescriptions.end(); ) {
+				if (!it->second.touchedSinceSweep) {
+					comboRedirectTarget.erase(ComboStateKey(it->second.nativeKeys));
+					it = comboDescriptions.erase(it);
+				} else {
+					it->second.touchedSinceSweep = false;
+					++it;
+				}
+			}
+		}
+
+		std::vector<TrackedComboKeyInfo> GetTrackedComboKeyInfo() {
+			std::vector<TrackedComboKeyInfo> result;
+			for (const auto& entry : comboDescriptions) {
+				const ComboKeyDescription& d = entry.second;
+				TrackedComboKeyInfo info;
+				info.nativeKeys = d.nativeKeys;
+				info.activeKeys = ResolveActiveCombo(d.nativeKeys);
+				info.isPressed = ValidCombo(info.activeKeys) && RawComboAllHeld(info.activeKeys);
+				info.scriptName = d.scriptName;
+				info.functionName = d.functionName;
+				info.hasToggleState = d.hasToggleState;
+				info.toggleEnabled = d.toggleEnabled;
+				result.push_back(std::move(info));
+			}
+			return result;
 		}
 
 		void ResetRepeat(USHORT vKey) {
