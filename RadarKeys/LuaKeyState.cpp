@@ -5,6 +5,8 @@
 #include "spdlog/spdlog.h"
 #include <chrono>
 #include <algorithm>
+#include <map>
+#include <sstream>
 
 namespace RadarKeys {
 	namespace LuaKeyState {
@@ -50,6 +52,16 @@ namespace RadarKeys {
 
 		KeyPollState states[256];
 		USHORT redirectTarget[256] = {};
+
+		struct ComboPollState {
+			bool active = false;
+			bool holdStartSet = false;
+			bool repeatStartSet = false;
+			clock::time_point pressTime{};
+			clock::time_point repeatStart{};
+			double currentIncrementMult = 1.0;
+		};
+		std::map<std::string, ComboPollState> comboStates;
 		bool ValidVKey(USHORT vKey) {
 			return vKey < 256;
 		}
@@ -344,6 +356,137 @@ namespace RadarKeys {
 				return 1.0;
 			}
 			return states[vKey].currentIncrementMult;
+		}
+
+		std::string ComboStateKey(const std::vector<USHORT>& vKeys) {
+			std::vector<USHORT> keys = vKeys;
+			std::sort(keys.begin(), keys.end());
+			keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+			std::string key;
+			for (USHORT vKey : keys) {
+				if (!key.empty()) key += ',';
+				key += std::to_string(vKey);
+			}
+			return key;
+		}
+
+		bool ValidCombo(const std::vector<USHORT>& vKeys) {
+			if (vKeys.size() < 2 || vKeys.size() > 3) return false;
+			std::vector<USHORT> keys = vKeys;
+			std::sort(keys.begin(), keys.end());
+			return std::all_of(keys.begin(), keys.end(), ValidVKey) &&
+				std::adjacent_find(keys.begin(), keys.end()) == keys.end();
+		}
+
+		bool ComboAllHeld(const std::vector<USHORT>& vKeys) {
+			if (!ValidCombo(vKeys)) return false;
+			for (USHORT vKey : vKeys) {
+				if (!RawInput::IsKeyHeldReal(vKey)) return false;
+			}
+			return true;
+		}
+
+		bool ComboButtonDown(const std::vector<USHORT>& vKeys) {
+			if (!ValidCombo(vKeys)) return false;
+			for (USHORT vKey : vKeys) EnsureTracked(vKey);
+			return ComboAllHeld(vKeys);
+		}
+
+		bool OnComboButtonDown(const std::vector<USHORT>& vKeys) {
+			if (!ValidCombo(vKeys)) return false;
+			for (USHORT vKey : vKeys) EnsureTracked(vKey);
+			std::string stateKey = ComboStateKey(vKeys);
+			ComboPollState& state = comboStates[stateKey];
+			bool allHeld = ComboAllHeld(vKeys);
+			if (allHeld && !state.active) {
+				state.active = true;
+				state.holdStartSet = true;
+				state.repeatStartSet = true;
+				state.pressTime = clock::now();
+				state.repeatStart = state.pressTime;
+				state.currentIncrementMult = 1.0;
+				return true;
+			}
+			if (!allHeld) {
+				state.active = false;
+				state.holdStartSet = false;
+				state.repeatStartSet = false;
+				state.currentIncrementMult = 1.0;
+			}
+			return false;
+		}
+
+		bool OnComboButtonUp(const std::vector<USHORT>& vKeys) {
+			if (!ValidCombo(vKeys)) return false;
+			std::string stateKey = ComboStateKey(vKeys);
+			ComboPollState& state = comboStates[stateKey];
+			bool allHeld = ComboAllHeld(vKeys);
+			if (state.active && !allHeld) {
+				state.active = false;
+				state.holdStartSet = false;
+				state.repeatStartSet = false;
+				state.currentIncrementMult = 1.0;
+				return true;
+			}
+			return false;
+		}
+
+		bool ComboButtonHeld(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
+			if (!ValidCombo(vKeys) || !ComboAllHeld(vKeys)) return false;
+			std::string stateKey = ComboStateKey(vKeys);
+			ComboPollState& state = comboStates[stateKey];
+			if (!state.active) {
+				state.active = true;
+				state.pressTime = clock::now();
+				state.holdStartSet = true;
+			}
+			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			return state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime;
+		}
+
+		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
+			if (!ValidCombo(vKeys) || !ComboAllHeld(vKeys)) return false;
+			std::string stateKey = ComboStateKey(vKeys);
+			ComboPollState& state = comboStates[stateKey];
+			if (!state.active) {
+				state.active = true;
+				state.pressTime = clock::now();
+				state.holdStartSet = true;
+			}
+			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			if (state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime) {
+				state.holdStartSet = false;
+				return true;
+			}
+			return false;
+		}
+
+		bool OnComboButtonRepeat(const std::vector<USHORT>& vKeys) {
+			if (!ValidCombo(vKeys) || !ComboAllHeld(vKeys)) return false;
+			std::string stateKey = ComboStateKey(vKeys);
+			ComboPollState& state = comboStates[stateKey];
+			if (!state.active) return false;
+			if (state.repeatStartSet && std::chrono::duration<double>(clock::now() - state.repeatStart).count() >= kRepeatRateSeconds) {
+				state.repeatStart = clock::now();
+				state.currentIncrementMult *= kIncrementMultIncrementMult;
+				if (state.currentIncrementMult > kMaxIncrementMult) state.currentIncrementMult = kMaxIncrementMult;
+				return true;
+			}
+			return false;
+		}
+
+		double GetComboRepeatMult(const std::vector<USHORT>& vKeys) {
+			if (!ValidCombo(vKeys)) return 1.0;
+			auto it = comboStates.find(ComboStateKey(vKeys));
+			return it == comboStates.end() ? 1.0 : it->second.currentIncrementMult;
+		}
+
+		void ResetComboRepeat(const std::vector<USHORT>& vKeys) {
+			if (!ValidCombo(vKeys)) return;
+			ComboPollState& state = comboStates[ComboStateKey(vKeys)];
+			state.holdStartSet = false;
+			state.repeatStartSet = false;
+			state.currentIncrementMult = 1.0;
 		}
 
 		void ResetRepeat(USHORT vKey) {
