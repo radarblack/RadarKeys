@@ -265,11 +265,25 @@ namespace RadarKeys {
 			return result;
 		}
 
+		bool IsMouseVKey(USHORT vKey) {
+			return vKey == VK_LBUTTON || vKey == VK_RBUTTON || vKey == VK_MBUTTON ||
+				vKey == VK_XBUTTON1 || vKey == VK_XBUTTON2;
+		}
+
+		std::vector<USHORT> CanonicalizeComboKeys(const std::vector<USHORT>& keys) {
+			std::vector<USHORT> ordered = keys;
+			std::stable_sort(ordered.begin(), ordered.end(), [](USHORT a, USHORT b) {
+				return IsMouseVKey(a) && !IsMouseVKey(b);
+			});
+			return ordered;
+		}
+
 		std::string ComboKeysDisplayName(const std::vector<USHORT>& keys) {
+			std::vector<USHORT> ordered = CanonicalizeComboKeys(keys);
 			std::string result;
-			for (size_t i = 0; i < keys.size(); i++) {
+			for (size_t i = 0; i < ordered.size(); i++) {
 				if (i) result += " + ";
-				result += NameForVKey(keys[i]);
+				result += NameForVKey(ordered[i]);
 			}
 			return result;
 		}
@@ -343,16 +357,39 @@ namespace RadarKeys {
 			return true;
 		}
 
-		bool IsMultiKeyComboAvailable(const std::vector<USHORT>& comboKeys, int editingIndex) {
+		bool IsMultiKeyComboAvailable(const std::vector<USHORT>& comboKeys, int editingIndex,
+			const std::string& ignoredScriptName = "", const std::string& ignoredFunctionName = "") {
 			for (USHORT k : comboKeys) {
 				if (IsReservedVKey(k)) return false;
 			}
+
 			for (int i = 0; i < (int)bindings.size(); i++) {
 				if (i == editingIndex) continue;
 				const KeyBind& b = bindings[i];
 				if (b.IsCombo() && VectorsEqualUnordered(b.comboKeys, comboKeys)) return false;
 			}
+
+			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (!ignoredScriptName.empty() &&
+					info.scriptName == ignoredScriptName &&
+					info.functionName == ignoredFunctionName) {
+					continue;
+				}
+				if (VectorsEqualUnordered(info.activeKeys, comboKeys)) return false;
+			}
+
 			return true;
+		}
+
+		bool IsComboConflictedWithBindings(const std::vector<USHORT>& comboKeys, int ignoredBindingIndex = -1) {
+			for (int i = 0; i < (int)bindings.size(); ++i) {
+				if (i == ignoredBindingIndex) continue;
+				const KeyBind& bind = bindings[i];
+				if (bind.IsCombo() && VectorsEqualUnordered(bind.comboKeys, comboKeys)) {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		struct PendingPress {
@@ -1434,15 +1471,9 @@ namespace RadarKeys {
 						if (capturedRepeatAccelMult < kMinRepeatAccelMult) capturedRepeatAccelMult = kMinRepeatAccelMult;
 						if (ImGui::IsItemHovered()) {
 							ImGui::SetTooltip(
-								"Acceleration multiplier for the Repeat interval.\n"
-								"Each time the repeat fires, the wait before the next fire\n"
-								"is divided by this amount - values above 1.00x make it fire\n"
-								"progressively faster the longer the key is held (acceleration);\n"
-								"values below 1.00x make it fire progressively slower instead\n"
-								"(deceleration).\n"
-								"1.00x = constant rate (no acceleration or deceleration).\n"
-								"e.g. 1.20x ramps up gradually; 2.00x ramps up quickly;\n"
-								"0.80x eases off gradually; 0.20x slows down quickly."
+								"Repeat interval Multiplier.\n"
+								"? > 1.00x = means the repeat trigger fires faster\n"
+								"? < 1.00x = means the repeat trigger fires slower"
 							);
 						}
 					}
@@ -1457,7 +1488,11 @@ namespace RadarKeys {
 			bool comboAvailable = false;
 			if (captureIsCombo) {
 				if (!capturedComboKeys.empty()) {
-					comboAvailable = IsMultiKeyComboAvailable(capturedComboKeys, editingBindingIndex);
+					comboAvailable = IsMultiKeyComboAvailable(
+						capturedComboKeys,
+						editingBindingIndex,
+						isAssigningModKey ? modKeyCaptureScriptName : "",
+						isAssigningModKey ? modKeyCaptureFunctionName : "");
 				}
 			}
 			else if (capturedVKey != 0) {
@@ -1498,7 +1533,7 @@ namespace RadarKeys {
 			ImGui::EndChild();
 			
 			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nYou can adjust it to be a Long Press by adding duration.");
+				ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nThis includes bindings declared by mods and existing manual bindings.\nChange the combination before finalizing.");
 			}
 			ImGui::EndGroup(); ImGui::Separator();
 		
@@ -1641,7 +1676,11 @@ namespace RadarKeys {
 			}
 			
 			bool captureReady = captureIsCombo ? !capturedComboKeys.empty() : (capturedVKey != 0);
-			bool canFinalize = captureReady && (isAssigningModKey || (comboAvailable && (isAssigningMenuToggleKey || (pathsValid && functionsValid))));
+			bool assignmentIsValid = comboAvailable;
+			if (isAssigningModKey && !captureIsCombo) {
+				assignmentIsValid = true;
+			}
+			bool canFinalize = captureReady && (assignmentIsValid && (isAssigningMenuToggleKey || isAssigningModKey || (pathsValid && functionsValid)));
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float buttonHeight = 30.0f;
 			float bottomAnchorY = ImGui::GetWindowHeight() - paddingY - buttonHeight;
@@ -1901,12 +1940,16 @@ namespace RadarKeys {
 					row.displayVKey = displayVKey;
 					rows.push_back(std::move(row));
 				}
-				for (LuaKeyState::TrackedComboKeyInfo& cinfo : trackedCombos) {
-					bool conflicted = false;
-					for (const KeyBind& bind : bindings) {
-						if (bind.IsCombo() && VectorsEqualUnordered(bind.comboKeys, cinfo.activeKeys)) {
-							conflicted = true;
-							break;
+				for (size_t i = 0; i < trackedCombos.size(); ++i) {
+					LuaKeyState::TrackedComboKeyInfo& cinfo = trackedCombos[i];
+					bool conflicted = IsComboConflictedWithBindings(cinfo.activeKeys);
+					if (!conflicted) {
+						for (size_t j = 0; j < trackedCombos.size(); ++j) {
+							if (i == j) continue;
+							if (VectorsEqualUnordered(cinfo.activeKeys, trackedCombos[j].activeKeys)) {
+								conflicted = true;
+								break;
+							}
 						}
 					}
 					UnifiedRow row;
@@ -1920,7 +1963,19 @@ namespace RadarKeys {
 					UnifiedRow row;
 					row.isManual = true;
 					row.bindIndex = i;
-					row.conflicted = conflictedVKeys.count(bindings[i].vKey) > 0;
+					if (bindings[i].IsCombo()) {
+						row.conflicted = IsComboConflictedWithBindings(bindings[i].comboKeys, i);
+						if (!row.conflicted) {
+							for (const auto& cinfo : trackedCombos) {
+								if (VectorsEqualUnordered(bindings[i].comboKeys, cinfo.activeKeys)) {
+									row.conflicted = true;
+									break;
+								}
+							}
+						}
+					} else {
+						row.conflicted = conflictedVKeys.count(bindings[i].vKey) > 0;
+					}
 					row.displayVKey = bindings[i].vKey;
 					rows.push_back(std::move(row));
 				}
