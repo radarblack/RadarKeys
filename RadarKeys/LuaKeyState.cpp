@@ -690,7 +690,6 @@ namespace RadarKeys {
 		void SweepStaleDescriptions() {
 			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
 				std::vector<KeyDescription>& descs = states[vKeyInt].descriptions;
-
 				if (!descs.empty()) {
 					descs.erase(
 						std::remove_if(descs.begin(), descs.end(), [](const KeyDescription& d) { return !d.touchedSinceSweep; }),
@@ -734,6 +733,7 @@ namespace RadarKeys {
 				}
 				USHORT vKey = static_cast<USHORT>(vKeyInt);
 				bool isPressed = RawInput::IsKeyHeldReal(vKey);
+
 				if (s.descriptions.empty()) {
 					continue;
 				}
