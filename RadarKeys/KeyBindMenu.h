@@ -22,7 +22,7 @@ namespace RadarKeys {
 			float holdSeconds = 0.0f;
 			bool isInstant = false;
 			int instantTriggerType = 0;
-			float repeatAccelMult = 1.0f; 
+			float repeatAccelMult = 1.0f;
 			double runtimeRepeatSpeedMult = 1.0;
 
 			// lua script pass
