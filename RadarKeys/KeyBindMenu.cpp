@@ -1125,7 +1125,7 @@ namespace RadarKeys {
 		
 			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 			auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
-			ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Key").x) * 0.5f); ImGui::Text(" Key"); ImGui::Separator();
+			ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Key").x) * 0.5f); ImGui::TextUnformatted("Key"); ImGui::Separator();
 			float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 		
 			if (capturedVKey == 0) {
@@ -1137,7 +1137,7 @@ namespace RadarKeys {
 			} else {
 				std::string keyName = NameForVKey(capturedVKey);
 				ImGui::SetCursorPosY(lowerBoxTopY + ((lowerBoxRemainingHeight - ImGui::GetTextLineHeight()) * 0.5f));
-				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(keyName.c_str()).x) * 0.5f); ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), " %s", keyName.c_str());
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(keyName.c_str()).x) * 0.5f); ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s", keyName.c_str());
 			}
 			ImGui::EndChild(); ImGui::SameLine();
 		
@@ -1161,7 +1161,7 @@ namespace RadarKeys {
 
 				ImGui::BeginChild("ComboKeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 				auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
-				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Keys").x) * 0.5f); ImGui::Text(" Keys"); ImGui::Separator();
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Keys").x) * 0.5f); ImGui::TextUnformatted("Keys"); ImGui::Separator();
 				float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 
 				if (capturedComboKeys.empty() && !comboHoldActive) {
@@ -1172,14 +1172,43 @@ namespace RadarKeys {
 					std::string names = ComboKeysDisplayName(shownKeys);
 
 					ImGui::SetWindowFontScale(0.8f);
-					float textHeight = ImGui::CalcTextSize(names.c_str(), nullptr, false, availWidth).y;
+					
+					std::vector<std::string> displayLines;
+					std::string currentLine;
+					std::string token;
+					for (size_t i = 0; i <= names.size(); ++i) {
+						bool atEnd = (i == names.size());
+						char c = atEnd ? '\0' : names[i];
+						if (c == ' ' || atEnd) {
+							if (!token.empty()) {
+								std::string candidate = currentLine.empty() ? token : currentLine + " " + token;
+								if (!currentLine.empty() && ImGui::CalcTextSize(candidate.c_str()).x > availWidth) {
+									displayLines.push_back(currentLine);
+									currentLine = token;
+								} else {
+									currentLine = candidate;
+								}
+								token.clear();
+							}
+						} else {
+							token += c;
+						}
+					}
+					if (!currentLine.empty()) displayLines.push_back(currentLine);
+					if (displayLines.empty()) displayLines.push_back(names);
+
+					float lineHeight = ImGui::GetTextLineHeight();
+					float lineSpacing = ImGui::GetStyle().ItemSpacing.y;
+					float textHeight = lineHeight * displayLines.size() + lineSpacing * (displayLines.size() - 1);
 					float reserveForBar = isFinal ? 0.0f : 12.0f;
 					ImGui::SetCursorPosY(lowerBoxTopY + (std::max)(0.0f, (lowerBoxRemainingHeight - textHeight - reserveForBar) * 0.5f));
-					ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + availWidth);
 					ImGui::PushStyleColor(ImGuiCol_Text, isFinal ? ImVec4(0.2f, 1.0f, 0.2f, 1.0f) : ImVec4(1.0f, 0.85f, 0.2f, 1.0f));
-					ImGui::TextWrapped("%s", names.c_str());
+					for (const std::string& line : displayLines) {
+						float lineWidth = ImGui::CalcTextSize(line.c_str()).x;
+						ImGui::SetCursorPosX((std::max)(0.0f, (availWidth - lineWidth) * 0.5f));
+						ImGui::TextUnformatted(line.c_str());
+					}
 					ImGui::PopStyleColor();
-					ImGui::PopTextWrapPos();
 					ImGui::SetWindowFontScale(1.0f);
 
 					if (!isFinal) {
