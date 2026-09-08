@@ -16,6 +16,7 @@
 #include <string>
 #include <cassert>
 #include <cstdlib>
+#include <cctype>
 #include <cmath>
 
 namespace RadarKeys {
@@ -89,14 +90,37 @@ namespace RadarKeys {
 
 	static int ResolveKeyNameArg(lua_State* L) {
 		const char* name = LuaToString(L, 1);
-		if (!name) {
-			return -1;
-		}
+		if (!name) return -1;
 		int vKey = KeyBindMenu::VKeyForName(name);
-		if (vKey < 0) {
-			spdlog::warn("RadarKeys key query: unrecognized key name '{}'", name);
-		}
+		if (vKey < 0) spdlog::warn("RadarKeys key query: unrecognized key name '{}'", name);
 		return vKey;
+	}
+
+	static std::vector<USHORT> ResolveKeyListArg(lua_State* L) {
+		std::vector<USHORT> result;
+		const char* raw = LuaToString(L, 1);
+		if (!raw) return result;
+		std::string input = raw;
+		std::stringstream ss(input);
+		std::string part;
+		while (std::getline(ss, part, '+')) {
+			while (!part.empty() && std::isspace((unsigned char)part.front())) part.erase(part.begin());
+			while (!part.empty() && std::isspace((unsigned char)part.back())) part.pop_back();
+			int vKey = KeyBindMenu::VKeyForName(part);
+			if (vKey < 0) {
+				spdlog::warn("RadarKeys combo query: unrecognized key name '{}'", part);
+				result.clear();
+				return result;
+			}
+			result.push_back((USHORT)vKey);
+		}
+		if (result.size() < 2 || result.size() > 3) result.clear();
+		return result;
+	}
+
+	static bool ArgIsCombo(lua_State* L) {
+		const char* raw = LuaToString(L, 1);
+		return raw && std::strchr(raw, '+') != nullptr;
 	}
 
 	static double ResolveHoldSecondsArg(lua_State* L) {
@@ -114,47 +138,53 @@ namespace RadarKeys {
 	}
 
 	static int l_ButtonDown(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::ComboButtonDown(ResolveKeyListArg(L))); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
 		LuaPushBool(L, vKey >= 0 && LuaKeyState::ButtonDown((USHORT)vKey));
 		return 1;
 	}
 	static int l_OnButtonDown(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonDown(ResolveKeyListArg(L))); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
 		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonDown((USHORT)vKey));
 		return 1;
 	}
 	static int l_OnButtonUp(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonUp(ResolveKeyListArg(L))); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
 		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonUp((USHORT)vKey));
 		return 1;
 	}
 	static int l_ButtonHeld(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::ComboButtonHeld(ResolveKeyListArg(L), ResolveHoldSecondsArg(L))); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
 		double holdOverride = RadarKeys::ResolveHoldSecondsArg(L);
 		LuaPushBool(L, vKey >= 0 && LuaKeyState::ButtonHeld((USHORT)vKey, holdOverride));
 		return 1;
 	}
 	static int l_OnButtonHoldTime(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonHoldTime(ResolveKeyListArg(L), ResolveHoldSecondsArg(L))); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
 		double holdOverride = RadarKeys::ResolveHoldSecondsArg(L);
 		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonHoldTime((USHORT)vKey, holdOverride));
 		return 1;
 	}
 	static int l_OnButtonRepeat(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonRepeat(ResolveKeyListArg(L))); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
 		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonRepeat((USHORT)vKey));
 		return 1;
 	}
 	static int l_GetRepeatMult(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushNumber(L, LuaKeyState::GetComboRepeatMult(ResolveKeyListArg(L))); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
 		LuaPushNumber(L, vKey >= 0 ? LuaKeyState::GetRepeatMult((USHORT)vKey) : 1.0);
 		return 1;
 	}
 	static int l_ResetRepeat(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaKeyState::ResetComboRepeat(ResolveKeyListArg(L)); return 0; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
-		if (vKey >= 0) {
-			LuaKeyState::ResetRepeat((USHORT)vKey);
-		}
+		if (vKey >= 0) LuaKeyState::ResetRepeat((USHORT)vKey);
 		return 0;
 	}
 
@@ -215,6 +245,14 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "OnButtonRepeat", RadarKeys::l_OnButtonRepeat },
 		{ "GetRepeatMult", RadarKeys::l_GetRepeatMult },
 		{ "ResetRepeat", RadarKeys::l_ResetRepeat },
+		{ "ComboButtonDown", RadarKeys::l_ButtonDown },
+		{ "OnComboButtonDown", RadarKeys::l_OnButtonDown },
+		{ "OnComboButtonUp", RadarKeys::l_OnButtonUp },
+		{ "ComboButtonHeld", RadarKeys::l_ButtonHeld },
+		{ "OnComboButtonHoldTime", RadarKeys::l_OnButtonHoldTime },
+		{ "OnComboButtonRepeat", RadarKeys::l_OnButtonRepeat },
+		{ "GetComboRepeatMult", RadarKeys::l_GetRepeatMult },
+		{ "ResetComboRepeat", RadarKeys::l_ResetRepeat },
 		{ "DebugLog", RadarKeys::l_DebugLog },
 		{ "DescribeKey", RadarKeys::l_DescribeKey },
 		{ "GetModKeyBinding", RadarKeys::l_GetModKeyBinding },
