@@ -29,6 +29,9 @@ namespace RadarKeys {
 		void SetSuppressedVKeys(const std::vector<USHORT>& vKeys);
 		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName);
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
+		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
+		void SweepStaleComboDescriptions();
+		std::vector<USHORT> ResolveActiveCombo(const std::vector<USHORT>& vKeys);
 
 		struct TrackedKeyInfo {
 			USHORT vKey = 0;
@@ -46,5 +49,16 @@ namespace RadarKeys {
 			bool usesOnRelease = false;
 		};
 		std::vector<TrackedKeyInfo> GetTrackedKeyInfo();
+
+		struct TrackedComboKeyInfo {
+			std::vector<USHORT> nativeKeys;
+			std::vector<USHORT> activeKeys;
+			bool isPressed = false;
+			std::string scriptName;
+			std::string functionName;
+			bool hasToggleState = false;
+			bool toggleEnabled = false;
+		};
+		std::vector<TrackedComboKeyInfo> GetTrackedComboKeyInfo();
 	}
 }
