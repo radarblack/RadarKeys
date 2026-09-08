@@ -1161,7 +1161,7 @@ namespace RadarKeys {
 
 				ImGui::BeginChild("ComboKeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 				auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
-				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Keys").x) * 0.5f); ImGui::TextUnformatted("Keys"); ImGui::Separator();
+				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("  Keys").x) * 0.5f); ImGui::TextUnformatted("  Keys"); ImGui::Separator();
 				float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 
 				if (capturedComboKeys.empty() && !comboHoldActive) {
@@ -1181,7 +1181,7 @@ namespace RadarKeys {
 						char c = atEnd ? '\0' : names[i];
 						if (c == ' ' || atEnd) {
 							if (!token.empty()) {
-								std::string candidate = currentLine.empty() ? token : currentLine + " " + token;
+								std::string candidate = currentLine.empty() ? token : currentLine + "   " + token;
 								if (!currentLine.empty() && ImGui::CalcTextSize(candidate.c_str()).x > availWidth) {
 									displayLines.push_back(currentLine);
 									currentLine = token;
