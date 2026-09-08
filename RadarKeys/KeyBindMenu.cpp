@@ -1125,7 +1125,8 @@ namespace RadarKeys {
 		
 			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 			auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
-			ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Key").x) * 0.5f); ImGui::TextUnformatted("Key"); ImGui::Separator();
+			const float contentStartX = ImGui::GetCursorPosX();
+			ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize("Key").x) * 0.5f)); ImGui::TextUnformatted("Key"); ImGui::Separator();
 			float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 		
 			if (capturedVKey == 0) {
@@ -1162,7 +1163,7 @@ namespace RadarKeys {
 				ImGui::BeginChild("ComboKeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 				auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
 				const float contentStartX = ImGui::GetCursorPosX();
-				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("Keys").x) * 0.5f); ImGui::TextUnformatted("Keys"); ImGui::Separator();
+				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize("Keys").x) * 0.5f)); ImGui::TextUnformatted("Keys"); ImGui::Separator();
 				float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 
 				if (capturedComboKeys.empty() && !comboHoldActive) {
