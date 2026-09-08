@@ -11,6 +11,14 @@ namespace RadarKeys {
 		bool OnButtonUp(USHORT vKey);
 		bool OnButtonRepeat(USHORT vKey);
 		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride = -1.0);
+		bool ComboButtonDown(const std::vector<USHORT>& vKeys);
+		bool OnComboButtonDown(const std::vector<USHORT>& vKeys);
+		bool OnComboButtonUp(const std::vector<USHORT>& vKeys);
+		bool ComboButtonHeld(const std::vector<USHORT>& vKeys, double holdSecondsOverride = -1.0);
+		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride = -1.0);
+		bool OnComboButtonRepeat(const std::vector<USHORT>& vKeys);
+		double GetComboRepeatMult(const std::vector<USHORT>& vKeys);
+		void ResetComboRepeat(const std::vector<USHORT>& vKeys);
 		void ResetRepeat(USHORT vKey);
 		double GetRepeatMult(USHORT vKey);
 		bool PhysicalOnButtonDown(USHORT vKey);
