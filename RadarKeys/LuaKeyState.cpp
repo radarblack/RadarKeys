@@ -57,6 +57,10 @@ namespace RadarKeys {
 			bool active = false;
 			bool holdStartSet = false;
 			bool repeatStartSet = false;
+			bool pendingUsesOnPress = false;
+			bool pendingUsesOnRelease = false;
+			bool pendingUsesHoldTime = false;
+			bool pendingUsesRepeat = false;
 			clock::time_point pressTime{};
 			clock::time_point repeatStart{};
 			double currentIncrementMult = 1.0;
@@ -431,6 +435,7 @@ namespace RadarKeys {
 			for (USHORT vKey : active) EnsureTracked(vKey);
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
+			state.pendingUsesOnPress = true;
 			bool allHeld = RawComboAllHeld(active);
 			if (allHeld && !state.active) {
 				state.active = true;
@@ -456,6 +461,7 @@ namespace RadarKeys {
 			if (!ValidCombo(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
+			state.pendingUsesOnRelease = true;
 			bool allHeld = RawComboAllHeld(active);
 			if (state.active && !allHeld) {
 				state.active = false;
@@ -473,6 +479,7 @@ namespace RadarKeys {
 			if (!ValidCombo(active) || !RawComboAllHeld(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
+			state.pendingUsesHoldTime = true;
 			if (!state.active) {
 				state.active = true;
 				state.pressTime = clock::now();
@@ -488,6 +495,7 @@ namespace RadarKeys {
 			if (!ValidCombo(active) || !RawComboAllHeld(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
+			state.pendingUsesHoldTime = true;
 			if (!state.active) {
 				state.active = true;
 				state.pressTime = clock::now();
@@ -507,6 +515,7 @@ namespace RadarKeys {
 			if (!ValidCombo(active) || !RawComboAllHeld(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
+			state.pendingUsesRepeat = true;
 			if (!state.active) return false;
 			if (state.repeatStartSet && std::chrono::duration<double>(clock::now() - state.repeatStart).count() >= kRepeatRateSeconds) {
 				state.repeatStart = clock::now();
@@ -539,6 +548,10 @@ namespace RadarKeys {
 			bool hasToggleState = false;
 			bool toggleEnabled = false;
 			bool touchedSinceSweep = true;
+			bool usesOnPress = false;
+			bool usesHoldTime = false;
+			bool usesRepeat = false;
+			bool usesOnRelease = false;
 			std::vector<USHORT> nativeKeys;
 			std::string scriptName;
 			std::string functionName;
@@ -550,6 +563,17 @@ namespace RadarKeys {
 				return;
 			}
 			UpdateRedirectForComboIdentity(vKeys, scriptName, functionName);
+			std::vector<USHORT> activeKeys = ResolveActiveCombo(vKeys);
+			std::string stateKey = ComboStateKey(activeKeys);
+			ComboPollState& state = comboStates[stateKey];
+			bool obsOnPress = state.pendingUsesOnPress;
+			bool obsHoldTime = state.pendingUsesHoldTime;
+			bool obsRepeat = state.pendingUsesRepeat;
+			bool obsOnRelease = state.pendingUsesOnRelease;
+			state.pendingUsesOnPress = false;
+			state.pendingUsesHoldTime = false;
+			state.pendingUsesRepeat = false;
+			state.pendingUsesOnRelease = false;
 			std::string identity = scriptName + "\x1f" + functionName;
 			ComboKeyDescription& d = comboDescriptions[identity];
 			d.nativeKeys = vKeys;
@@ -557,6 +581,10 @@ namespace RadarKeys {
 			d.functionName = functionName;
 			d.hasToggleState = (toggleState == "on" || toggleState == "off");
 			d.toggleEnabled = (toggleState == "on");
+			d.usesOnPress = obsOnPress;
+			d.usesHoldTime = obsHoldTime;
+			d.usesRepeat = obsRepeat;
+			d.usesOnRelease = obsOnRelease;
 			d.touchedSinceSweep = true;
 		}
 
@@ -564,6 +592,11 @@ namespace RadarKeys {
 			for (auto it = comboDescriptions.begin(); it != comboDescriptions.end(); ) {
 				if (!it->second.touchedSinceSweep) {
 					comboRedirectTarget.erase(ComboStateKey(it->second.nativeKeys));
+					ComboPollState& state = comboStates[ComboStateKey(ResolveActiveCombo(it->second.nativeKeys))];
+					state.pendingUsesOnPress = false;
+					state.pendingUsesHoldTime = false;
+					state.pendingUsesRepeat = false;
+					state.pendingUsesOnRelease = false;
 					it = comboDescriptions.erase(it);
 				} else {
 					it->second.touchedSinceSweep = false;
@@ -584,6 +617,10 @@ namespace RadarKeys {
 				info.functionName = d.functionName;
 				info.hasToggleState = d.hasToggleState;
 				info.toggleEnabled = d.toggleEnabled;
+				info.usesOnPress = d.usesOnPress;
+				info.usesHoldTime = d.usesHoldTime;
+				info.usesRepeat = d.usesRepeat;
+				info.usesOnRelease = d.usesOnRelease;
 				result.push_back(std::move(info));
 			}
 			return result;
@@ -653,6 +690,7 @@ namespace RadarKeys {
 		void SweepStaleDescriptions() {
 			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
 				std::vector<KeyDescription>& descs = states[vKeyInt].descriptions;
+
 				if (!descs.empty()) {
 					descs.erase(
 						std::remove_if(descs.begin(), descs.end(), [](const KeyDescription& d) { return !d.touchedSinceSweep; }),
@@ -700,7 +738,6 @@ namespace RadarKeys {
 					continue;
 				}
 
-				bool conflicted = s.descriptions.size() > 1;
 				for (const KeyDescription& d : s.descriptions) {
 					TrackedKeyInfo info;
 					info.vKey = vKey;
@@ -710,7 +747,24 @@ namespace RadarKeys {
 					info.functionName = d.functionName;
 					info.hasToggleState = d.hasToggleState;
 					info.toggleEnabled = d.toggleEnabled;
-					info.isConflicted = conflicted;
+					info.isConflicted = false;
+					unsigned dMask = 0;
+					if (d.usesOnPress) dMask |= 1u << 0;
+					if (d.usesOnRelease) dMask |= 1u << 1;
+					if (d.usesHoldTime) dMask |= 1u << 2;
+					if (d.usesRepeat) dMask |= 1u << 3;
+					for (const KeyDescription& other : s.descriptions) {
+						if (&other == &d) continue;
+						unsigned otherMask = 0;
+						if (other.usesOnPress) otherMask |= 1u << 0;
+						if (other.usesOnRelease) otherMask |= 1u << 1;
+						if (other.usesHoldTime) otherMask |= 1u << 2;
+						if (other.usesRepeat) otherMask |= 1u << 3;
+						if (dMask != 0 && otherMask != 0 && (dMask & otherMask) != 0) {
+							info.isConflicted = true;
+							break;
+						}
+					}
 					info.usesOnPress = d.usesOnPress;
 					info.usesHoldTime = d.usesHoldTime;
 					info.lastHoldSeconds = d.lastHoldSeconds;
