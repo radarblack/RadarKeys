@@ -192,38 +192,41 @@ namespace RadarKeys {
 			{"0", '0'}, {"1", '1'}, {"2", '2'}, {"3", '3'}, {"4", '4'},
 			{"5", '5'}, {"6", '6'}, {"7", '7'}, {"8", '8'}, {"9", '9'},
 
-			{"F1", VK_F1}, 		{"F2", VK_F2}, 		{"F3", VK_F3}, 		{"F4", VK_F4},
-			{"F5", VK_F5}, 		{"F6", VK_F6}, 		{"F7", VK_F7}, 		{"F8", VK_F8},
-			{"F9", VK_F9}, 		{"F10", VK_F10}, 	{"F11", VK_F11}, 	{"F12", VK_F12},
-			{"F13", VK_F13}, 	{"F14", VK_F14}, 	{"F15", VK_F15}, 	{"F16", VK_F16},
-			{"F17", VK_F17}, 	{"F18", VK_F18}, 	{"F19", VK_F19}, 	{"F20", VK_F20},
-			{"F21", VK_F21}, 	{"F22", VK_F22}, 	{"F23", VK_F23}, 	{"F24", VK_F24},
+			{"F1", VK_F1}, {"F2", VK_F2}, {"F3", VK_F3}, {"F4", VK_F4},
+			{"F5", VK_F5}, {"F6", VK_F6}, {"F7", VK_F7}, {"F8", VK_F8},
+			{"F9", VK_F9}, {"F10", VK_F10}, {"F11", VK_F11}, {"F12", VK_F12},
+			{"F13", VK_F13}, {"F14", VK_F14}, {"F15", VK_F15}, {"F16", VK_F16},
+			{"F17", VK_F17}, {"F18", VK_F18}, {"F19", VK_F19}, {"F20", VK_F20},
+			{"F21", VK_F21}, {"F22", VK_F22}, {"F23", VK_F23}, {"F24", VK_F24},
 
-			{"Space", VK_SPACE}, 	{"Tab", VK_TAB}, 		{"Enter", VK_RETURN}, 	{"Backspace", VK_BACK},
-			{"Insert", VK_INSERT}, 	{"Delete", VK_DELETE}, 	{"Home", VK_HOME}, 		{"End", VK_END},
-			{"Page Up", VK_PRIOR}, 	{"Page Down", VK_NEXT}, {"Up", VK_UP}, 			{"Down", VK_DOWN}, 
-			{"Left", VK_LEFT}, 		{"Right", VK_RIGHT},
+			{"Space", VK_SPACE}, {"Tab", VK_TAB}, {"Enter", VK_RETURN}, {"Backspace", VK_BACK},
+			{"Insert", VK_INSERT}, {"Delete", VK_DELETE},
+			{"Home", VK_HOME}, {"End", VK_END},
+			{"Page Up", VK_PRIOR}, {"Page Down", VK_NEXT},
+			{"Up", VK_UP}, {"Down", VK_DOWN}, {"Left", VK_LEFT}, {"Right", VK_RIGHT},
 
-			{"Numpad 0", VK_NUMPAD0},  {"Numpad 1", VK_NUMPAD1},  {"Numpad 2", VK_NUMPAD2},
-			{"Numpad 3", VK_NUMPAD3},  {"Numpad 4", VK_NUMPAD4},  {"Numpad 5", VK_NUMPAD5},
-			{"Numpad 6", VK_NUMPAD6},  {"Numpad 7", VK_NUMPAD7},  {"Numpad 8", VK_NUMPAD8},
-			{"Numpad 9", VK_NUMPAD9},  {"Numpad *", VK_MULTIPLY}, {"Numpad +", VK_ADD}, 
-			{"Numpad -", VK_SUBTRACT}, {"Numpad .", VK_DECIMAL},  {"Numpad /", VK_DIVIDE},
+			{"Numpad 0", VK_NUMPAD0}, {"Numpad 1", VK_NUMPAD1}, {"Numpad 2", VK_NUMPAD2},
+			{"Numpad 3", VK_NUMPAD3}, {"Numpad 4", VK_NUMPAD4}, {"Numpad 5", VK_NUMPAD5},
+			{"Numpad 6", VK_NUMPAD6}, {"Numpad 7", VK_NUMPAD7}, {"Numpad 8", VK_NUMPAD8},
+			{"Numpad 9", VK_NUMPAD9}, {"Numpad *", VK_MULTIPLY}, {"Numpad +", VK_ADD}, 
+			{"Numpad -", VK_SUBTRACT}, {"Numpad .", VK_DECIMAL}, {"Numpad /", VK_DIVIDE},
 
-			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD}, 	{";", VK_OEM_1}, {"=", VK_OEM_PLUS}, 
-			{"-", VK_OEM_MINUS}, {"/", VK_OEM_2}, 		{"`", VK_OEM_3}, {"[", VK_OEM_4}, 
-			{"\\", VK_OEM_5}, 	 {"]", VK_OEM_6}, 	 	{"'", VK_OEM_7},
+			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
+			{";", VK_OEM_1}, {"=", VK_OEM_PLUS}, {"-", VK_OEM_MINUS}, {"/", VK_OEM_2},
+			{"`", VK_OEM_3}, {"[", VK_OEM_4}, {"\\", VK_OEM_5}, {"]", VK_OEM_6}, {"'", VK_OEM_7},
 
-			{"Caps Lock", VK_CAPITAL}, 		{"Num Lock", VK_NUMLOCK}, 	
-			{"Scroll Lock", VK_SCROLL},		{"Pause", VK_PAUSE},
+			{"Caps Lock", VK_CAPITAL}, {"Num Lock", VK_NUMLOCK}, {"Scroll Lock", VK_SCROLL},
+			{"Print Screen", VK_SNAPSHOT}, {"Pause", VK_PAUSE}, {"Menu Key", VK_APPS},
 
-			{"Volume Up", VK_VOLUME_UP}, 				{"Volume Down", VK_VOLUME_DOWN}, 			{"Volume Mute", VK_VOLUME_MUTE},
-			{"Media Play/Pause", VK_MEDIA_PLAY_PAUSE}, 	{"Media Stop", VK_MEDIA_STOP},
-			{"Media Next", VK_MEDIA_NEXT_TRACK}, 		{"Media Previous", VK_MEDIA_PREV_TRACK},
+			{"Volume Up", VK_VOLUME_UP}, {"Volume Down", VK_VOLUME_DOWN}, {"Volume Mute", VK_VOLUME_MUTE},
+			{"Media Play/Pause", VK_MEDIA_PLAY_PAUSE}, {"Media Stop", VK_MEDIA_STOP},
+			{"Media Next", VK_MEDIA_NEXT_TRACK}, {"Media Previous", VK_MEDIA_PREV_TRACK},
 
-			{"Ctrl", VK_CONTROL}, 	{"Shift", VK_SHIFT}, 	{"Alt", VK_MENU},
+			{"Ctrl", VK_CONTROL}, {"Shift", VK_SHIFT}, {"Alt", VK_MENU},
 
-			{"Mouse Wheel", VK_MBUTTON}, 	{"Mouse 4", VK_XBUTTON1}, 	{"Mouse 5", VK_XBUTTON2},
+			{"Mouse Wheel", VK_MBUTTON},
+			{"Mouse 4", VK_XBUTTON1},
+			{"Mouse 5", VK_XBUTTON2},
 			{"Right Click", VK_RBUTTON}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
@@ -916,12 +919,17 @@ namespace RadarKeys {
 		static std::vector<USHORT> comboHoldKeys;
 		static std::chrono::steady_clock::time_point comboHoldStartTime;
 		static bool comboHoldActive = false;
+		static USHORT singleHoldKey = 0;
+		static std::chrono::steady_clock::time_point singleHoldStartTime;
+		static bool singleHoldActive = false;
 		constexpr double kComboHoldSeconds = 2.0;
 
 		void ResetComboCaptureState() {
 			capturedComboKeys.clear();
 			comboHoldKeys.clear();
 			comboHoldActive = false;
+			singleHoldKey = 0;
+			singleHoldActive = false;
 		}
 
 		std::vector<USHORT> ScanCurrentlyHeldKeys() {
@@ -1097,24 +1105,43 @@ namespace RadarKeys {
 				capturedCtrl  = ImGui::GetIO().KeyCtrl;
 				capturedShift = ImGui::GetIO().KeyShift;
 				capturedAlt   = ImGui::GetIO().KeyAlt;
-		
-				if (ImGui::IsMouseClicked(2)) { capturedVKey = VK_MBUTTON; }
-				else if (ImGui::IsMouseClicked(3)) { capturedVKey = VK_XBUTTON1; }
-				else if (ImGui::IsMouseClicked(4)) { capturedVKey = VK_XBUTTON2; }
-				else {
-					for (int i = 1; i < 256; i++) {
-						if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
-							i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU) {
-							continue;
+
+				if (!singleHoldActive) {
+					USHORT pressedKey = 0;
+					if (ImGui::IsMouseClicked(2)) pressedKey = VK_MBUTTON;
+					else if (ImGui::IsMouseClicked(3)) pressedKey = VK_XBUTTON1;
+					else if (ImGui::IsMouseClicked(4)) pressedKey = VK_XBUTTON2;
+					else {
+						for (int i = 1; i < 256; i++) {
+							if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
+								i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU)
+								continue;
+							if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
+							if (ImGui::IsKeyPressed((ImGuiKey)i)) { pressedKey = (USHORT)i; break; }
 						}
-						if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
-		
-						if (ImGui::IsKeyPressed((ImGuiKey)i)) {
-							capturedVKey = (USHORT)i;
-							capturedCtrl  = ImGui::GetIO().KeyCtrl;
+					}
+					if (pressedKey != 0) {
+						singleHoldKey = pressedKey;
+						singleHoldStartTime = std::chrono::steady_clock::now();
+						singleHoldActive = true;
+					}
+				}
+
+				if (singleHoldActive) {
+					if (!RawInput::IsKeyHeldReal(singleHoldKey)) {
+						singleHoldActive = false;
+						singleHoldKey = 0;
+						LogActivity("Single-key capture cancelled - key was released before the hold completed");
+					} else {
+						double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - singleHoldStartTime).count();
+						if (heldSeconds >= kComboHoldSeconds) {
+							capturedVKey = singleHoldKey;
+							capturedCtrl = ImGui::GetIO().KeyCtrl;
 							capturedShift = ImGui::GetIO().KeyShift;
-							capturedAlt   = ImGui::GetIO().KeyAlt;
-							break;
+							capturedAlt = ImGui::GetIO().KeyAlt;
+							singleHoldActive = false;
+							singleHoldKey = 0;
+							LogActivity("Single key captured: " + NameForVKey(capturedVKey));
 						}
 					}
 				}
@@ -1127,15 +1154,35 @@ namespace RadarKeys {
 			float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 		
 			if (capturedVKey == 0) {
-				float startVerticalY = lowerBoxTopY + ((lowerBoxRemainingHeight - (ImGui::GetTextLineHeightWithSpacing() * 2.0f)) * 0.5f);
-				ImGui::SetNextItemOpen(true); 
+				const bool showingHold = singleHoldActive && singleHoldKey != 0;
+				float lineHeight = ImGui::GetTextLineHeight();
+				float lineSpacing = ImGui::GetStyle().ItemSpacing.y;
+				float progressHeight = showingHold ? 8.0f : 0.0f;
+				float progressGap = showingHold ? lineSpacing : 0.0f;
+				float blockHeight = lineHeight * 2.0f + lineSpacing + progressGap + progressHeight;
+				float startVerticalY = lowerBoxTopY + ((lowerBoxRemainingHeight - blockHeight) * 0.5f);
 				ImGui::SetCursorPosY(startVerticalY);
-				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("PRESS").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), " PRESS");
-				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize("KEY...").x) * 0.5f); ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "  KEY..");
+
+				std::string holdName = showingHold ? NameForVKey(singleHoldKey) : "";
+				const char* line1 = showingHold ? holdName.c_str() : "PRESS";
+				const char* line2 = showingHold ? "HOLD" : "KEY...";
+				float w1 = ImGui::CalcTextSize(line1).x;
+				float w2 = ImGui::CalcTextSize(line2).x;
+				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - w1) * 0.5f));
+				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line1);
+				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - w2) * 0.5f));
+				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line2);
+				if (showingHold) {
+					double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - singleHoldStartTime).count();
+					float progress = (float)(std::min)(heldSeconds / kComboHoldSeconds, 1.0);
+					ImGui::Spacing();
+					ImGui::ProgressBar(progress, ImVec2(availWidth - 4.0f, 8.0f), "");
+				}
 			} else {
 				std::string keyName = NameForVKey(capturedVKey);
 				ImGui::SetCursorPosY(lowerBoxTopY + ((lowerBoxRemainingHeight - ImGui::GetTextLineHeight()) * 0.5f));
-				ImGui::SetCursorPosX((availWidth - ImGui::CalcTextSize(keyName.c_str()).x) * 0.5f); ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s", keyName.c_str());
+				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(keyName.c_str()).x) * 0.5f));
+				ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s", keyName.c_str());
 			}
 			ImGui::EndChild(); ImGui::SameLine();
 		
