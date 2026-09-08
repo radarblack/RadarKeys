@@ -1165,7 +1165,7 @@ namespace RadarKeys {
 				float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 
 				if (capturedComboKeys.empty() && !comboHoldActive) {
-					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "HOLD", "2-3 KEYS");
+					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "  HOLD", "  2-3 KEYS");
 				} else {
 					bool isFinal = !capturedComboKeys.empty();
 					const std::vector<USHORT>& shownKeys = isFinal ? capturedComboKeys : comboHoldKeys;
