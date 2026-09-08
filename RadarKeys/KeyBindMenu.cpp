@@ -25,6 +25,9 @@ namespace RadarKeys {
 	bool showCapturePrompt = false; 
 	namespace KeyBindMenu {
 		std::vector<KeyBind> bindings;
+		static float capturedHoldSeconds = 0.0f;
+		static bool capturedInstantMode = false;
+		static int capturedInstantTriggerType = 0;
 		static bool isAssigningMenuToggleKey = false; 
 		static bool isAssigningModKey = false;
 		static bool requestCaptureFocus = false;
@@ -347,12 +350,143 @@ namespace RadarKeys {
 			return vKey == VK_F2 || vKey == VK_F3 || vKey == VK_ESCAPE || vKey == menuToggleVKey;
 		}
 
-		bool IsComboAvailable(USHORT vKey, bool needCtrl, bool needShift, bool needAlt, float holdSeconds) {
-			if (IsReservedVKey(vKey)) return false;
-			for (const auto& bind : bindings) {
-				if (bind.vKey == vKey && bind.needCtrl == needCtrl && bind.needShift == needShift && bind.needAlt == needAlt) {
-					if (bind.holdSeconds == holdSeconds || ((holdSeconds > 0.0f) == (bind.holdSeconds > 0.0f))) return false;
+		enum TriggerMask : unsigned {
+			Trigger_None     = 0,
+			Trigger_OnPress  = 1u << 0,
+			Trigger_OnRelease= 1u << 1,
+			Trigger_LongPress= 1u << 2,
+			Trigger_Repeat   = 1u << 3
+		};
+
+		unsigned ManualTriggerMask(const KeyBind& bind) {
+			unsigned mask = Trigger_None;
+			if (bind.holdSeconds > 0.0f) {
+				mask |= Trigger_LongPress;
+				if (bind.isInstant && bind.instantTriggerType == 1) mask |= Trigger_OnRelease;
+				else if (bind.isInstant && bind.instantTriggerType == 0) mask |= Trigger_OnRelease;
+				if (bind.isInstant && bind.instantTriggerType == 2) mask |= Trigger_Repeat;
+			} else if (bind.isInstant) {
+				switch (bind.instantTriggerType) {
+				case 0: mask |= Trigger_OnPress; break;
+				case 1: mask |= Trigger_OnRelease; break;
+				case 2: mask |= Trigger_Repeat; break;
+				default: mask |= Trigger_OnRelease; break;
 				}
+			} else {
+				mask |= Trigger_OnRelease;
+			}
+			return mask;
+		}
+
+		unsigned ModTriggerMask(const LuaKeyState::TrackedKeyInfo& info) {
+			unsigned mask = Trigger_None;
+			if (info.usesOnPress) mask |= Trigger_OnPress;
+			if (info.usesOnRelease) mask |= Trigger_OnRelease;
+			if (info.usesHoldTime) mask |= Trigger_LongPress;
+			if (info.usesRepeat) mask |= Trigger_Repeat;
+			return mask;
+		}
+
+		unsigned ModComboTriggerMask(const LuaKeyState::TrackedComboKeyInfo& info) {
+			unsigned mask = Trigger_None;
+			if (info.usesOnPress) mask |= Trigger_OnPress;
+			if (info.usesOnRelease) mask |= Trigger_OnRelease;
+			if (info.usesHoldTime) mask |= Trigger_LongPress;
+			if (info.usesRepeat) mask |= Trigger_Repeat;
+			return mask;
+		}
+
+		unsigned ManualCaptureTriggerMask() {
+			KeyBind capture{};
+			capture.holdSeconds = capturedHoldSeconds;
+			capture.isInstant = capturedInstantMode;
+			capture.instantTriggerType = capturedInstantTriggerType;
+			return ManualTriggerMask(capture);
+		}
+
+		bool IsSingleTriggerConflict(unsigned manualMask, const LuaKeyState::TrackedKeyInfo& info) {
+			unsigned modMask = ModTriggerMask(info);
+			return modMask != Trigger_None && (manualMask & modMask) != 0;
+		}
+
+		bool IsComboTriggerConflict(unsigned manualMask, const LuaKeyState::TrackedComboKeyInfo& info) {
+			unsigned modMask = ModComboTriggerMask(info);
+			return modMask != Trigger_None && (manualMask & modMask) != 0;
+		}
+
+		unsigned GetModSingleTriggerMask(const std::string& scriptName, const std::string& functionName) {
+			unsigned mask = Trigger_None;
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (info.scriptName != scriptName || info.functionName != functionName) continue;
+				mask |= ModTriggerMask(info);
+			}
+			return mask;
+		}
+
+		unsigned GetModComboTriggerMask(const std::string& scriptName, const std::string& functionName) {
+			unsigned mask = Trigger_None;
+			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (info.scriptName != scriptName || info.functionName != functionName) continue;
+				mask |= ModComboTriggerMask(info);
+			}
+			return mask;
+		}
+
+		bool IsModSingleAssignmentAvailable(USHORT vKey, const std::string& scriptName, const std::string& functionName) {
+			if (IsReservedVKey(vKey)) return false;
+			unsigned modMask = GetModSingleTriggerMask(scriptName, functionName);
+			if (modMask == Trigger_None) return true;
+
+			for (const auto& bind : bindings) {
+				if (bind.IsCombo() || bind.vKey != vKey) continue;
+				if ((ManualTriggerMask(bind) & modMask) != 0) return false;
+			}
+
+			for (const auto& other : LuaKeyState::GetTrackedKeyInfo()) {
+				if (!other.hasDescription || other.vKey != vKey) continue;
+				if (other.scriptName == scriptName && other.functionName == functionName) continue;
+				if ((modMask & ModTriggerMask(other)) != 0) return false;
+			}
+			return true;
+		}
+
+		bool IsModComboAssignmentAvailable(const std::vector<USHORT>& comboKeys, const std::string& scriptName, const std::string& functionName) {
+			for (USHORT k : comboKeys) {
+				if (IsReservedVKey(k)) return false;
+			}
+			unsigned modMask = GetModComboTriggerMask(scriptName, functionName);
+			if (modMask == Trigger_None) return true;
+
+			for (int i = 0; i < (int)bindings.size(); ++i) {
+				const KeyBind& bind = bindings[i];
+				if (!bind.IsCombo() || !VectorsEqualUnordered(bind.comboKeys, comboKeys)) continue;
+				if ((ManualTriggerMask(bind) & modMask) != 0) return false;
+			}
+
+			for (const auto& other : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (!VectorsEqualUnordered(other.activeKeys, comboKeys)) continue;
+				if (other.scriptName == scriptName && other.functionName == functionName) continue;
+				unsigned otherMask = ModComboTriggerMask(other);
+				if ((modMask & otherMask) != 0) return false;
+			}
+			return true;
+		}
+
+		bool IsComboAvailable(USHORT vKey, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, unsigned manualMask, int editingIndex = -1) {
+			if (IsReservedVKey(vKey)) return false;
+			for (int i = 0; i < (int)bindings.size(); ++i) {
+				if (i == editingIndex) continue;
+				const auto& bind = bindings[i];
+				if (bind.IsCombo()) continue;
+				if (bind.vKey == vKey && bind.needCtrl == needCtrl && bind.needShift == needShift && bind.needAlt == needAlt) {
+					if (bind.holdSeconds > 0.0f && holdSeconds > 0.0f) return false;
+					if (bind.holdSeconds <= 0.0f && holdSeconds <= 0.0f) return false;
+				}
+			}
+
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (!info.hasDescription || info.vKey != vKey) continue;
+				if (IsSingleTriggerConflict(manualMask, info)) return false;
 			}
 			return true;
 		}
@@ -369,25 +503,26 @@ namespace RadarKeys {
 				if (b.IsCombo() && VectorsEqualUnordered(b.comboKeys, comboKeys)) return false;
 			}
 
+			unsigned manualMask = ManualCaptureTriggerMask();
 			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
 				if (!ignoredScriptName.empty() &&
 					info.scriptName == ignoredScriptName &&
 					info.functionName == ignoredFunctionName) {
 					continue;
 				}
-				if (VectorsEqualUnordered(info.activeKeys, comboKeys)) return false;
+				if (VectorsEqualUnordered(info.activeKeys, comboKeys) &&
+					IsComboTriggerConflict(manualMask, info)) return false;
 			}
 
 			return true;
 		}
 
-		bool IsComboConflictedWithBindings(const std::vector<USHORT>& comboKeys, int ignoredBindingIndex = -1) {
+		bool IsComboConflictedWithBindings(const std::vector<USHORT>& comboKeys, int ignoredBindingIndex = -1, unsigned triggerMask = 0) {
 			for (int i = 0; i < (int)bindings.size(); ++i) {
 				if (i == ignoredBindingIndex) continue;
 				const KeyBind& bind = bindings[i];
-				if (bind.IsCombo() && VectorsEqualUnordered(bind.comboKeys, comboKeys)) {
-					return true;
-				}
+				if (!bind.IsCombo() || !VectorsEqualUnordered(bind.comboKeys, comboKeys)) continue;
+				if (triggerMask == 0 || (ManualTriggerMask(bind) & triggerMask) != 0) return true;
 			}
 			return false;
 		}
@@ -483,18 +618,21 @@ namespace RadarKeys {
 		}
 
 		std::vector<USHORT> ComputeConflictedVKeys() {
-			std::unordered_set<USHORT> manualVKeys;
-			for (const auto& bind : bindings) {
-				manualVKeys.insert(bind.vKey);
-			}
-
 			std::unordered_set<USHORT> conflicted;
 			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
 				if (info.isConflicted) {
 					conflicted.insert(info.vKey);
 				}
-				if (info.hasDescription && manualVKeys.count(ResolveDisplayVKey(info)) > 0) {
-					conflicted.insert(ResolveDisplayVKey(info));
+
+				if (!info.hasDescription) continue;
+				USHORT activeVKey = ResolveDisplayVKey(info);
+				for (const auto& bind : bindings) {
+					if (bind.IsCombo()) continue;
+					if (bind.vKey != activeVKey) continue;
+					if (IsSingleTriggerConflict(ManualTriggerMask(bind), info)) {
+						conflicted.insert(activeVKey);
+						break;
+					}
 				}
 			}
 			return std::vector<USHORT>(conflicted.begin(), conflicted.end());
@@ -1044,7 +1182,6 @@ namespace RadarKeys {
 		static bool capturedCtrl = false;
 		static bool capturedShift = false;
 		static bool capturedAlt = false;
-		static float capturedHoldSeconds = 0.0f;
 		static char capturedScriptPathOnBuffer[512] = "";
 		static char capturedScriptPathOffBuffer[512] = "";
 		static char capturedFuncOnBuffer[128] = "";
@@ -1052,8 +1189,6 @@ namespace RadarKeys {
 		static char capturedFuncTapBuffer[128] = "";
 		static bool capturedToggleMode = false;
 		static bool capturedLongPressMode = false;
-		static bool capturedInstantMode = false;
-		static int capturedInstantTriggerType = 0;
 		static float capturedRepeatAccelMult = 1.0f;
 		static bool capturedHasFuncOn = false;
 		static bool capturedHasFuncOff = false;
@@ -1199,7 +1334,7 @@ namespace RadarKeys {
 				result.breakdownLines.push_back(triggerLabel + " -> " + row.scriptName + " [" + row.functionName + "]");
 			}
 
-			if (bestInstantPriority >= 1) {
+			if (bestInstantPriority >= 0) {
 				result.anyInstant = true;
 				result.instantType = bestInstantPriority;
 			}
@@ -1208,6 +1343,7 @@ namespace RadarKeys {
 
 		ModKeyReadOnlyInfo ComputeComboModKeyReadOnlyInfo(const std::string& scriptName, const std::string& functionName) {
 			ModKeyReadOnlyInfo result;
+			int bestInstantPriority = -1;
 			for (const auto& row : LuaKeyState::GetTrackedComboKeyInfo()) {
 				if (row.scriptName != scriptName || row.functionName != functionName) {
 					continue;
@@ -1216,8 +1352,29 @@ namespace RadarKeys {
 				if (row.hasToggleState) {
 					result.anyToggle = true;
 				}
-				result.breakdownLines.push_back("Multi-key combo -> " + row.scriptName + " [" + row.functionName + "]");
+				std::string triggerLabel = "Multi-key combo";
+				if (row.usesHoldTime) {
+					result.anyLongPress = true;
+					triggerLabel += " / Long Press";
+				}
+				if (row.usesRepeat) {
+					bestInstantPriority = (std::max)(bestInstantPriority, 2);
+					triggerLabel += " / Repeat";
+				}
+				if (row.usesOnRelease) {
+					bestInstantPriority = (std::max)(bestInstantPriority, 1);
+					triggerLabel += " / On Release";
+				}
+				if (row.usesOnPress) {
+					bestInstantPriority = (std::max)(bestInstantPriority, 0);
+					triggerLabel += " / On Press";
+				}
+				result.breakdownLines.push_back(triggerLabel + " -> " + row.scriptName + " [" + row.functionName + "]");
 				break;
+			}
+			if (bestInstantPriority >= 0) {
+				result.anyInstant = true;
+				result.instantType = bestInstantPriority;
 			}
 			return result;
 		}
@@ -1471,9 +1628,15 @@ namespace RadarKeys {
 						if (capturedRepeatAccelMult < kMinRepeatAccelMult) capturedRepeatAccelMult = kMinRepeatAccelMult;
 						if (ImGui::IsItemHovered()) {
 							ImGui::SetTooltip(
-								"Repeat interval Multiplier.\n"
-								"? > 1.00x = means the repeat trigger fires faster\n"
-								"? < 1.00x = means the repeat trigger fires slower"
+								"Acceleration multiplier for the Repeat interval.\n"
+								"Each time the repeat fires, the wait before the next fire\n"
+								"is divided by this amount - values above 1.00x make it fire\n"
+								"progressively faster the longer the key is held (acceleration);\n"
+								"values below 1.00x make it fire progressively slower instead\n"
+								"(deceleration).\n"
+								"1.00x = constant rate (no acceleration or deceleration).\n"
+								"e.g. 1.20x ramps up gradually; 2.00x ramps up quickly;\n"
+								"0.80x eases off gradually; 0.20x slows down quickly."
 							);
 						}
 					}
@@ -1488,40 +1651,36 @@ namespace RadarKeys {
 			bool comboAvailable = false;
 			if (captureIsCombo) {
 				if (!capturedComboKeys.empty()) {
-					comboAvailable = IsMultiKeyComboAvailable(
-						capturedComboKeys,
+					if (isAssigningModKey) {
+						comboAvailable = IsModComboAssignmentAvailable(
+							capturedComboKeys, modKeyCaptureScriptName, modKeyCaptureFunctionName);
+					} else {
+						comboAvailable = IsMultiKeyComboAvailable(
+							capturedComboKeys,
 						editingBindingIndex,
-						isAssigningModKey ? modKeyCaptureScriptName : "",
-						isAssigningModKey ? modKeyCaptureFunctionName : "");
+						"", "");
+					}
 				}
 			}
 			else if (capturedVKey != 0) {
 				if (isAssigningModKey) {
-					comboAvailable = true;
+					comboAvailable = IsModSingleAssignmentAvailable(
+						capturedVKey, modKeyCaptureScriptName, modKeyCaptureFunctionName);
 				}
 				else if (isAssigningMenuToggleKey) {
 					comboAvailable = !(capturedVKey == VK_F2 || capturedVKey == VK_F3 || capturedVKey == VK_ESCAPE);
 				} 
-				else if (editingBindingIndex != -1) {
+				else {
 					static int lastCheckedIndex = -1;
-					if (lastCheckedIndex != editingBindingIndex) {
+					if (editingBindingIndex != -1 && lastCheckedIndex != editingBindingIndex) {
 						capturedHasFuncOn = !bindings[editingBindingIndex].functionOn.empty() || !bindings[editingBindingIndex].functionTap.empty();
 						capturedHasFuncOff = !bindings[editingBindingIndex].functionOff.empty();
 						lastCheckedIndex = editingBindingIndex;
 					}
 
-					comboAvailable = !IsReservedVKey(capturedVKey);
-					if (comboAvailable) {
-						for (int i = 0; i < (int)bindings.size(); i++) {
-							if (i == editingBindingIndex) continue;
-							const auto& b = bindings[i];
-							if (b.vKey == capturedVKey && b.needCtrl == capturedCtrl && b.needShift == capturedShift && b.needAlt == capturedAlt) {
-								if (b.holdSeconds == capturedHoldSeconds || ((capturedHoldSeconds > 0.0f) == (b.holdSeconds > 0.0f))) { comboAvailable = false; break; }
-							}
-						}
-					}
-				} else {
-					comboAvailable = IsComboAvailable(capturedVKey, capturedCtrl, capturedShift, capturedAlt, capturedHoldSeconds);
+					comboAvailable = IsComboAvailable(
+						capturedVKey, capturedCtrl, capturedShift, capturedAlt,
+						capturedHoldSeconds, ManualCaptureTriggerMask(), editingBindingIndex);
 				}
 			}
 			ImGui::Spacing();
@@ -1677,9 +1836,6 @@ namespace RadarKeys {
 			
 			bool captureReady = captureIsCombo ? !capturedComboKeys.empty() : (capturedVKey != 0);
 			bool assignmentIsValid = comboAvailable;
-			if (isAssigningModKey && !captureIsCombo) {
-				assignmentIsValid = true;
-			}
 			bool canFinalize = captureReady && (assignmentIsValid && (isAssigningMenuToggleKey || isAssigningModKey || (pathsValid && functionsValid)));
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float buttonHeight = 30.0f;
@@ -1942,11 +2098,14 @@ namespace RadarKeys {
 				}
 				for (size_t i = 0; i < trackedCombos.size(); ++i) {
 					LuaKeyState::TrackedComboKeyInfo& cinfo = trackedCombos[i];
-					bool conflicted = IsComboConflictedWithBindings(cinfo.activeKeys);
+					unsigned cinfoMask = ModComboTriggerMask(cinfo);
+					bool conflicted = IsComboConflictedWithBindings(cinfo.activeKeys, -1, cinfoMask);
 					if (!conflicted) {
 						for (size_t j = 0; j < trackedCombos.size(); ++j) {
 							if (i == j) continue;
-							if (VectorsEqualUnordered(cinfo.activeKeys, trackedCombos[j].activeKeys)) {
+							if (!VectorsEqualUnordered(cinfo.activeKeys, trackedCombos[j].activeKeys)) continue;
+							unsigned otherMask = ModComboTriggerMask(trackedCombos[j]);
+							if (cinfoMask != 0 && otherMask != 0 && (cinfoMask & otherMask) != 0) {
 								conflicted = true;
 								break;
 							}
@@ -1964,10 +2123,11 @@ namespace RadarKeys {
 					row.isManual = true;
 					row.bindIndex = i;
 					if (bindings[i].IsCombo()) {
-						row.conflicted = IsComboConflictedWithBindings(bindings[i].comboKeys, i);
+						unsigned manualMask = ManualTriggerMask(bindings[i]);
+						row.conflicted = IsComboConflictedWithBindings(bindings[i].comboKeys, i, manualMask);
 						if (!row.conflicted) {
 							for (const auto& cinfo : trackedCombos) {
-								if (VectorsEqualUnordered(bindings[i].comboKeys, cinfo.activeKeys)) {
+								if (VectorsEqualUnordered(bindings[i].comboKeys, cinfo.activeKeys) && IsComboTriggerConflict(manualMask, cinfo)) {
 									row.conflicted = true;
 									break;
 								}
