@@ -614,11 +614,35 @@ namespace RadarKeys {
 				}
 				if (allHeld) return true;
 			}
+
+			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (!info.isPressed) continue;
+				for (USHORT k : info.activeKeys) {
+					if (k == vKey) return true;
+				}
+			}
+
 			return false;
 		}
 
 		std::vector<USHORT> ComputeConflictedVKeys() {
 			std::unordered_set<USHORT> conflicted;
+
+			for (const auto& bind : bindings) {
+				if (!bind.IsCombo()) continue;
+				bool allHeld = true;
+				for (USHORT k : bind.comboKeys) {
+					if (!RawInput::IsKeyHeldReal(k)) { allHeld = false; break; }
+				}
+				if (!allHeld) continue;
+				for (USHORT k : bind.comboKeys) conflicted.insert(k);
+			}
+
+			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (!info.isPressed) continue;
+				for (USHORT k : info.activeKeys) conflicted.insert(k);
+			}
+
 			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
 				if (info.isConflicted) {
 					conflicted.insert(info.vKey);
