@@ -15,6 +15,8 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <cctype>
+#include <sstream>
 #include <deque>
 #include <algorithm>
 #include <unordered_set>
@@ -245,6 +247,24 @@ namespace RadarKeys {
 			return -1;
 		}
 
+		std::vector<USHORT> ParseComboKeyNames(const std::string& raw) {
+			std::vector<USHORT> result;
+			std::stringstream ss(raw);
+			std::string part;
+			while (std::getline(ss, part, '+')) {
+				while (!part.empty() && std::isspace((unsigned char)part.front())) part.erase(part.begin());
+				while (!part.empty() && std::isspace((unsigned char)part.back())) part.pop_back();
+				int vKey = VKeyForName(part);
+				if (vKey < 0) {
+					result.clear();
+					return result;
+				}
+				result.push_back((USHORT)vKey);
+			}
+			if (result.size() < 2 || result.size() > 3) result.clear();
+			return result;
+		}
+
 		std::string ComboKeysDisplayName(const std::vector<USHORT>& keys) {
 			std::string result;
 			for (size_t i = 0; i < keys.size(); i++) {
@@ -343,11 +363,15 @@ namespace RadarKeys {
 			bool tapFired = false;
 			std::chrono::steady_clock::time_point pressTime;
 			std::chrono::steady_clock::time_point lastRepeatTime;
+			double repeatSpeedMult = 1.0;
 		};
 		std::map<USHORT, PendingPress> pendingPresses;
 
 		constexpr double kRepeatIntervalSeconds = 0.3;
 		constexpr double kNearMissHoldFraction = 0.8;
+		constexpr double kMaxRepeatSpeedMult = 20.0;
+		constexpr float kMinRepeatAccelMult = 0.1f;
+		constexpr double kMinRepeatSpeedMult = 0.05;
 		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld, bool preferHold) {
 			const KeyBind* plainFallbackMatch = nullptr;
 
@@ -514,11 +538,13 @@ namespace RadarKeys {
 				}
 				if (repeatBind && !suppressedByCombo) {
 					double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.lastRepeatTime).count();
-					if (sinceLastRepeat >= kRepeatIntervalSeconds) {
+					double effectiveInterval = kRepeatIntervalSeconds / pending.repeatSpeedMult;
+					if (sinceLastRepeat >= effectiveInterval) {
 						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " repeat-fired");
 						LogActivity(NameForVKey(vKey) + " repeat-fired");
 						FireBinding(*repeatBind);
 						pending.lastRepeatTime = std::chrono::steady_clock::now();
+						pending.repeatSpeedMult = (std::clamp)(pending.repeatSpeedMult * (double)repeatBind->repeatAccelMult, kMinRepeatSpeedMult, kMaxRepeatSpeedMult);
 					}
 				}
 
@@ -560,6 +586,7 @@ namespace RadarKeys {
 					bind.comboTapFired = false;
 					bind.comboPressTime = std::chrono::steady_clock::now();
 					bind.comboLastRepeatTime = bind.comboPressTime;
+					bind.runtimeRepeatSpeedMult = 1.0;
 
 					std::string label = CombinedDisplayName(bind);
 					DebuggerMenu::LogButtonPress(label + " pressed");
@@ -587,11 +614,13 @@ namespace RadarKeys {
 					bool repeatEligible = bind.isInstant && bind.instantTriggerType == 2 && (hasHold ? bind.comboHoldFired : true);
 					if (repeatEligible) {
 						double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - bind.comboLastRepeatTime).count();
-						if (sinceLastRepeat >= kRepeatIntervalSeconds) {
+						double effectiveInterval = kRepeatIntervalSeconds / bind.runtimeRepeatSpeedMult;
+						if (sinceLastRepeat >= effectiveInterval) {
 							DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " repeat-fired");
 							LogActivity(CombinedDisplayName(bind) + " repeat-fired");
 							FireBinding(bind);
 							bind.comboLastRepeatTime = std::chrono::steady_clock::now();
+							bind.runtimeRepeatSpeedMult = (std::clamp)(bind.runtimeRepeatSpeedMult * (double)bind.repeatAccelMult, kMinRepeatSpeedMult, kMaxRepeatSpeedMult);
 						}
 					}
 				}
@@ -646,6 +675,10 @@ namespace RadarKeys {
 				if (!genericOn.empty() && genericOn.find(gameDirStr) == 0) {
 					genericOn.erase(0, gameDirStr.length());
 				}
+				std::string genericOff = b.scriptPathOff.empty() ? "" : std::filesystem::path(b.scriptPathOff).generic_string();
+				if (!genericOff.empty() && genericOff.find(gameDirStr) == 0) {
+					genericOff.erase(0, gameDirStr.length());
+				}
 
 				if (b.IsCombo()) {
 					std::string keysJoined;
@@ -653,13 +686,14 @@ namespace RadarKeys {
 						if (i) keysJoined += ",";
 						keysJoined += NameForVKey(b.comboKeys[i]);
 					}
-					outFile << "COMBO|" << keysJoined << "|" << genericOn << "|" << b.functionTap << "\n";
+					outFile << "COMBO2|" << keysJoined << "|" << b.holdSeconds << "|";
+					if (b.isToggle) {
+						outFile << "1|" << genericOn << "|" << genericOff << "|" << b.functionOn << "|" << b.functionOff;
+					} else {
+						outFile << "0|" << genericOn << "|" << b.functionTap;
+					}
+					outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "|" << b.repeatAccelMult << "\n";
 					continue;
-				}
-
-				std::string genericOff = b.scriptPathOff.empty() ? "" : std::filesystem::path(b.scriptPathOff).generic_string();
-				if (!genericOff.empty() && genericOff.find(gameDirStr) == 0) {
-					genericOff.erase(0, gameDirStr.length());
 				}
 
 				outFile << "BIND|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|";
@@ -668,7 +702,7 @@ namespace RadarKeys {
 				} else {
 					outFile << "0|" << genericOn << "|" << b.functionTap;
 				}
-				outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "\n";
+				outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "|" << b.repeatAccelMult << "\n";
 			}
 			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
 				outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "\n";
@@ -714,6 +748,72 @@ namespace RadarKeys {
 					if (!entry.scriptName.empty() && !entry.functionName.empty() && !entry.keyName.empty()) {
 						modKeyEntries.push_back(std::move(entry));
 					}
+				}
+				else if (parts[0] == "COMBO2" && parts.size() >= 6) {
+					std::vector<std::string> keyNames = split(trim(parts[1]), ",");
+					std::vector<USHORT> comboKeys;
+					bool allValid = keyNames.size() >= 2 && keyNames.size() <= 3;
+					for (std::string& kn : keyNames) {
+						int vk = VKeyForName(trim(kn));
+						if (vk == -1) { allValid = false; break; }
+						comboKeys.push_back((USHORT)vk);
+					}
+					if (!allValid) {
+						spdlog::warn("KeyBindMenu::LoadBindings: skipping invalid COMBO2 line: {}", line);
+						LogActivity("Skipped invalid COMBO2 line while loading bindings: " + line, false);
+						continue;
+					}
+
+					float holdSeconds = 0.0f;
+					try { holdSeconds = std::stof(trim(parts[2])); }
+					catch (...) { holdSeconds = 0.0f; }
+
+					bool isToggle = trim(parts[3]) == "1";
+					std::string pathOn, pathOff, funcOn, funcOff, funcTap;
+					size_t instantFieldStart;
+					if (isToggle && parts.size() >= 8) {
+						pathOn = trim(parts[4]);
+						pathOff = trim(parts[5]);
+						funcOn = trim(parts[6]);
+						funcOff = trim(parts[7]);
+						instantFieldStart = 8;
+					} else if (!isToggle && parts.size() >= 6) {
+						pathOn = trim(parts[4]);
+						funcTap = trim(parts[5]);
+						instantFieldStart = 6;
+					} else {
+						spdlog::warn("KeyBindMenu::LoadBindings: skipping incomplete COMBO2 line: {}", line);
+						LogActivity("Skipped incomplete COMBO2 line while loading bindings: " + line, false);
+						continue;
+					}
+
+					bool isInstant = false;
+					int instantTriggerType = 0;
+					float repeatAccelMult = 1.0f;
+					if (parts.size() >= instantFieldStart + 2) {
+						isInstant = trim(parts[instantFieldStart]) == "1";
+						try { instantTriggerType = std::stoi(trim(parts[instantFieldStart + 1])); }
+						catch (...) { instantTriggerType = 0; }
+					}
+					if (parts.size() >= instantFieldStart + 3) {
+						try { repeatAccelMult = std::stof(trim(parts[instantFieldStart + 2])); }
+						catch (...) { repeatAccelMult = 1.0f; }
+						if (repeatAccelMult < kMinRepeatAccelMult) repeatAccelMult = kMinRepeatAccelMult;
+					}
+
+					KeyBind b{};
+					b.comboKeys = comboKeys;
+					b.isToggle = isToggle;
+					b.scriptPathOn = ResolveScriptPath(pathOn);
+					b.scriptPathOff = pathOff.empty() ? "" : ResolveScriptPath(pathOff);
+					b.holdSeconds = holdSeconds;
+					b.isInstant = isInstant;
+					b.instantTriggerType = instantTriggerType;
+					b.repeatAccelMult = repeatAccelMult;
+					b.functionOn = funcOn;
+					b.functionOff = funcOff;
+					b.functionTap = funcTap;
+					bindings.push_back(b);
 				}
 				else if (parts[0] == "COMBO" && parts.size() >= 3) {
 					std::vector<std::string> keyNames = split(trim(parts[1]), ",");
@@ -783,16 +883,23 @@ namespace RadarKeys {
 
 					bool isInstant = false;
 					int instantTriggerType = 0;
+					float repeatAccelMult = 1.0f;
 					size_t instantFieldStart = isToggle ? 11 : 9;
 					if (parts.size() >= instantFieldStart + 2) {
 						isInstant = trim(parts[instantFieldStart]) == "1";
 						try { instantTriggerType = std::stoi(trim(parts[instantFieldStart + 1])); }
 						catch (...) { instantTriggerType = 0; }
 					}
+					if (parts.size() >= instantFieldStart + 3) {
+						try { repeatAccelMult = std::stof(trim(parts[instantFieldStart + 2])); }
+						catch (...) { repeatAccelMult = 1.0f; }
+						if (repeatAccelMult < kMinRepeatAccelMult) repeatAccelMult = kMinRepeatAccelMult;
+					}
 
 					KeyBind b{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, resolvedOn, resolvedOff, false, holdSeconds };
 					b.isInstant = isInstant;
 					b.instantTriggerType = instantTriggerType;
+					b.repeatAccelMult = repeatAccelMult;
 					b.functionOn = funcOn;
 					b.functionOff = funcOff;
 					b.functionTap = funcTap;
@@ -809,10 +916,11 @@ namespace RadarKeys {
 			MarkDisplayCacheDirty();
 		}
 
-		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, bool isToggle, const std::string& pathOn, const std::string& pathOff, const std::string& funcOn, const std::string& funcOff, const std::string& funcTap, bool isInstant, int instantTriggerType) {
+		void AddBinding(USHORT vKey, const std::string& keyName, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, bool isToggle, const std::string& pathOn, const std::string& pathOff, const std::string& funcOn, const std::string& funcOff, const std::string& funcTap, bool isInstant, int instantTriggerType, float repeatAccelMult = 1.0f) {
 			KeyBind b{ vKey, needCtrl, needShift, needAlt, keyName, isToggle, pathOn, pathOff, false, holdSeconds };
 			b.isInstant = isInstant;
 			b.instantTriggerType = instantTriggerType;
+			b.repeatAccelMult = repeatAccelMult;
 			b.functionOn = funcOn;
 			b.functionOff = funcOff;
 			b.functionTap = funcTap;
@@ -825,7 +933,7 @@ namespace RadarKeys {
 			LogActivity("Bound " + CombinedDisplayName(bindings.back()) + " (toggle: " + (isToggle ? "YES" : "NO") + ")");
 		}
 
-		void AddComboBinding(const std::vector<USHORT>& comboKeys, bool isToggle, const std::string& pathOn, const std::string& pathOff, const std::string& funcOn, const std::string& funcOff, const std::string& funcTap, float holdSeconds, bool isInstant, int instantTriggerType) {
+		void AddComboBinding(const std::vector<USHORT>& comboKeys, bool isToggle, const std::string& pathOn, const std::string& pathOff, const std::string& funcOn, const std::string& funcOff, const std::string& funcTap, float holdSeconds, bool isInstant, int instantTriggerType, float repeatAccelMult = 1.0f) {
 			KeyBind b{};
 			b.comboKeys = comboKeys;
 			b.isToggle = isToggle;
@@ -834,6 +942,7 @@ namespace RadarKeys {
 			b.holdSeconds = holdSeconds;
 			b.isInstant = isInstant;
 			b.instantTriggerType = instantTriggerType;
+			b.repeatAccelMult = repeatAccelMult;
 			b.functionOn = funcOn;
 			b.functionOff = funcOff;
 			b.functionTap = funcTap;
@@ -908,6 +1017,7 @@ namespace RadarKeys {
 		static bool capturedLongPressMode = false;
 		static bool capturedInstantMode = false;
 		static int capturedInstantTriggerType = 0;
+		static float capturedRepeatAccelMult = 1.0f;
 		static bool capturedHasFuncOn = false;
 		static bool capturedHasFuncOff = false;
 		static int capturedToggleType = 0; 
@@ -1059,6 +1169,22 @@ namespace RadarKeys {
 			return result;
 		}
 
+		ModKeyReadOnlyInfo ComputeComboModKeyReadOnlyInfo(const std::string& scriptName, const std::string& functionName) {
+			ModKeyReadOnlyInfo result;
+			for (const auto& row : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (row.scriptName != scriptName || row.functionName != functionName) {
+					continue;
+				}
+				result.found = true;
+				if (row.hasToggleState) {
+					result.anyToggle = true;
+				}
+				result.breakdownLines.push_back("Multi-key combo -> " + row.scriptName + " [" + row.functionName + "]");
+				break;
+			}
+			return result;
+		}
+
 		void DrawKeyCapturePrompt() {
 			ImGui::SetNextWindowSize(ImVec2(340, 330), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 165), ImGuiCond_FirstUseEver);
@@ -1076,7 +1202,9 @@ namespace RadarKeys {
 
 			ModKeyReadOnlyInfo modKeyInfo;
 			if (isAssigningModKey) {
-				modKeyInfo = ComputeModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
+				modKeyInfo = captureIsCombo
+					? ComputeComboModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName)
+					: ComputeModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
 				capturedToggleMode = modKeyInfo.anyToggle;
 				capturedLongPressMode = modKeyInfo.anyLongPress;
 				capturedHoldSeconds = (float)modKeyInfo.longPressSeconds;
@@ -1198,6 +1326,7 @@ namespace RadarKeys {
 			    capturedToggleType = 0;
 		    capturedInstantMode = false;
 		    capturedInstantTriggerType = 0;
+		    capturedRepeatAccelMult = 1.0f;
 			    LogActivity("Keybind has been reset");
 			}
 			ImGui::EndGroup(); ImGui::SameLine(205);
@@ -1298,6 +1427,25 @@ namespace RadarKeys {
 					static const char* instantTriggerLabels[] = { "On Press", "On Release", "Repeat" };
 					ImGui::SetNextItemWidth(120);
 					ImGui::Combo("##capturedInstantTrigger", &capturedInstantTriggerType, instantTriggerLabels, IM_ARRAYSIZE(instantTriggerLabels));
+
+					if (capturedInstantTriggerType == 2) {
+						ImGui::SetNextItemWidth(55);
+						ImGui::InputFloat("##capturedRepeatAccelInput", &capturedRepeatAccelMult, 0.0f, 0.0f, "%.2fx");
+						if (capturedRepeatAccelMult < kMinRepeatAccelMult) capturedRepeatAccelMult = kMinRepeatAccelMult;
+						if (ImGui::IsItemHovered()) {
+							ImGui::SetTooltip(
+								"Acceleration multiplier for the Repeat interval.\n"
+								"Each time the repeat fires, the wait before the next fire\n"
+								"is divided by this amount - values above 1.00x make it fire\n"
+								"progressively faster the longer the key is held (acceleration);\n"
+								"values below 1.00x make it fire progressively slower instead\n"
+								"(deceleration).\n"
+								"1.00x = constant rate (no acceleration or deceleration).\n"
+								"e.g. 1.20x ramps up gradually; 2.00x ramps up quickly;\n"
+								"0.80x eases off gradually; 0.20x slows down quickly."
+							);
+						}
+					}
 				}
 
 				if (isAssigningModKey) {
@@ -1503,25 +1651,37 @@ namespace RadarKeys {
 			if (!canFinalize) ImGui::BeginDisabled();
 			if (ImGui::Button("Finalize", ImVec2(145, buttonHeight))) {
 				if (isAssigningModKey) {
-					USHORT oldVKey = 0;
-					for (const auto& row : LuaKeyState::GetTrackedKeyInfo()) {
-						if (row.scriptName == modKeyCaptureScriptName && row.functionName == modKeyCaptureFunctionName) {
-							oldVKey = row.vKey;
-							break;
-						}
-					}
+					if (captureIsCombo) {
+						std::string comboKeyName = ComboKeysDisplayName(capturedComboKeys);
+						ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, comboKeyName);
+						DebuggerMenu::LogBindEvent("Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
+						LogActivity("Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
+						MarkDisplayCacheDirty();
 
-					ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(capturedVKey));
-					DebuggerMenu::LogBindEvent("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
-					LogActivity("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
-					if (oldVKey != 0 && oldVKey != capturedVKey) {
-						LuaKeyState::ReassignBinding(oldVKey, capturedVKey, modKeyCaptureScriptName, modKeyCaptureFunctionName);
+						ResetComboCaptureState();
+						captureIsCombo = false;
 					}
-					MarkDisplayCacheDirty();
+					else {
+						USHORT oldVKey = 0;
+						for (const auto& row : LuaKeyState::GetTrackedKeyInfo()) {
+							if (row.scriptName == modKeyCaptureScriptName && row.functionName == modKeyCaptureFunctionName) {
+								oldVKey = row.vKey;
+								break;
+							}
+						}
+
+						ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(capturedVKey));
+						DebuggerMenu::LogBindEvent("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
+						LogActivity("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
+						if (oldVKey != 0 && oldVKey != capturedVKey) {
+							LuaKeyState::ReassignBinding(oldVKey, capturedVKey, modKeyCaptureScriptName, modKeyCaptureFunctionName);
+						}
+						MarkDisplayCacheDirty();
+					}
 
 					capturedVKey = 0; capturedHoldSeconds = 0.0f;
 					capturedToggleMode = capturedLongPressMode = false;
-					capturedInstantMode = false; capturedInstantTriggerType = 0;
+					capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
 					showCapturePrompt = isAssigningModKey = false;
 				}
 				else if (isAssigningMenuToggleKey) {
@@ -1532,7 +1692,7 @@ namespace RadarKeys {
 					DebuggerMenu::LogBindEvent("Menu Hotkey reassigned to: " + NameForVKey(capturedVKey));
 					LogActivity("Menu Hotkey reassigned to " + NameForVKey(capturedVKey));
 					capturedToggleMode = capturedLongPressMode = false;
-					capturedInstantMode = false; capturedInstantTriggerType = 0;
+					capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
 				} else {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 				
@@ -1557,6 +1717,7 @@ namespace RadarKeys {
 							editedBind.holdSeconds = finalHoldSeconds;
 							editedBind.isInstant = capturedInstantMode;
 							editedBind.instantTriggerType = capturedInstantTriggerType;
+							editedBind.repeatAccelMult = capturedRepeatAccelMult;
 							editedBind.functionOn = finalFuncOn;
 							editedBind.functionOff = finalFuncOff;
 							editedBind.functionTap = finalFuncTap;
@@ -1566,7 +1727,7 @@ namespace RadarKeys {
 							MarkDisplayCacheDirty();
 							LogActivity("Edited combo binding -> " + CombinedDisplayName(editedBind));
 						} else {
-							AddComboBinding(capturedComboKeys, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap, finalHoldSeconds, capturedInstantMode, capturedInstantTriggerType);
+							AddComboBinding(capturedComboKeys, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap, finalHoldSeconds, capturedInstantMode, capturedInstantTriggerType, capturedRepeatAccelMult);
 						}
 					}
 					else if (editingBindingIndex != -1) {
@@ -1574,6 +1735,7 @@ namespace RadarKeys {
 						KeyBind editedBind{ capturedVKey, capturedCtrl, capturedShift, capturedAlt, NameForVKey(capturedVKey), capturedToggleMode, finalPathOn, finalPathOff, false, finalHoldSeconds };
 						editedBind.isInstant = capturedInstantMode;
 						editedBind.instantTriggerType = capturedInstantTriggerType;
+						editedBind.repeatAccelMult = capturedRepeatAccelMult;
 						editedBind.functionOn = finalFuncOn;
 						editedBind.functionOff = finalFuncOff;
 						editedBind.functionTap = finalFuncTap;
@@ -1583,12 +1745,12 @@ namespace RadarKeys {
 						MarkDisplayCacheDirty();
 						LogActivity("Edited binding -> " + CombinedDisplayName(editedBind));
 					} else {
-						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap, capturedInstantMode, capturedInstantTriggerType);
+						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap, capturedInstantMode, capturedInstantTriggerType, capturedRepeatAccelMult);
 					}
 					capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 					capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
 					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
-					capturedInstantMode = false; capturedInstantTriggerType = 0;
+					capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
 					ResetComboCaptureState();
 					captureIsCombo = false;
 				}
@@ -1606,7 +1768,7 @@ namespace RadarKeys {
 				capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 				capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
 				capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
-				capturedInstantMode = false; capturedInstantTriggerType = 0;
+				capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
 				ResetComboCaptureState();
 				captureIsCombo = false;
 				showCapturePrompt = isAssigningMenuToggleKey = isAssigningModKey = false; editingBindingIndex = -1;
@@ -1704,7 +1866,9 @@ namespace RadarKeys {
 
 			{
 				LuaKeyState::SweepStaleDescriptions();
+				LuaKeyState::SweepStaleComboDescriptions();
 				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
+				std::vector<LuaKeyState::TrackedComboKeyInfo> trackedCombos = LuaKeyState::GetTrackedComboKeyInfo();
 				std::unordered_set<USHORT> manualBoundVKeys;
 				for (const KeyBind& bind : bindings) {
 					manualBoundVKeys.insert(bind.vKey);
@@ -1714,13 +1878,15 @@ namespace RadarKeys {
 
 				struct UnifiedRow {
 					bool isManual = false;
+					bool isComboScript = false;
 					int bindIndex = -1;
 					LuaKeyState::TrackedKeyInfo info;
+					LuaKeyState::TrackedComboKeyInfo comboInfo;
 					bool conflicted = false;
 					USHORT displayVKey = 0;
 				};
 				std::vector<UnifiedRow> rows;
-				rows.reserve(trackedKeys.size() + bindings.size());
+				rows.reserve(trackedKeys.size() + trackedCombos.size() + bindings.size());
 
 				for (LuaKeyState::TrackedKeyInfo& info : trackedKeys) {
 					if (!info.hasDescription && manualBoundVKeys.count(info.vKey) > 0) {
@@ -1733,6 +1899,21 @@ namespace RadarKeys {
 					row.info = std::move(info);
 					row.conflicted = conflicted;
 					row.displayVKey = displayVKey;
+					rows.push_back(std::move(row));
+				}
+				for (LuaKeyState::TrackedComboKeyInfo& cinfo : trackedCombos) {
+					bool conflicted = false;
+					for (const KeyBind& bind : bindings) {
+						if (bind.IsCombo() && VectorsEqualUnordered(bind.comboKeys, cinfo.activeKeys)) {
+							conflicted = true;
+							break;
+						}
+					}
+					UnifiedRow row;
+					row.isManual = false;
+					row.isComboScript = true;
+					row.comboInfo = std::move(cinfo);
+					row.conflicted = conflicted;
 					rows.push_back(std::move(row));
 				}
 				for (int i = 0; i < (int)bindings.size(); i++) {
@@ -1765,6 +1946,10 @@ namespace RadarKeys {
 					std::string detailText;
 					if (row.isManual) {
 						detailText = displayCache[row.bindIndex].detailText;
+					}
+					else if (row.isComboScript) {
+						std::string funcStr = row.comboInfo.functionName.empty() ? "" : " [" + row.comboInfo.functionName + "]";
+						detailText = "-> " + row.comboInfo.scriptName + funcStr;
 					}
 					else if (row.info.hasDescription) {
 						std::string funcStr = row.info.functionName.empty() ? "" : " [" + row.info.functionName + "]";
@@ -1814,7 +1999,7 @@ namespace RadarKeys {
 						ImGui::PopStyleVar();
 						ImGui::PopStyleColor(2);
 						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip(row.info.hasDescription
+							ImGui::SetTooltip((row.isComboScript || row.info.hasDescription)
 								? "Another binding is using this same key - it's disabled until resolved.\nClick the key name to reassign this one."
 								: "Another binding is using this same key - it's disabled until resolved.\nUnable to reassign an override - Key is not yet described through RadarKeys module.");
 						}
@@ -1844,6 +2029,7 @@ namespace RadarKeys {
 							capturedHoldSeconds = bindings[i].holdSeconds;
 							capturedInstantMode = bindings[i].isInstant;
 							capturedInstantTriggerType = bindings[i].instantTriggerType;
+							capturedRepeatAccelMult = bindings[i].repeatAccelMult;
 							capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 							capturedHasFuncOff = !bindings[i].functionOff.empty();
 
@@ -1864,6 +2050,44 @@ namespace RadarKeys {
 							LogActivity("Key Assignment Edit Prompt opened " + itemLabel);
 						}
 					}
+					else if (row.isComboScript) {
+						ImVec4 keyNameColor;
+						bool displayKeyPressed = row.comboInfo.isPressed;
+						if (row.comboInfo.hasToggleState) {
+							keyNameColor = row.comboInfo.toggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
+						}
+						else {
+							keyNameColor = displayKeyPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+						}
+
+						auto openComboReassignPrompt = [&row]() {
+							modKeyCaptureScriptName = row.comboInfo.scriptName;
+							modKeyCaptureFunctionName = row.comboInfo.functionName;
+							captureIsCombo = true;
+							ResetComboCaptureState();
+							capturedVKey = 0;
+							capturedCtrl = capturedShift = capturedAlt = false;
+							capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
+							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
+							capturedHasFuncOn = capturedHasFuncOff = false;
+							capturedToggleType = 0;
+							editingBindingIndex = -1;
+							isAssigningMenuToggleKey = false;
+							isAssigningModKey = true;
+							requestCaptureFocus = true;
+							showCapturePrompt = true;
+						};
+
+						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
+						std::string comboLabel = ComboKeysDisplayName(row.comboInfo.activeKeys);
+						if (ImGui::Button(comboLabel.c_str(), ImVec2(130, buttonHeight))) {
+							openComboReassignPrompt();
+						}
+						if (ImGui::IsItemHovered()) {
+							ImGui::SetTooltip("Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder");
+						}
+						ImGui::PopStyleColor();
+					}
 					else {
 						ImVec4 keyNameColor;
 						bool displayKeyPressed = (row.displayVKey == row.info.vKey) ? row.info.isPressed : RawInput::IsKeyHeldReal(row.displayVKey);
@@ -1877,6 +2101,7 @@ namespace RadarKeys {
 						auto openReassignPrompt = [&row]() {
 							modKeyCaptureScriptName = row.info.scriptName;
 							modKeyCaptureFunctionName = row.info.functionName;
+							captureIsCombo = false;
 							capturedVKey = 0;
 							capturedCtrl = capturedShift = capturedAlt = false;
 							capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
