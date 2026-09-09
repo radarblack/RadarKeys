@@ -24,6 +24,7 @@ namespace RadarKeys {
 			int instantTriggerType = 0;
 			float repeatAccelMult = 1.0f;
 			double runtimeRepeatSpeedMult = 1.0;
+			bool disabled = false;
 
 			// lua script pass
 			std::string functionOn;
