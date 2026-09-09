@@ -106,7 +106,7 @@ function this.Update()
         end
       else
         if scriptPath and scriptPath~="" then
-          RunDoScript("local f=loadfile([["..scriptPath.."]]); if f then f(); local fn="..tostring(functionExpr).."; if type(fn)=="function" then fn(); end end")
+          RunDoScript("local f=loadfile([["..scriptPath.."]]); if f then f(); local fn="..tostring(functionExpr).."; if type(fn)==\"function\" then fn(); end end")
         else
           InfCore.Log("RadarKeys_Core: function not found: "..tostring(functionExpr))
         end
