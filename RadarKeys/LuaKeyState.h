@@ -27,6 +27,8 @@ namespace RadarKeys {
 		void SweepStaleDescriptions();
 		void RetireIfUndescribed(USHORT vKey);
 		void SetSuppressedVKeys(const std::vector<USHORT>& vKeys);
+		void SetDisabledVKeys(const std::vector<USHORT>& vKeys);
+		void SetDisabledCombos(const std::vector<std::vector<USHORT>>& combos);
 		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName);
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
 		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
