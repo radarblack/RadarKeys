@@ -7,6 +7,7 @@
 #include "DebuggerMenu.h"
 #include "LuaKeyState.h"
 #include "ModKeyBindings.h"
+#include "ModInfoRegistry.h"
 #include <MinHook.h>
 
 #include "spdlog/spdlog.h"
@@ -72,7 +73,7 @@ namespace RadarKeys {
 	static int l_GetMenuMessages(lua_State* L) {
 		std::optional<std::string> messageOpt = LuaBridge::messagesIn.pop();
 		if (!messageOpt) {
-			LuaPushNil(L); // no messages
+			LuaPushNil(L);
 			return 1;
 		}
 		LuaCreateTable(L, 0, 0);
@@ -217,6 +218,29 @@ namespace RadarKeys {
 		return 0;
 	}
 
+	static int l_DescribeMod(lua_State* L) {
+		const char* scriptName = LuaToString(L, 1);
+		const char* modName = LuaToString(L, 2);
+		const char* modDescription = LuaToString(L, 3);
+		const char* modCreator = LuaToString(L, 4);
+		const char* modVersion = LuaToString(L, 5);
+		const char* modLink = LuaToString(L, 6);
+
+		if (!scriptName || scriptName[0] == '\0') {
+			return 0;
+		}
+
+		ModInfoRegistry::DescribeMod(
+			scriptName,
+			modName ? modName : "",
+			modDescription ? modDescription : "",
+			modCreator ? modCreator : "",
+			modVersion ? modVersion : "",
+			modLink ? modLink : ""
+		);
+		return 0;
+	}
+
 	static int l_GetModKeyBinding(lua_State* L) {
 		const char* scriptName = LuaToString(L, 1);
 		const char* functionName = LuaToString(L, 2);
@@ -259,6 +283,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "ResetComboRepeat", RadarKeys::l_ResetRepeat },
 		{ "DebugLog", RadarKeys::l_DebugLog },
 		{ "DescribeKey", RadarKeys::l_DescribeKey },
+		{ "DescribeMod", RadarKeys::l_DescribeMod },
 		{ "GetModKeyBinding", RadarKeys::l_GetModKeyBinding },
 		{ NULL, NULL }
 	};
