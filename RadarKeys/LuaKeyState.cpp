@@ -6,6 +6,7 @@
 #include <chrono>
 #include <algorithm>
 #include <map>
+#include <set>
 #include <sstream>
 
 namespace RadarKeys {
@@ -84,6 +85,23 @@ namespace RadarKeys {
 			for (USHORT vKey : vKeys) {
 				if (ValidVKey(vKey)) {
 					suppressed[vKey] = true;
+				}
+			}
+		}
+
+		bool disabledVKey[256] = {};
+
+		bool IsDisabledVKey(USHORT vKey) {
+			return ValidVKey(vKey) && disabledVKey[vKey];
+		}
+
+		void SetDisabledVKeys(const std::vector<USHORT>& vKeys) {
+			for (int i = 0; i < 256; ++i) {
+				disabledVKey[i] = false;
+			}
+			for (USHORT vKey : vKeys) {
+				if (ValidVKey(vKey)) {
+					disabledVKey[vKey] = true;
 				}
 			}
 		}
@@ -181,7 +199,7 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			states[vKey].pendingUsesOnPress = true;
-			if (IsSuppressed(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
 				return false;
 			}
 			return RawInput::IsKeyHeldReal(vKey);
@@ -212,7 +230,7 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			s.pendingUsesOnPress = true;
-			if (IsSuppressed(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
 				s.downEdgePending = false;
 				return false;
 			}
@@ -248,7 +266,7 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			s.pendingUsesOnRelease = true;
-			if (IsSuppressed(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
 				s.upEdgePending = false;
 				return false;
 			}
@@ -268,7 +286,7 @@ namespace RadarKeys {
 			double heldHoldTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			states[vKey].pendingUsesHoldTime = true;
 			states[vKey].pendingLastHoldSeconds = heldHoldTime;
-			if (IsSuppressed(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
 				return false;
 			}
 			KeyPollState& s = states[vKey];
@@ -310,7 +328,7 @@ namespace RadarKeys {
 			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			s.pendingUsesHoldTime = true;
 			s.pendingLastHoldSeconds = holdTime;
-			if (IsSuppressed(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
 				s.onHoldStartSet = false;
 				return false;
 			}
@@ -332,7 +350,7 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			s.pendingUsesRepeat = true;
-			if (IsSuppressed(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
 				s.repeatStartSet = false;
 				s.currentIncrementMult = 1.0;
 				return false;
@@ -360,7 +378,7 @@ namespace RadarKeys {
 				return 1.0;
 			}
 			vKey = ResolveActive(vKey);
-			if (IsSuppressed(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
 				return 1.0;
 			}
 			return states[vKey].currentIncrementMult;
@@ -384,6 +402,21 @@ namespace RadarKeys {
 			std::sort(keys.begin(), keys.end());
 			return std::all_of(keys.begin(), keys.end(), ValidVKey) &&
 				std::adjacent_find(keys.begin(), keys.end()) == keys.end();
+		}
+
+		std::set<std::string> disabledComboKeys;
+
+		bool IsComboDisabled(const std::vector<USHORT>& vKeys) {
+			return disabledComboKeys.count(ComboStateKey(vKeys)) > 0;
+		}
+
+		void SetDisabledCombos(const std::vector<std::vector<USHORT>>& combos) {
+			disabledComboKeys.clear();
+			for (const auto& combo : combos) {
+				if (ValidCombo(combo)) {
+					disabledComboKeys.insert(ComboStateKey(combo));
+				}
+			}
 		}
 
 		std::map<std::string, std::vector<USHORT>> comboRedirectTarget;
@@ -427,7 +460,7 @@ namespace RadarKeys {
 		bool ComboButtonDown(const std::vector<USHORT>& vKeys) {
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active)) return false;
 			for (USHORT vKey : active) EnsureTracked(vKey);
 			return RawComboAllHeld(active);
 		}
@@ -435,7 +468,7 @@ namespace RadarKeys {
 		bool OnComboButtonDown(const std::vector<USHORT>& vKeys) {
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active)) return false;
 			for (USHORT vKey : active) EnsureTracked(vKey);
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
@@ -462,7 +495,7 @@ namespace RadarKeys {
 		bool OnComboButtonUp(const std::vector<USHORT>& vKeys) {
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesOnRelease = true;
@@ -480,7 +513,7 @@ namespace RadarKeys {
 		bool ComboButtonHeld(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || !RawComboAllHeld(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active) || !RawComboAllHeld(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesHoldTime = true;
@@ -496,7 +529,7 @@ namespace RadarKeys {
 		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || !RawComboAllHeld(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active) || !RawComboAllHeld(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesHoldTime = true;
@@ -516,7 +549,7 @@ namespace RadarKeys {
 		bool OnComboButtonRepeat(const std::vector<USHORT>& vKeys) {
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || !RawComboAllHeld(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active) || !RawComboAllHeld(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesRepeat = true;
@@ -533,7 +566,7 @@ namespace RadarKeys {
 		double GetComboRepeatMult(const std::vector<USHORT>& vKeys) {
 			if (!ValidCombo(vKeys)) return 1.0;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active)) return 1.0;
+			if (!ValidCombo(active) || IsComboDisabled(active)) return 1.0;
 			auto it = comboStates.find(ComboStateKey(active));
 			return it == comboStates.end() ? 1.0 : it->second.currentIncrementMult;
 		}
