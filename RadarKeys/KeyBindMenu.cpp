@@ -550,6 +550,7 @@ namespace RadarKeys {
 
 			for (const auto& bind : bindings) {
 				if (bind.vKey != vKey) continue;
+				if (bind.disabled) continue;
 				bool categoryMatches = preferHold ? (bind.holdSeconds > 0.0f) : (bind.holdSeconds <= 0.0f);
 				if (!categoryMatches) continue;
 
@@ -661,8 +662,29 @@ namespace RadarKeys {
 			return std::vector<USHORT>(conflicted.begin(), conflicted.end());
 		}
 
+		std::vector<USHORT> ComputeDisabledModVKeys() {
+			std::vector<USHORT> result;
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (!info.hasDescription) continue;
+				if (!ModKeyBindings::IsDisabled(info.scriptName, info.functionName)) continue;
+				result.push_back(ResolveDisplayVKey(info));
+			}
+			return result;
+		}
+
+		std::vector<std::vector<USHORT>> ComputeDisabledModCombos() {
+			std::vector<std::vector<USHORT>> result;
+			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (!ModKeyBindings::IsDisabled(info.scriptName, info.functionName)) continue;
+				result.push_back(info.activeKeys);
+			}
+			return result;
+		}
+
 		void Update() {
 			LuaKeyState::SetSuppressedVKeys(ComputeConflictedVKeys());
+			LuaKeyState::SetDisabledVKeys(ComputeDisabledModVKeys());
+			LuaKeyState::SetDisabledCombos(ComputeDisabledModCombos());
 
 			if (showCapturePrompt) {
 				for (USHORT vKey : activeBindVKeys) {
@@ -682,7 +704,7 @@ namespace RadarKeys {
 
 					bool hasHoldOptionOnKey = false;
 					for (const auto& bind : bindings) {
-						if (bind.vKey == vKey && bind.holdSeconds > 0.0f) {
+						if (bind.vKey == vKey && bind.holdSeconds > 0.0f && !bind.disabled) {
 							if ((bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) ||
 								(!bind.needCtrl && !bind.needShift && !bind.needAlt)) {
 								hasHoldOptionOnKey = true;
@@ -890,7 +912,7 @@ namespace RadarKeys {
 					} else {
 						outFile << "0|" << genericOn << "|" << b.functionTap;
 					}
-					outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "|" << b.repeatAccelMult << "\n";
+					outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "|" << b.repeatAccelMult << "|" << (b.disabled ? "1" : "0") << "\n";
 					continue;
 				}
 
@@ -900,10 +922,10 @@ namespace RadarKeys {
 				} else {
 					outFile << "0|" << genericOn << "|" << b.functionTap;
 				}
-				outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "|" << b.repeatAccelMult << "\n";
+				outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "|" << b.repeatAccelMult << "|" << (b.disabled ? "1" : "0") << "\n";
 			}
 			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
-				outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "\n";
+				outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << (entry.disabled ? "1" : "0") << "\n";
 			}
 			outFile.close();
 			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), GetBindsFileName());
@@ -943,7 +965,8 @@ namespace RadarKeys {
 					entry.scriptName = trim(parts[1]);
 					entry.functionName = trim(parts[2]);
 					entry.keyName = trim(parts[3]);
-					if (!entry.scriptName.empty() && !entry.functionName.empty() && !entry.keyName.empty()) {
+					entry.disabled = parts.size() >= 5 && trim(parts[4]) == "1";
+					if (!entry.scriptName.empty() && !entry.functionName.empty() && (!entry.keyName.empty() || entry.disabled)) {
 						modKeyEntries.push_back(std::move(entry));
 					}
 				}
@@ -998,6 +1021,7 @@ namespace RadarKeys {
 						catch (...) { repeatAccelMult = 1.0f; }
 						if (repeatAccelMult < kMinRepeatAccelMult) repeatAccelMult = kMinRepeatAccelMult;
 					}
+					bool disabled = (parts.size() >= instantFieldStart + 4) && trim(parts[instantFieldStart + 3]) == "1";
 
 					KeyBind b{};
 					b.comboKeys = comboKeys;
@@ -1008,6 +1032,7 @@ namespace RadarKeys {
 					b.isInstant = isInstant;
 					b.instantTriggerType = instantTriggerType;
 					b.repeatAccelMult = repeatAccelMult;
+					b.disabled = disabled;
 					b.functionOn = funcOn;
 					b.functionOff = funcOff;
 					b.functionTap = funcTap;
@@ -1093,11 +1118,13 @@ namespace RadarKeys {
 						catch (...) { repeatAccelMult = 1.0f; }
 						if (repeatAccelMult < kMinRepeatAccelMult) repeatAccelMult = kMinRepeatAccelMult;
 					}
+					bool disabled = (parts.size() >= instantFieldStart + 4) && trim(parts[instantFieldStart + 3]) == "1";
 
 					KeyBind b{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, resolvedOn, resolvedOff, false, holdSeconds };
 					b.isInstant = isInstant;
 					b.instantTriggerType = instantTriggerType;
 					b.repeatAccelMult = repeatAccelMult;
+					b.disabled = disabled;
 					b.functionOn = funcOn;
 					b.functionOff = funcOff;
 					b.functionTap = funcTap;
@@ -1215,7 +1242,7 @@ namespace RadarKeys {
 		static float capturedRepeatAccelMult = 1.0f;
 		static bool capturedHasFuncOn = false;
 		static bool capturedHasFuncOff = false;
-		static int capturedToggleType = 0;
+		static int capturedToggleType = 0; 
 		static bool capturedInstantUserSet = false;
 		static int editingBindingIndex = -1;
 		static std::string modKeyCaptureScriptName;
@@ -1550,10 +1577,10 @@ namespace RadarKeys {
 			    capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false; 
 			    capturedHoldSeconds = 0.0f;
 			    capturedToggleType = 0;
-			    capturedInstantMode = false;
-			    capturedInstantTriggerType = 0;
-			    capturedRepeatAccelMult = 1.0f;
-			    capturedInstantUserSet = false;
+		    capturedInstantMode = false;
+		    capturedInstantTriggerType = 0;
+		    capturedRepeatAccelMult = 1.0f;
+		    capturedInstantUserSet = false;
 			    LogActivity("Keybind has been reset");
 			}
 			ImGui::EndGroup(); ImGui::SameLine(205);
@@ -1666,8 +1693,14 @@ namespace RadarKeys {
 						if (ImGui::IsItemHovered()) {
 							ImGui::SetTooltip(
 								"Acceleration multiplier for the Repeat interval.\n"
-								"? > 1.00 = Faster\n"
-								"? < 1.00 = Slower"
+								"Each time the repeat fires, the wait before the next fire\n"
+								"is divided by this amount - values above 1.00x make it fire\n"
+								"progressively faster the longer the key is held (acceleration);\n"
+								"values below 1.00x make it fire progressively slower instead\n"
+								"(deceleration).\n"
+								"1.00x = constant rate (no acceleration or deceleration).\n"
+								"e.g. 1.20x ramps up gradually; 2.00x ramps up quickly;\n"
+								"0.80x eases off gradually; 0.20x slows down quickly."
 							);
 						}
 					}
@@ -2100,6 +2133,7 @@ namespace RadarKeys {
 				ModInfoRegistry::SweepStale();
 				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
 				std::vector<LuaKeyState::TrackedComboKeyInfo> trackedCombos = LuaKeyState::GetTrackedComboKeyInfo();
+
 				std::unordered_map<std::string, ModInfoRegistry::ModInfo> modInfoByScript;
 				for (const ModInfoRegistry::ModInfo& modInfo : ModInfoRegistry::GetTrackedModInfo()) {
 					modInfoByScript[modInfo.scriptName] = modInfo;
@@ -2193,7 +2227,9 @@ namespace RadarKeys {
 					ImGui::TextDisabled("Keys described from the mod script will put the information in the list.");
 				}
 
-				int removeIndex = -1;
+				static std::unordered_map<int, std::chrono::steady_clock::time_point> disableHoldStart;
+				static int pendingRemoveConfirmIndex = -1;
+				static bool removeConfirmPopupRequested = false;
 				ImGui::BeginChild("KeyBindingsList", ImVec2(0, listRemainingHeight), true);
 				if (rows.empty()) {
 					ImGui::TextDisabled("(No Keys are assigned yet.)");
@@ -2281,7 +2317,36 @@ namespace RadarKeys {
 
 					ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
 					if (row.isManual) {
-						if (ImGui::Button("Remove", ImVec2(55, buttonHeight))) removeIndex = row.bindIndex;
+						int bindIdx = row.bindIndex;
+						bool isDisabled = bindings[bindIdx].disabled;
+						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
+						bool clicked = ImGui::Button(isDisabled ? "Enable" : "Disable", ImVec2(55, buttonHeight));
+						ImGui::PopStyleColor();
+
+						if (ImGui::IsItemActive()) {
+							auto holdIt = disableHoldStart.find(bindIdx);
+							if (holdIt == disableHoldStart.end()) {
+								disableHoldStart[bindIdx] = std::chrono::steady_clock::now();
+							} else if (pendingRemoveConfirmIndex != bindIdx) {
+								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
+								if (heldSeconds >= 3.0) {
+									pendingRemoveConfirmIndex = bindIdx;
+									removeConfirmPopupRequested = true;
+								}
+							}
+						} else {
+							disableHoldStart.erase(bindIdx);
+						}
+
+						if (clicked && pendingRemoveConfirmIndex != bindIdx) {
+							bindings[bindIdx].disabled = !bindings[bindIdx].disabled;
+							LogActivity((bindings[bindIdx].disabled ? std::string("Disabled binding: ") : std::string("Enabled binding: ")) + CombinedDisplayName(bindings[bindIdx]));
+							SaveBindings();
+						}
+
+						if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
+							ImGui::SetTooltip("Click to %s.\nHold for 3 seconds to remove.", isDisabled ? "enable" : "disable");
+						}
 					}
 					else if (row.conflicted) {
 						ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
@@ -2300,6 +2365,20 @@ namespace RadarKeys {
 							ImGui::SetTooltip((row.isComboScript || row.info.hasDescription)
 								? "Another binding is using this same key - it's disabled until resolved.\nClick the key name to reassign this one."
 								: "Another binding is using this same key - it's disabled until resolved.\nUnable to reassign an override - Key is not yet described through RadarKeys module.");
+						}
+					}
+					else if (row.isComboScript || row.info.hasDescription) {
+						const std::string& mkScriptName = row.isComboScript ? row.comboInfo.scriptName : row.info.scriptName;
+						const std::string& mkFunctionName = row.isComboScript ? row.comboInfo.functionName : row.info.functionName;
+						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName);
+						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
+						if (ImGui::Button(isDisabled ? "Enable" : "Disable", ImVec2(55, buttonHeight))) {
+							ModKeyBindings::SetDisabled(mkScriptName, mkFunctionName, !isDisabled);
+							LogActivity((!isDisabled ? std::string("Disabled mod key: ") : std::string("Enabled mod key: ")) + mkScriptName + " [" + mkFunctionName + "]");
+						}
+						ImGui::PopStyleColor();
+						if (ImGui::IsItemHovered()) {
+							ImGui::SetTooltip("Mod keys can't be removed here - only disabled.");
 						}
 					}
 					else {
@@ -2441,7 +2520,33 @@ namespace RadarKeys {
 				}
 				ImGui::EndChild();
 
-				if (removeIndex != -1) RemoveBinding(removeIndex);
+				if (removeConfirmPopupRequested) {
+					ImGui::OpenPopup("Remove Binding?");
+					removeConfirmPopupRequested = false;
+				}
+				if (ImGui::BeginPopupModal("Remove Binding?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+					bool indexValid = pendingRemoveConfirmIndex >= 0 && pendingRemoveConfirmIndex < (int)bindings.size();
+					if (indexValid) {
+						ImGui::Text("Remove \"%s\"?", CombinedDisplayName(bindings[pendingRemoveConfirmIndex]).c_str());
+						ImGui::TextDisabled("This can't be undone.");
+					} else {
+						ImGui::Text("This binding no longer exists.");
+					}
+					ImGui::Spacing();
+					if (ImGui::Button("Yes", ImVec2(80, 0))) {
+						if (indexValid) {
+							RemoveBinding(pendingRemoveConfirmIndex);
+						}
+						pendingRemoveConfirmIndex = -1;
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("No", ImVec2(80, 0))) {
+						pendingRemoveConfirmIndex = -1;
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::EndPopup();
+				}
 			}
 			float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 35.0f; 
 			ImGui::SetCursorPosY(bottomControlPanelY);
