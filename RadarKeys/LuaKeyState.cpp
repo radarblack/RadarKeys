@@ -34,6 +34,8 @@ namespace RadarKeys {
 			bool isPressed = false;
 			bool downEdgePending = false;
 			bool upEdgePending = false;
+			bool physicalDownEdgePending = false;
+			bool physicalUpEdgePending = false;
 			bool heldStartSet = false;
 			bool onHoldStartSet = false;
 			bool repeatStartSet = false;
@@ -124,6 +126,7 @@ namespace RadarKeys {
 			if (ev == RawInput::BUTTONEVENT::ONDOWN) {
 				s.isPressed = true;
 				s.downEdgePending = true;
+				s.physicalDownEdgePending = true;
 				clock::time_point now = clock::now();
 				s.heldStart = now;
 				s.heldStartSet = true;
@@ -136,6 +139,7 @@ namespace RadarKeys {
 			else if (ev == RawInput::BUTTONEVENT::ONUP) {
 				s.isPressed = false;
 				s.upEdgePending = true;
+				s.physicalUpEdgePending = true;
 				s.heldStartSet = false;
 				s.onHoldStartSet = false;
 				s.repeatStartSet = false;
@@ -190,11 +194,11 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			if (IsSuppressed(vKey)) {
-				s.downEdgePending = false;
+				s.physicalDownEdgePending = false;
 				return false;
 			}
-			if (s.downEdgePending) {
-				s.downEdgePending = false;
+			if (s.physicalDownEdgePending) {
+				s.physicalDownEdgePending = false;
 				return true;
 			}
 			return false;
@@ -226,11 +230,11 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			if (IsSuppressed(vKey)) {
-				s.upEdgePending = false;
+				s.physicalUpEdgePending = false;
 				return false;
 			}
-			if (s.upEdgePending) {
-				s.upEdgePending = false;
+			if (s.physicalUpEdgePending) {
+				s.physicalUpEdgePending = false;
 				return true;
 			}
 			return false;
