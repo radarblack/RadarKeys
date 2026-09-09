@@ -11,6 +11,7 @@
 namespace RadarKeys {
 	namespace ModKeyBindings {
 		static std::map<std::string, std::map<std::string, std::string>> overrides;
+		static std::map<std::string, std::map<std::string, bool>> disabledMap;
 		static bool loaded = false;
 		static bool TryMigrateLegacyFile() {
 			std::filesystem::path legacyPath = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radar_keybinds_mod.conf";
@@ -66,9 +67,23 @@ namespace RadarKeys {
 
 		std::vector<OverrideEntry> GetAllOverrides() {
 			std::vector<OverrideEntry> result;
+			std::map<std::string, std::map<std::string, bool>> seen;
 			for (const auto& scriptEntry : overrides) {
 				for (const auto& funcEntry : scriptEntry.second) {
-					result.push_back(OverrideEntry{ scriptEntry.first, funcEntry.first, funcEntry.second });
+					bool disabled = IsDisabled(scriptEntry.first, funcEntry.first);
+					result.push_back(OverrideEntry{ scriptEntry.first, funcEntry.first, funcEntry.second, disabled });
+					seen[scriptEntry.first][funcEntry.first] = true;
+				}
+			}
+			for (const auto& scriptEntry : disabledMap) {
+				for (const auto& funcEntry : scriptEntry.second) {
+					if (!funcEntry.second) {
+						continue;
+					}
+					if (seen[scriptEntry.first].count(funcEntry.first)) {
+						continue;
+					}
+					result.push_back(OverrideEntry{ scriptEntry.first, funcEntry.first, "", true });
 				}
 			}
 			return result;
@@ -76,11 +91,17 @@ namespace RadarKeys {
 
 		void LoadFromEntries(const std::vector<OverrideEntry>& entries) {
 			overrides.clear();
+			disabledMap.clear();
 			for (const auto& e : entries) {
-				if (e.scriptName.empty() || e.functionName.empty() || e.keyName.empty()) {
+				if (e.scriptName.empty() || e.functionName.empty()) {
 					continue;
 				}
-				overrides[e.scriptName][e.functionName] = e.keyName;
+				if (!e.keyName.empty()) {
+					overrides[e.scriptName][e.functionName] = e.keyName;
+				}
+				if (e.disabled) {
+					disabledMap[e.scriptName][e.functionName] = true;
+				}
 			}
 
 			bool migrated = false;
@@ -117,6 +138,29 @@ namespace RadarKeys {
 				Load();
 			}
 			overrides[scriptName][functionName] = keyName;
+			KeyBindMenu::SaveBindings();
+		}
+
+		bool IsDisabled(const std::string& scriptName, const std::string& functionName) {
+			if (!loaded) {
+				Load();
+			}
+			auto scriptIt = disabledMap.find(scriptName);
+			if (scriptIt == disabledMap.end()) {
+				return false;
+			}
+			auto funcIt = scriptIt->second.find(functionName);
+			if (funcIt == scriptIt->second.end()) {
+				return false;
+			}
+			return funcIt->second;
+		}
+
+		void SetDisabled(const std::string& scriptName, const std::string& functionName, bool disabled) {
+			if (!loaded) {
+				Load();
+			}
+			disabledMap[scriptName][functionName] = disabled;
 			KeyBindMenu::SaveBindings();
 		}
 	}
