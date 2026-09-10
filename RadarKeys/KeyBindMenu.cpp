@@ -545,6 +545,7 @@ namespace RadarKeys {
 		constexpr double kMaxRepeatSpeedMult = 20.0;
 		constexpr float kMinRepeatAccelMult = 0.1f;
 		constexpr double kMinRepeatSpeedMult = 0.05;
+		constexpr double kRemoveHoldSeconds = 1.5;
 		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld, bool preferHold) {
 			const KeyBind* plainFallbackMatch = nullptr;
 
@@ -1663,9 +1664,16 @@ namespace RadarKeys {
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
 				if (isAssigningModKey) ImGui::BeginDisabled();
-
+				if (capturedInstantMode) ImGui::BeginDisabled();
 				ImGui::Checkbox("Toggle", &capturedToggleMode);
+				if (capturedInstantMode && ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Uncheck Instant first to use Toggle or Long Press.");
+				}
 				ImGui::Checkbox("Long Press", &capturedLongPressMode);
+				if (capturedInstantMode && ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Uncheck Instant first to use Toggle or Long Press.");
+				}
+				if (capturedInstantMode) ImGui::EndDisabled();
 				
 				if (capturedLongPressMode) {
 				    ImGui::SetNextItemWidth(75);
@@ -1675,8 +1683,14 @@ namespace RadarKeys {
 				    if (ImGui::Button(" + ", ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
 				}
 
+				bool toggleOrLongPress = capturedToggleMode || capturedLongPressMode;
+				if (toggleOrLongPress) ImGui::BeginDisabled();
 				if (ImGui::Checkbox("Instant", &capturedInstantMode)) {
 					capturedInstantUserSet = true;
+				}
+				if (toggleOrLongPress) ImGui::EndDisabled();
+				if (toggleOrLongPress && ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Uncheck Toggle and Long Press first to use Instant.");
 				}
 
 				if (capturedInstantMode) {
@@ -1692,15 +1706,9 @@ namespace RadarKeys {
 						if (capturedRepeatAccelMult < kMinRepeatAccelMult) capturedRepeatAccelMult = kMinRepeatAccelMult;
 						if (ImGui::IsItemHovered()) {
 							ImGui::SetTooltip(
-								"Acceleration multiplier for the Repeat interval.\n"
-								"Each time the repeat fires, the wait before the next fire\n"
-								"is divided by this amount - values above 1.00x make it fire\n"
-								"progressively faster the longer the key is held (acceleration);\n"
-								"values below 1.00x make it fire progressively slower instead\n"
-								"(deceleration).\n"
-								"1.00x = constant rate (no acceleration or deceleration).\n"
-								"e.g. 1.20x ramps up gradually; 2.00x ramps up quickly;\n"
-								"0.80x eases off gradually; 0.20x slows down quickly."
+								"Acceleration multiplier for the Repeat interval:\n"
+								"? > 1.0 = Faster\n"
+								"? < 1.0 = Slower"
 							);
 						}
 					}
@@ -2133,7 +2141,6 @@ namespace RadarKeys {
 				ModInfoRegistry::SweepStale();
 				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
 				std::vector<LuaKeyState::TrackedComboKeyInfo> trackedCombos = LuaKeyState::GetTrackedComboKeyInfo();
-
 				std::unordered_map<std::string, ModInfoRegistry::ModInfo> modInfoByScript;
 				for (const ModInfoRegistry::ModInfo& modInfo : ModInfoRegistry::GetTrackedModInfo()) {
 					modInfoByScript[modInfo.scriptName] = modInfo;
@@ -2230,6 +2237,11 @@ namespace RadarKeys {
 				static std::unordered_map<int, std::chrono::steady_clock::time_point> disableHoldStart;
 				static int pendingRemoveConfirmIndex = -1;
 				static bool removeConfirmPopupRequested = false;
+				static std::unordered_map<std::string, std::chrono::steady_clock::time_point> modKeyHoldStart;
+				static std::string pendingResetScriptName;
+				static std::string pendingResetFunctionName;
+				static bool pendingResetActive = false;
+				static bool resetConfirmPopupRequested = false;
 				ImGui::BeginChild("KeyBindingsList", ImVec2(0, listRemainingHeight), true);
 				if (rows.empty()) {
 					ImGui::TextDisabled("(No Keys are assigned yet.)");
@@ -2322,14 +2334,21 @@ namespace RadarKeys {
 						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
 						bool clicked = ImGui::Button(isDisabled ? "Enable" : "Disable", ImVec2(55, buttonHeight));
 						ImGui::PopStyleColor();
-
+						ImVec2 disableBtnMin = ImGui::GetItemRectMin();
+						ImVec2 disableBtnMax = ImGui::GetItemRectMax();
+						
 						if (ImGui::IsItemActive()) {
 							auto holdIt = disableHoldStart.find(bindIdx);
 							if (holdIt == disableHoldStart.end()) {
 								disableHoldStart[bindIdx] = std::chrono::steady_clock::now();
 							} else if (pendingRemoveConfirmIndex != bindIdx) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
-								if (heldSeconds >= 3.0) {
+								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
+								float barHeight = 3.0f;
+								ImVec2 barMin(disableBtnMin.x, disableBtnMax.y - barHeight);
+								ImVec2 barMax(disableBtnMin.x + (disableBtnMax.x - disableBtnMin.x) * holdProgress, disableBtnMax.y);
+								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(255, 70, 70, 255));
+								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingRemoveConfirmIndex = bindIdx;
 									removeConfirmPopupRequested = true;
 								}
@@ -2345,7 +2364,7 @@ namespace RadarKeys {
 						}
 
 						if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
-							ImGui::SetTooltip("Click to %s.\nHold for 3 seconds to remove.", isDisabled ? "enable" : "disable");
+							ImGui::SetTooltip("Click to %s.\nHold for 1.5 seconds to remove.", isDisabled ? "enable" : "disable");
 						}
 					}
 					else if (row.conflicted) {
@@ -2370,15 +2389,46 @@ namespace RadarKeys {
 					else if (row.isComboScript || row.info.hasDescription) {
 						const std::string& mkScriptName = row.isComboScript ? row.comboInfo.scriptName : row.info.scriptName;
 						const std::string& mkFunctionName = row.isComboScript ? row.comboInfo.functionName : row.info.functionName;
+						std::string mkHoldKey = mkScriptName + "\x1f" + mkFunctionName;
+						bool hasOverride = !ModKeyBindings::GetOverride(mkScriptName, mkFunctionName).empty();
 						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName);
 						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
-						if (ImGui::Button(isDisabled ? "Enable" : "Disable", ImVec2(55, buttonHeight))) {
+						bool clicked = ImGui::Button(isDisabled ? "Enable" : "Disable", ImVec2(55, buttonHeight));
+						ImGui::PopStyleColor();
+						ImVec2 modKeyBtnMin = ImGui::GetItemRectMin();
+						ImVec2 modKeyBtnMax = ImGui::GetItemRectMax();
+						
+						bool isPendingThisKey = pendingResetActive && pendingResetScriptName == mkScriptName && pendingResetFunctionName == mkFunctionName;
+						if (hasOverride && ImGui::IsItemActive()) {
+							auto holdIt = modKeyHoldStart.find(mkHoldKey);
+							if (holdIt == modKeyHoldStart.end()) {
+								modKeyHoldStart[mkHoldKey] = std::chrono::steady_clock::now();
+							} else if (!isPendingThisKey) {
+								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
+								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
+								float barHeight = 3.0f;
+								ImVec2 barMin(modKeyBtnMin.x, modKeyBtnMax.y - barHeight);
+								ImVec2 barMax(modKeyBtnMin.x + (modKeyBtnMax.x - modKeyBtnMin.x) * holdProgress, modKeyBtnMax.y);
+								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(255, 70, 70, 255));
+								if (heldSeconds >= kRemoveHoldSeconds) {
+									pendingResetScriptName = mkScriptName;
+									pendingResetFunctionName = mkFunctionName;
+									pendingResetActive = true;
+									resetConfirmPopupRequested = true;
+								}
+							}
+						} else {
+							modKeyHoldStart.erase(mkHoldKey);
+						}
+
+						if (clicked && !isPendingThisKey) {
 							ModKeyBindings::SetDisabled(mkScriptName, mkFunctionName, !isDisabled);
 							LogActivity((!isDisabled ? std::string("Disabled mod key: ") : std::string("Enabled mod key: ")) + mkScriptName + " [" + mkFunctionName + "]");
 						}
-						ImGui::PopStyleColor();
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip("Mod keys can't be removed here - only disabled.");
+						if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
+							ImGui::SetTooltip(hasOverride
+								? "Click to %s.\nHold for 1.5 seconds to reset to the mod's default key."
+								: "Click to %s.\nMod keys can't be removed - only disabled.", isDisabled ? "enable" : "disable");
 						}
 					}
 					else {
@@ -2524,7 +2574,10 @@ namespace RadarKeys {
 					ImGui::OpenPopup("Remove Binding?");
 					removeConfirmPopupRequested = false;
 				}
-				if (ImGui::BeginPopupModal("Remove Binding?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+				ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+				bool removeConfirmOpen = ImGui::BeginPopupModal("Remove Binding?", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+				ImGui::PopStyleColor();
+				if (removeConfirmOpen) {
 					bool indexValid = pendingRemoveConfirmIndex >= 0 && pendingRemoveConfirmIndex < (int)bindings.size();
 					if (indexValid) {
 						ImGui::Text("Remove \"%s\"?", CombinedDisplayName(bindings[pendingRemoveConfirmIndex]).c_str());
@@ -2543,6 +2596,31 @@ namespace RadarKeys {
 					ImGui::SameLine();
 					if (ImGui::Button("No", ImVec2(80, 0))) {
 						pendingRemoveConfirmIndex = -1;
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::EndPopup();
+				}
+
+				if (resetConfirmPopupRequested) {
+					ImGui::OpenPopup("Reset Mod Key?");
+					resetConfirmPopupRequested = false;
+				}
+				ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+				bool resetConfirmOpen = ImGui::BeginPopupModal("Reset Mod Key?", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+				ImGui::PopStyleColor();
+				if (resetConfirmOpen) {
+					ImGui::Text("Reset \"%s [%s]\" to the mod's default key?", pendingResetScriptName.c_str(), pendingResetFunctionName.c_str());
+					ImGui::TextDisabled("This clears the reassignment made in this menu.");
+					ImGui::Spacing();
+					if (ImGui::Button("Yes", ImVec2(80, 0))) {
+						ModKeyBindings::SetOverride(pendingResetScriptName, pendingResetFunctionName, "");
+						LogActivity("Reset mod key to default: " + pendingResetScriptName + " [" + pendingResetFunctionName + "]");
+						pendingResetActive = false;
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("No", ImVec2(80, 0))) {
+						pendingResetActive = false;
 						ImGui::CloseCurrentPopup();
 					}
 					ImGui::EndPopup();
