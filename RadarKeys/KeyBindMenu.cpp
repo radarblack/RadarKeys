@@ -34,6 +34,102 @@ namespace RadarKeys {
 		static bool isAssigningModKey = false;
 		static bool requestCaptureFocus = false;
 
+		// ==================== UI Strings ====================
+		static const char* UI_FMT_SCRIPT_FUNCTION_BRACKETS = "%s [%s]";
+		static const char* UI_LBL_BIND_TYPE = "Bind Type:";
+		static const char* UI_RADIO_SINGLE_KEY = "Single Key";
+		static const char* UI_RADIO_MULTI_KEY_COMBO = "Multi-Key Combo";
+		static const char* UI_LBL_KEY = "Key";
+		static const char* UI_LBL_PRESS = "PRESS";
+		static const char* UI_LBL_HOLD = "HOLD";
+		static const char* UI_LBL_KEY_ELLIPSIS = "KEY...";
+		static const char* UI_CHK_CTRL = "Ctrl";
+		static const char* UI_CHK_SHIFT = "Shift";
+		static const char* UI_CHK_ALT = "Alt";
+		static const char* UI_BTN_RESET = "Reset";
+		static const char* UI_LBL_KEYS = "Keys";
+		static const char* UI_LBL_HOLD_INDENT = "  HOLD";
+		static const char* UI_LBL_2_3_KEYS = "  2-3 KEYS";
+		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
+		static const char* UI_CHK_TOGGLE = "Toggle";
+		static const char* UI_TIP_UNCHECK_INSTANT_FIRST = "Uncheck Instant first to use Toggle or Long Press.";
+		static const char* UI_CHK_LONG_PRESS = "Long Press";
+		static const char* UI_BTN_MINUS = " - ";
+		static const char* UI_BTN_PLUS = " + ";
+		static const char* UI_CHK_INSTANT = "Instant";
+		static const char* UI_TIP_UNCHECK_TOGGLE_FIRST = "Uncheck Toggle and Long Press first to use Instant.";
+		static const char* UI_OPT_ON_PRESS = "On Press";
+		static const char* UI_OPT_ON_RELEASE = "On Release";
+		static const char* UI_OPT_REPEAT = "Repeat";
+		static const char* UI_TIP_REPEAT_ACCEL =
+			"Acceleration multiplier for the Repeat interval.\n"
+			"Each time the repeat fires, the wait before the next fire\n"
+			"is divided by this amount - values above 1.00x make it fire\n"
+			"progressively faster the longer the key is held (acceleration);\n"
+			"values below 1.00x make it fire progressively slower instead\n"
+			"(deceleration).\n"
+			"1.00x = constant rate (no acceleration or deceleration).\n"
+			"e.g. 1.20x ramps up gradually; 2.00x ramps up quickly;\n"
+			"0.80x eases off gradually; 0.20x slows down quickly.";
+		static const char* UI_TXT_DETECTED_READ_ONLY = "Detected from the script - read only";
+		static const char* UI_LBL_READY = "[ READY ]";
+		static const char* UI_LBL_UNFIT = "[ UNFIT ]";
+		static const char* UI_TIP_COMBO_VALID = "The key combination is valid. Key assignment can finalize.";
+		static const char* UI_TIP_COMBO_CONFLICT = "Conflict! Key combination is already in use.\nThis includes bindings declared by mods and existing manual bindings.\nChange the combination before finalizing.";
+		static const char* UI_LBL_SCRIPT_MODE = "Script Mode:";
+		static const char* UI_RADIO_SINGLE = "Single";
+		static const char* UI_RADIO_DUAL = "Dual";
+		static const char* UI_TIP_TARGET_GLOBAL_FUNCS = "Target specific global functions inside the file";
+		static const char* UI_LBL_SCRIPT_PATH = "Script Path:";
+		static const char* UI_LBL_ENABLE_FUNCTION = "Enable Function:";
+		static const char* UI_LBL_DISABLE_FUNCTION = "Disable Function:";
+		static const char* UI_TIP_TARGET_ENABLE_SCRIPT = "Target a specific function inside the Enable Script";
+		static const char* UI_LBL_ENABLE_SCRIPT_PATH = "Enable Script Path:";
+		static const char* UI_TIP_TARGET_DISABLE_SCRIPT = "Target a specific function inside the Disable Script";
+		static const char* UI_LBL_DISABLE_SCRIPT_PATH = "Disable Script Path:";
+		static const char* UI_TIP_TARGET_SCRIPT_FILE = "Target a specific function inside this script file";
+		static const char* UI_TXT_DETECTED_FROM_SCRIPT = "Detected from the script:";
+		static const char* UI_TXT_NO_KEYS_QUERIED = "(No Keys from any mods are queried by the core module.)";
+		static const char* UI_FMT_S = "%s";
+		static const char* UI_BTN_FINALIZE = "Finalize";
+		static const char* UI_BTN_CANCEL = "Cancel";
+		static const char* UI_TXT_TAKES_EFFECT_NEXT_FRAME = "This will immediately take effect once the frame updates after assigning.";
+		static const char* UI_WINDOW_TITLE = "RadarKeys - Key Bindings";
+		static const char* UI_BTN_DEBUGGER = "Debugger";
+		static const char* UI_LOG_DEBUGGER_OPENED = "Debugger Overlay opened";
+		static const char* UI_LOG_DEBUGGER_CLOSED = "Debugger Overlay closed";
+		static const char* UI_LBL_MENU_HOTKEY_PREFIX = "Menu Hotkey: [";
+		static const char* UI_LBL_MENU_HOTKEY_SUFFIX = "]";
+		static const char* UI_HDR_KEY_BINDINGS = "Key Bindings";
+		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Keys described from the mod script will put the information in the list.";
+		static const char* UI_TXT_NO_KEYS_ASSIGNED = "(No Keys are assigned yet.)";
+		static const char* UI_TXT_NOT_YET_DESCRIBED = "-> (Key is not yet described through RadarKeys module.)";
+		static const char* UI_BTN_ENABLE = "Enable";
+		static const char* UI_BTN_DISABLE = "Disable";
+		static const char* UI_TIP_CLICK_HOLD_REMOVE = "Click to %s.\nHold for 1.5 seconds to remove.";
+		static const char* UI_WORD_ENABLE = "enable";
+		static const char* UI_WORD_DISABLE = "disable";
+		static const char* UI_LBL_ERROR = "Error!";
+		static const char* UI_TIP_CONFLICT_REASSIGNABLE = "Another binding is using this same key - it's disabled until resolved.\nClick the key name to reassign this one.";
+		static const char* UI_TIP_CONFLICT_NOT_DESCRIBED = "Another binding is using this same key - it's disabled until resolved.\nUnable to reassign an override - Key is not yet described through RadarKeys module.";
+		static const char* UI_TIP_CLICK_HOLD_RESET = "Click to %s.\nHold for 1.5 seconds to reset to the mod's default key.";
+		static const char* UI_TIP_CLICK_NO_REMOVE = "Click to %s.\nMod keys can't be removed - only disabled.";
+		static const char* UI_BTN_SCRIPT_PLACEHOLDER = "Script";
+		static const char* UI_TIP_REASSIGN_COMBO = "Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder";
+		static const char* UI_TIP_REASSIGN_KEY = "Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder";
+		static const char* UI_TIP_CANNOT_REASSIGN_UNDESCRIBED = "Unable to reassign an override - Key is not yet described through RadarKeys module.";
+		static const char* UI_POPUP_REMOVE_BINDING = "Remove Binding?";
+		static const char* UI_FMT_REMOVE_CONFIRM = "Remove \"%s\"?";
+		static const char* UI_TXT_CANNOT_BE_UNDONE = "This can't be undone.";
+		static const char* UI_TXT_BINDING_NO_LONGER_EXISTS = "This binding no longer exists.";
+		static const char* UI_BTN_YES = "Yes";
+		static const char* UI_BTN_NO = "No";
+		static const char* UI_POPUP_RESET_MOD_KEY = "Reset Mod Key?";
+		static const char* UI_FMT_RESET_CONFIRM = "Reset \"%s [%s]\" to the mod's default key?";
+		static const char* UI_TXT_CLEARS_REASSIGNMENT = "This clears the reassignment made in this menu.";
+		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Clear All Hotkeys";
+		static const char* UI_BTN_ADD_NEW_BINDING = "Add New Binding...";
+
 		struct BindingDisplayCache {
 			std::string itemLabel;
 			std::string detailText;
@@ -1461,16 +1557,16 @@ namespace RadarKeys {
 				capturedInstantMode = modKeyInfo.anyInstant;
 				capturedInstantTriggerType = modKeyInfo.instantType;
 
-				ImGui::TextWrapped("%s [%s]", modKeyCaptureScriptName.c_str(), modKeyCaptureFunctionName.c_str());
+				ImGui::TextWrapped(UI_FMT_SCRIPT_FUNCTION_BRACKETS, modKeyCaptureScriptName.c_str(), modKeyCaptureFunctionName.c_str());
 				ImGui::Separator();
 			}
 
 			if (!isAssigningMenuToggleKey && !isAssigningModKey) {
 				bool wasCombo = captureIsCombo;
-				ImGui::TextUnformatted("Bind Type:"); ImGui::SameLine();
-				if (ImGui::RadioButton("Single Key", !captureIsCombo)) captureIsCombo = false;
+				ImGui::TextUnformatted(UI_LBL_BIND_TYPE); ImGui::SameLine();
+				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo)) captureIsCombo = false;
 				ImGui::SameLine();
-				if (ImGui::RadioButton("Multi-Key Combo", captureIsCombo)) captureIsCombo = true;
+				if (ImGui::RadioButton(UI_RADIO_MULTI_KEY_COMBO, captureIsCombo)) captureIsCombo = true;
 				if (captureIsCombo != wasCombo) {
 					capturedVKey = 0;
 					ResetComboCaptureState();
@@ -1532,7 +1628,7 @@ namespace RadarKeys {
 			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 			auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
 			const float contentStartX = ImGui::GetCursorPosX();
-			ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize("Key").x) * 0.5f)); ImGui::TextUnformatted("Key"); ImGui::Separator();
+			ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(UI_LBL_KEY).x) * 0.5f)); ImGui::TextUnformatted(UI_LBL_KEY); ImGui::Separator();
 			float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 		
 			if (capturedVKey == 0) {
@@ -1546,8 +1642,8 @@ namespace RadarKeys {
 				ImGui::SetCursorPosY(startVerticalY);
 
 				std::string holdName = showingHold ? NameForVKey(singleHoldKey) : "";
-				const char* line1 = showingHold ? holdName.c_str() : "PRESS";
-				const char* line2 = showingHold ? "HOLD" : "KEY...";
+				const char* line1 = showingHold ? holdName.c_str() : UI_LBL_PRESS;
+				const char* line2 = showingHold ? UI_LBL_HOLD : UI_LBL_KEY_ELLIPSIS;
 				float w1 = ImGui::CalcTextSize(line1).x;
 				float w2 = ImGui::CalcTextSize(line2).x;
 				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - w1) * 0.5f));
@@ -1570,10 +1666,10 @@ namespace RadarKeys {
 		
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey && !isAssigningModKey) {
-				ImGui::Checkbox("Ctrl", &capturedCtrl); ImGui::Checkbox("Shift", &capturedShift); ImGui::Checkbox("Alt", &capturedAlt); 
+				ImGui::Checkbox(UI_CHK_CTRL, &capturedCtrl); ImGui::Checkbox(UI_CHK_SHIFT, &capturedShift); ImGui::Checkbox(UI_CHK_ALT, &capturedAlt); 
 			}
 			
-			if (ImGui::Button("Reset", ImVec2(55, 22))) { 
+			if (ImGui::Button(UI_BTN_RESET, ImVec2(55, 22))) { 
 			    capturedVKey = 0; 
 			    capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false; 
 			    capturedHoldSeconds = 0.0f;
@@ -1591,11 +1687,11 @@ namespace RadarKeys {
 				ImGui::BeginChild("ComboKeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 				auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
 				const float contentStartX = ImGui::GetCursorPosX();
-				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize("Keys").x) * 0.5f)); ImGui::TextUnformatted("Keys"); ImGui::Separator();
+				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(UI_LBL_KEYS).x) * 0.5f)); ImGui::TextUnformatted(UI_LBL_KEYS); ImGui::Separator();
 				float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
 
 				if (capturedComboKeys.empty() && !comboHoldActive) {
-					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "  HOLD", "  2-3 KEYS");
+					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), UI_LBL_HOLD_INDENT, UI_LBL_2_3_KEYS);
 				} else {
 					bool isFinal = !capturedComboKeys.empty();
 					const std::vector<USHORT>& shownKeys = isFinal ? capturedComboKeys : comboHoldKeys;
@@ -1649,12 +1745,12 @@ namespace RadarKeys {
 				}
 				ImGui::EndChild();
 				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.", kComboHoldSeconds);
+					ImGui::SetTooltip(UI_TIP_COMBO_HOLD, kComboHoldSeconds);
 				}
 				ImGui::SameLine();
 
 				ImGui::BeginGroup();
-				if (ImGui::Button("Reset", ImVec2(55, 22))) {
+				if (ImGui::Button(UI_BTN_RESET, ImVec2(55, 22))) {
 					ResetComboCaptureState();
 					LogActivity("Multi-key combo has been reset");
 				}
@@ -1665,13 +1761,13 @@ namespace RadarKeys {
 			if (!isAssigningMenuToggleKey) {
 				if (isAssigningModKey) ImGui::BeginDisabled();
 				if (capturedInstantMode) ImGui::BeginDisabled();
-				ImGui::Checkbox("Toggle", &capturedToggleMode);
+				ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
 				if (capturedInstantMode && ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Uncheck Instant first to use Toggle or Long Press.");
+					ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 				}
-				ImGui::Checkbox("Long Press", &capturedLongPressMode);
+				ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode);
 				if (capturedInstantMode && ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Uncheck Instant first to use Toggle or Long Press.");
+					ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 				}
 				if (capturedInstantMode) ImGui::EndDisabled();
 				
@@ -1679,22 +1775,22 @@ namespace RadarKeys {
 				    ImGui::SetNextItemWidth(75);
 				    ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
 				    if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
-				    if (ImGui::Button(" - ", ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine(40);
-				    if (ImGui::Button(" + ", ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
+				    if (ImGui::Button(UI_BTN_MINUS, ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine(40);
+				    if (ImGui::Button(UI_BTN_PLUS, ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
 				}
 
 				bool toggleOrLongPress = capturedToggleMode || capturedLongPressMode;
 				if (toggleOrLongPress) ImGui::BeginDisabled();
-				if (ImGui::Checkbox("Instant", &capturedInstantMode)) {
+				if (ImGui::Checkbox(UI_CHK_INSTANT, &capturedInstantMode)) {
 					capturedInstantUserSet = true;
 				}
 				if (toggleOrLongPress) ImGui::EndDisabled();
 				if (toggleOrLongPress && ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Uncheck Toggle and Long Press first to use Instant.");
+					ImGui::SetTooltip(UI_TIP_UNCHECK_TOGGLE_FIRST);
 				}
 
 				if (capturedInstantMode) {
-					static const char* instantTriggerLabels[] = { "On Press", "On Release", "Repeat" };
+					static const char* instantTriggerLabels[] = { UI_OPT_ON_PRESS, UI_OPT_ON_RELEASE, UI_OPT_REPEAT };
 					ImGui::SetNextItemWidth(120);
 					if (ImGui::Combo("##capturedInstantTrigger", &capturedInstantTriggerType, instantTriggerLabels, IM_ARRAYSIZE(instantTriggerLabels))) {
 						capturedInstantUserSet = true;
@@ -1705,18 +1801,14 @@ namespace RadarKeys {
 						ImGui::InputFloat("##capturedRepeatAccelInput", &capturedRepeatAccelMult, 0.0f, 0.0f, "%.2fx");
 						if (capturedRepeatAccelMult < kMinRepeatAccelMult) capturedRepeatAccelMult = kMinRepeatAccelMult;
 						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip(
-								"Acceleration multiplier for the Repeat interval:\n"
-								"? > 1.0 = Faster\n"
-								"? < 1.0 = Slower"
-							);
+							ImGui::SetTooltip("%s", UI_TIP_REPEAT_ACCEL);
 						}
 					}
 				}
 
 				if (isAssigningModKey) {
 					ImGui::EndDisabled();
-					ImGui::TextDisabled("Detected from the script - read only");
+					ImGui::TextDisabled(UI_TXT_DETECTED_READ_ONLY);
 				}
 			}
 			
@@ -1757,14 +1849,14 @@ namespace RadarKeys {
 			}
 			ImGui::Spacing();
 			
-			const char* comboStatusLabel = comboAvailable ? "[ READY ]" : "[ UNFIT ]";
+			const char* comboStatusLabel = comboAvailable ? UI_LBL_READY : UI_LBL_UNFIT;
 			ImVec2 comboStatusSize = ImGui::CalcTextSize(comboStatusLabel);
 			ImGui::BeginChild("ComboStatusBox", ImVec2(comboStatusSize.x + ImGui::GetStyle().WindowPadding.x * 2.0f, comboStatusSize.y + ImGui::GetStyle().WindowPadding.y * 2.0f), true, ImGuiWindowFlags_NoScrollbar);
 			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", comboStatusLabel);
 			ImGui::EndChild();
 			
 			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(comboAvailable ? "The key combination is valid. Key assignment can finalize." : "Conflict! Key combination is already in use.\nThis includes bindings declared by mods and existing manual bindings.\nChange the combination before finalizing.");
+				ImGui::SetTooltip(comboAvailable ? UI_TIP_COMBO_VALID : UI_TIP_COMBO_CONFLICT);
 			}
 			ImGui::EndGroup(); ImGui::Separator();
 		
@@ -1811,33 +1903,33 @@ namespace RadarKeys {
 
 				if (capturedToggleMode) {
 					ImGui::AlignTextToFramePadding();
-					ImGui::Text("Script Mode:"); ImGui::SameLine();
-					ImGui::RadioButton("Single", &capturedToggleType, 0); ImGui::SameLine();
-					ImGui::RadioButton("Dual", &capturedToggleType, 1);
+					ImGui::Text(UI_LBL_SCRIPT_MODE); ImGui::SameLine();
+					ImGui::RadioButton(UI_RADIO_SINGLE, &capturedToggleType, 0); ImGui::SameLine();
+					ImGui::RadioButton(UI_RADIO_DUAL, &capturedToggleType, 1);
 					ImGui::Separator(); ImGui::Spacing();
 
 					if (capturedToggleType == 0) {
 						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
-						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target specific global functions inside the file");
-						ImGui::SameLine(); ImGui::Text("Script Path:");
+						if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_GLOBAL_FUNCS);
+						ImGui::SameLine(); ImGui::Text(UI_LBL_SCRIPT_PATH);
 						
 						ImGui::SetNextItemWidth(-1);
 						ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 						
 						if (capturedHasFuncOn) {
-							ImGui::Text("Enable Function:"); ImGui::SameLine(targetCursorPosX);
+							ImGui::Text(UI_LBL_ENABLE_FUNCTION); ImGui::SameLine(targetCursorPosX);
 							ImGui::SetNextItemWidth(elementWidth);
 							ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
 		
-							ImGui::Text("Disable Function:"); ImGui::SameLine(targetCursorPosX);
+							ImGui::Text(UI_LBL_DISABLE_FUNCTION); ImGui::SameLine(targetCursorPosX);
 							ImGui::SetNextItemWidth(elementWidth);
 							ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
 						}
 					} 
 					else {
 						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
-						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Enable Script");
-						ImGui::SameLine(); ImGui::Text("Enable Script Path:");
+						if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_ENABLE_SCRIPT);
+						ImGui::SameLine(); ImGui::Text(UI_LBL_ENABLE_SCRIPT_PATH);
 
 						ImGui::SetNextItemWidth(-1);
 						ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
@@ -1850,9 +1942,9 @@ namespace RadarKeys {
 
 						ImGui::Spacing();
 						ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff); ImGui::SameLine();
-						if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside the Disable Script");
+						if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_DISABLE_SCRIPT);
 						
-						ImGui::SameLine(); ImGui::Text("Disable Script Path:");
+						ImGui::SameLine(); ImGui::Text(UI_LBL_DISABLE_SCRIPT_PATH);
 						ImGui::SetNextItemWidth(-1);
 						ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
 						
@@ -1865,9 +1957,9 @@ namespace RadarKeys {
 				} 
 				else {
 					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn); ImGui::SameLine();
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip("Target a specific function inside this script file");
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_SCRIPT_FILE);
 					
-					ImGui::SameLine(); ImGui::Text("Script Path:");
+					ImGui::SameLine(); ImGui::Text(UI_LBL_SCRIPT_PATH);
 					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 					
@@ -1879,12 +1971,12 @@ namespace RadarKeys {
 				}
 			}
 			else if (isAssigningModKey) {
-				ImGui::TextDisabled("Detected from the script:");
+				ImGui::TextDisabled(UI_TXT_DETECTED_FROM_SCRIPT);
 				if (modKeyInfo.breakdownLines.empty()) {
-					ImGui::TextWrapped("(No Keys from any mods are queried by the core module.)");
+					ImGui::TextWrapped(UI_TXT_NO_KEYS_QUERIED);
 				} else {
 					for (const std::string& line : modKeyInfo.breakdownLines) {
-						ImGui::TextWrapped("%s", line.c_str());
+						ImGui::TextWrapped(UI_FMT_S, line.c_str());
 					}
 				}
 			}
@@ -1916,7 +2008,7 @@ namespace RadarKeys {
 			ImGui::SetCursorPosY(bottomAnchorY);
 
 			if (!canFinalize) ImGui::BeginDisabled();
-			if (ImGui::Button("Finalize", ImVec2(145, buttonHeight))) {
+			if (ImGui::Button(UI_BTN_FINALIZE, ImVec2(145, buttonHeight))) {
 				if (isAssigningModKey) {
 					if (captureIsCombo) {
 						std::string comboKeyName = ComboKeysDisplayName(capturedComboKeys);
@@ -2033,7 +2125,7 @@ namespace RadarKeys {
 			float targetCancelX = ImGui::GetWindowWidth() - paddingX - 145.0f - 8.0f;
 			ImGui::SameLine(targetCancelX);
 			
-			if (ImGui::Button("Cancel", ImVec2(145, buttonHeight))) {
+			if (ImGui::Button(UI_BTN_CANCEL, ImVec2(145, buttonHeight))) {
 				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
 				capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 				capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
@@ -2047,7 +2139,7 @@ namespace RadarKeys {
 			}
 
 			if (isAssigningModKey) {
-				ImGui::TextDisabled("This will immediately take effect once the frame updates after assigning.");
+				ImGui::TextDisabled(UI_TXT_TAKES_EFFECT_NEXT_FRAME);
 			}
 			ImGui::End();
 		}
@@ -2110,14 +2202,14 @@ namespace RadarKeys {
 			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, minWindowHeightFloor), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, minWindowHeightFloor), ImVec2(FLT_MAX, FLT_MAX));
 
-			if (!ImGui::Begin("RadarKeys - Key Bindings", p_open)) { ImGui::End(); return; }
-			if (ImGui::Button("Debugger")) {
+			if (!ImGui::Begin(UI_WINDOW_TITLE, p_open)) { ImGui::End(); return; }
+			if (ImGui::Button(UI_BTN_DEBUGGER)) {
 				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
-				LogActivity(DebuggerMenu::menuOpen ? "Debugger Overlay opened" : "Debugger Overlay closed");
+				LogActivity(DebuggerMenu::menuOpen ? UI_LOG_DEBUGGER_OPENED : UI_LOG_DEBUGGER_CLOSED);
 			}
 			ImGui::SameLine();
 			
-			std::string buttonLabel = "Menu Hotkey: [" + NameForVKey(menuToggleVKey) + "]";
+			std::string buttonLabel = UI_LBL_MENU_HOTKEY_PREFIX + NameForVKey(menuToggleVKey) + UI_LBL_MENU_HOTKEY_SUFFIX;
 			if (ImGui::Button(buttonLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) { 
 				isAssigningMenuToggleKey = showCapturePrompt = true; 
 				requestCaptureFocus = true;
@@ -2125,7 +2217,7 @@ namespace RadarKeys {
 			}
 			ImGui::Separator();
 
-			ImGui::Text("Key Bindings");
+			ImGui::Text(UI_HDR_KEY_BINDINGS);
 			const float kListMinHeight = 150.0f;
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
@@ -2231,7 +2323,7 @@ namespace RadarKeys {
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 
 				if (!rows.empty()) {
-					ImGui::TextDisabled("Keys described from the mod script will put the information in the list.");
+					ImGui::TextDisabled(UI_TXT_DESCRIBED_KEYS_HINT);
 				}
 
 				static std::unordered_map<int, std::chrono::steady_clock::time_point> disableHoldStart;
@@ -2244,7 +2336,7 @@ namespace RadarKeys {
 				static bool resetConfirmPopupRequested = false;
 				ImGui::BeginChild("KeyBindingsList", ImVec2(0, listRemainingHeight), true);
 				if (rows.empty()) {
-					ImGui::TextDisabled("(No Keys are assigned yet.)");
+					ImGui::TextDisabled(UI_TXT_NO_KEYS_ASSIGNED);
 				}
 				for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
 					UnifiedRow& row = rows[rowIdx];
@@ -2267,7 +2359,7 @@ namespace RadarKeys {
 						detailText = "-> " + displayScriptName(row.info.scriptName) + funcStr;
 					}
 					else {
-						detailText = "-> (Key is not yet described through RadarKeys module.)";
+						detailText = UI_TXT_NOT_YET_DESCRIBED;
 					}
 
 					const float conflictBoxHeight = 34.0f;
@@ -2332,11 +2424,10 @@ namespace RadarKeys {
 						int bindIdx = row.bindIndex;
 						bool isDisabled = bindings[bindIdx].disabled;
 						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
-						bool clicked = ImGui::Button(isDisabled ? "Enable" : "Disable", ImVec2(55, buttonHeight));
+						bool clicked = ImGui::Button(isDisabled ? UI_BTN_ENABLE : UI_BTN_DISABLE, ImVec2(55, buttonHeight));
 						ImGui::PopStyleColor();
 						ImVec2 disableBtnMin = ImGui::GetItemRectMin();
 						ImVec2 disableBtnMax = ImGui::GetItemRectMax();
-						
 						if (ImGui::IsItemActive()) {
 							auto holdIt = disableHoldStart.find(bindIdx);
 							if (holdIt == disableHoldStart.end()) {
@@ -2364,7 +2455,7 @@ namespace RadarKeys {
 						}
 
 						if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
-							ImGui::SetTooltip("Click to %s.\nHold for 1.5 seconds to remove.", isDisabled ? "enable" : "disable");
+							ImGui::SetTooltip(UI_TIP_CLICK_HOLD_REMOVE, isDisabled ? UI_WORD_ENABLE : UI_WORD_DISABLE);
 						}
 					}
 					else if (row.conflicted) {
@@ -2372,18 +2463,18 @@ namespace RadarKeys {
 						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.25f, 0.25f, 1.0f));
 						ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 						ImGui::BeginChild("ConflictBadge", ImVec2(60, buttonHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoInputs);
-						ImVec2 errorTextSize = ImGui::CalcTextSize("Error!");
+						ImVec2 errorTextSize = ImGui::CalcTextSize(UI_LBL_ERROR);
 						ImGui::SetCursorPos(ImVec2(
 						    (std::max)(0.0f, (60.0f - errorTextSize.x) * 0.5f),
 						    (std::max)(0.0f, (buttonHeight - errorTextSize.y) * 0.5f)));
-						ImGui::TextUnformatted("Error!");
+						ImGui::TextUnformatted(UI_LBL_ERROR);
 						ImGui::EndChild();
 						ImGui::PopStyleVar();
 						ImGui::PopStyleColor(2);
 						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip((row.isComboScript || row.info.hasDescription)
-								? "Another binding is using this same key - it's disabled until resolved.\nClick the key name to reassign this one."
-								: "Another binding is using this same key - it's disabled until resolved.\nUnable to reassign an override - Key is not yet described through RadarKeys module.");
+							ImGui::SetTooltip("%s", (row.isComboScript || row.info.hasDescription)
+								? UI_TIP_CONFLICT_REASSIGNABLE
+								: UI_TIP_CONFLICT_NOT_DESCRIBED);
 						}
 					}
 					else if (row.isComboScript || row.info.hasDescription) {
@@ -2393,11 +2484,10 @@ namespace RadarKeys {
 						bool hasOverride = !ModKeyBindings::GetOverride(mkScriptName, mkFunctionName).empty();
 						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName);
 						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
-						bool clicked = ImGui::Button(isDisabled ? "Enable" : "Disable", ImVec2(55, buttonHeight));
+						bool clicked = ImGui::Button(isDisabled ? UI_BTN_ENABLE : UI_BTN_DISABLE, ImVec2(55, buttonHeight));
 						ImGui::PopStyleColor();
 						ImVec2 modKeyBtnMin = ImGui::GetItemRectMin();
 						ImVec2 modKeyBtnMax = ImGui::GetItemRectMax();
-						
 						bool isPendingThisKey = pendingResetActive && pendingResetScriptName == mkScriptName && pendingResetFunctionName == mkFunctionName;
 						if (hasOverride && ImGui::IsItemActive()) {
 							auto holdIt = modKeyHoldStart.find(mkHoldKey);
@@ -2427,13 +2517,13 @@ namespace RadarKeys {
 						}
 						if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
 							ImGui::SetTooltip(hasOverride
-								? "Click to %s.\nHold for 1.5 seconds to reset to the mod's default key."
-								: "Click to %s.\nMod keys can't be removed - only disabled.", isDisabled ? "enable" : "disable");
+								? UI_TIP_CLICK_HOLD_RESET
+								: UI_TIP_CLICK_NO_REMOVE, isDisabled ? UI_WORD_ENABLE : UI_WORD_DISABLE);
 						}
 					}
 					else {
 						ImGui::BeginDisabled();
-						ImGui::Button("Script", ImVec2(55, buttonHeight));
+						ImGui::Button(UI_BTN_SCRIPT_PLACEHOLDER, ImVec2(55, buttonHeight));
 						ImGui::EndDisabled();
 					}
 					ImGui::SameLine();
@@ -2457,7 +2547,7 @@ namespace RadarKeys {
 							capturedInstantMode = bindings[i].isInstant;
 							capturedInstantTriggerType = bindings[i].instantTriggerType;
 							capturedRepeatAccelMult = bindings[i].repeatAccelMult;
-							capturedInstantUserSet = true;
+							capturedInstantUserSet = true; // editing an existing binding - these came from it, not a default
 							capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 							capturedHasFuncOff = !bindings[i].functionOff.empty();
 
@@ -2513,7 +2603,7 @@ namespace RadarKeys {
 							openComboReassignPrompt();
 						}
 						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip("Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder");
+							ImGui::SetTooltip(UI_TIP_REASSIGN_COMBO);
 						}
 						ImGui::PopStyleColor();
 					}
@@ -2551,7 +2641,7 @@ namespace RadarKeys {
 								openReassignPrompt();
 							}
 							if (ImGui::IsItemHovered()) {
-								ImGui::SetTooltip("Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder");
+								ImGui::SetTooltip(UI_TIP_REASSIGN_KEY);
 							}
 						}
 						else {
@@ -2559,7 +2649,7 @@ namespace RadarKeys {
 							ImGui::Button(NameForVKey(row.displayVKey).c_str(), ImVec2(130, buttonHeight));
 							ImGui::EndDisabled();
 							if (ImGui::IsItemHovered()) {
-								ImGui::SetTooltip("Unable to reassign an override - Key is not yet described through RadarKeys module.");
+								ImGui::SetTooltip(UI_TIP_CANNOT_REASSIGN_UNDESCRIBED);
 							}
 						}
 						ImGui::PopStyleColor();
@@ -2571,22 +2661,22 @@ namespace RadarKeys {
 				ImGui::EndChild();
 
 				if (removeConfirmPopupRequested) {
-					ImGui::OpenPopup("Remove Binding?");
+					ImGui::OpenPopup(UI_POPUP_REMOVE_BINDING);
 					removeConfirmPopupRequested = false;
 				}
 				ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-				bool removeConfirmOpen = ImGui::BeginPopupModal("Remove Binding?", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+				bool removeConfirmOpen = ImGui::BeginPopupModal(UI_POPUP_REMOVE_BINDING, nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 				ImGui::PopStyleColor();
 				if (removeConfirmOpen) {
 					bool indexValid = pendingRemoveConfirmIndex >= 0 && pendingRemoveConfirmIndex < (int)bindings.size();
 					if (indexValid) {
-						ImGui::Text("Remove \"%s\"?", CombinedDisplayName(bindings[pendingRemoveConfirmIndex]).c_str());
-						ImGui::TextDisabled("This can't be undone.");
+						ImGui::Text(UI_FMT_REMOVE_CONFIRM, CombinedDisplayName(bindings[pendingRemoveConfirmIndex]).c_str());
+						ImGui::TextDisabled(UI_TXT_CANNOT_BE_UNDONE);
 					} else {
-						ImGui::Text("This binding no longer exists.");
+						ImGui::Text(UI_TXT_BINDING_NO_LONGER_EXISTS);
 					}
 					ImGui::Spacing();
-					if (ImGui::Button("Yes", ImVec2(80, 0))) {
+					if (ImGui::Button(UI_BTN_YES, ImVec2(80, 0))) {
 						if (indexValid) {
 							RemoveBinding(pendingRemoveConfirmIndex);
 						}
@@ -2594,7 +2684,7 @@ namespace RadarKeys {
 						ImGui::CloseCurrentPopup();
 					}
 					ImGui::SameLine();
-					if (ImGui::Button("No", ImVec2(80, 0))) {
+					if (ImGui::Button(UI_BTN_NO, ImVec2(80, 0))) {
 						pendingRemoveConfirmIndex = -1;
 						ImGui::CloseCurrentPopup();
 					}
@@ -2602,24 +2692,24 @@ namespace RadarKeys {
 				}
 
 				if (resetConfirmPopupRequested) {
-					ImGui::OpenPopup("Reset Mod Key?");
+					ImGui::OpenPopup(UI_POPUP_RESET_MOD_KEY);
 					resetConfirmPopupRequested = false;
 				}
 				ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-				bool resetConfirmOpen = ImGui::BeginPopupModal("Reset Mod Key?", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+				bool resetConfirmOpen = ImGui::BeginPopupModal(UI_POPUP_RESET_MOD_KEY, nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 				ImGui::PopStyleColor();
 				if (resetConfirmOpen) {
-					ImGui::Text("Reset \"%s [%s]\" to the mod's default key?", pendingResetScriptName.c_str(), pendingResetFunctionName.c_str());
-					ImGui::TextDisabled("This clears the reassignment made in this menu.");
+					ImGui::Text(UI_FMT_RESET_CONFIRM, pendingResetScriptName.c_str(), pendingResetFunctionName.c_str());
+					ImGui::TextDisabled(UI_TXT_CLEARS_REASSIGNMENT);
 					ImGui::Spacing();
-					if (ImGui::Button("Yes", ImVec2(80, 0))) {
+					if (ImGui::Button(UI_BTN_YES, ImVec2(80, 0))) {
 						ModKeyBindings::SetOverride(pendingResetScriptName, pendingResetFunctionName, "");
 						LogActivity("Reset mod key to default: " + pendingResetScriptName + " [" + pendingResetFunctionName + "]");
 						pendingResetActive = false;
 						ImGui::CloseCurrentPopup();
 					}
 					ImGui::SameLine();
-					if (ImGui::Button("No", ImVec2(80, 0))) {
+					if (ImGui::Button(UI_BTN_NO, ImVec2(80, 0))) {
 						pendingResetActive = false;
 						ImGui::CloseCurrentPopup();
 					}
@@ -2630,11 +2720,11 @@ namespace RadarKeys {
 			ImGui::SetCursorPosY(bottomControlPanelY);
 			
 			if (bindings.empty()) ImGui::BeginDisabled();
-			if (ImGui::Button("Clear All Hotkeys", ImVec2(145, 24))) RemoveAllBindings();
+			if (ImGui::Button(UI_BTN_CLEAR_ALL_HOTKEYS, ImVec2(145, 24))) RemoveAllBindings();
 			if (bindings.empty()) ImGui::EndDisabled();
 			
 			ImGui::SameLine(ImGui::GetContentRegionMax().x - 165.0f);
-			if (ImGui::Button("Add New Binding...", ImVec2(165, 24))) {
+			if (ImGui::Button(UI_BTN_ADD_NEW_BINDING, ImVec2(165, 24))) {
 				editingBindingIndex = -1;
 				captureIsCombo = false;
 				ResetComboCaptureState();
