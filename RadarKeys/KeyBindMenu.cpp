@@ -5,6 +5,7 @@
 #include "LuaKeyState.h"
 #include "ModKeyBindings.h"
 #include "ModInfoRegistry.h"
+#include "LuaApi.h"
 #include "Util.h"
 #include "HookUtils.h"
 #include "spdlog/spdlog.h"
@@ -665,18 +666,32 @@ namespace RadarKeys {
 				bind.toggleState = !bind.toggleState;
 			}
 
-			if (DebuggerMenu::LogScriptAttempt(targetPath)) {
-				if (!targetFunc.empty()) {
-					std::string luaPayload = "CallFunction|" + targetFunc + "|" + targetPath;
-					LuaBridge::QueueMessageIn(luaPayload);
-					LogActivity("Fired script " + targetPath + " [" + targetFunc + "]");
-				} else {
-					LuaBridge::QueueMessageIn("DoScript|dofile([[" + targetPath + "]])");
-					LogActivity("Fired script " + targetPath);
-				}
-			} else {
+			if (!DebuggerMenu::LogScriptAttempt(targetPath)) {
 				LogActivity("Script not found: " + targetPath, false);
+				return;
 			}
+
+			if (targetFunc.empty()) {
+				LuaBridge::QueueMessageIn("DoScript|dofile([[" + targetPath + "]])");
+				LogActivity("Fired script " + targetPath);
+				return;
+			}
+
+			switch (LuaCallGlobalFunction(targetFunc)) {
+				case LuaDirectCallResult::Success:
+					LogActivity("Fired script " + targetPath + " [" + targetFunc + "] (direct)");
+					return;
+				case LuaDirectCallResult::RuntimeError:
+					LogActivity("Script error firing " + targetPath + " [" + targetFunc + "]", false);
+					return;
+				case LuaDirectCallResult::NotFound:
+				case LuaDirectCallResult::NotAvailable:
+					break;
+			}
+
+			std::string luaPayload = "CallFunction|" + targetFunc + "|" + targetPath;
+			LuaBridge::QueueMessageIn(luaPayload);
+			LogActivity("Fired script " + targetPath + " [" + targetFunc + "] (queued)");
 		}
 
 		USHORT ResolveDisplayVKey(const LuaKeyState::TrackedKeyInfo& info) {
