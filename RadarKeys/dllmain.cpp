@@ -292,6 +292,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		spdlog::error("luaopen_RadarKeys: RegisterLuaLibrary failed - Lua API addresses may not have resolved yet");
 		return 0;
 	}
+	RadarKeys::LuaApiCaptureState(L);
 	return 1;
 }
 
