@@ -24,14 +24,16 @@ namespace RadarKeys {
 		std::deque<LogEntry> logEntries;
 
 		std::string CurrentTimestamp() {
-			auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::duration<double>(ImGui::GetTime()));
-			auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
-			duration -= hours;
-			auto minutes = std::chrono::duration_cast<std::chrono::minutes>(duration);
-			duration -= minutes;
+			auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<double>(ImGui::GetTime()));
+			auto hours = std::chrono::duration_cast<std::chrono::hours>(durationMs);
+			durationMs -= hours;
+			auto minutes = std::chrono::duration_cast<std::chrono::minutes>(durationMs);
+			durationMs -= minutes;
+			auto seconds = std::chrono::duration_cast<std::chrono::seconds>(durationMs);
+			durationMs -= seconds;
 
 			char timestr[32];
-			snprintf(timestr, sizeof(timestr), "%02d:%02d:%02d", hours.count(), minutes.count(), duration.count());
+			snprintf(timestr, sizeof(timestr), "%02d:%02d:%02d.%03d", hours.count(), minutes.count(), seconds.count(), durationMs.count());
 			return std::string(timestr);
 		}
 
