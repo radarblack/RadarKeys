@@ -890,6 +890,7 @@ namespace RadarKeys {
 
 			for (KeyBind& bind : bindings) {
 				if (!bind.IsCombo()) continue;
+				if (bind.disabled) continue;
 
 				bool allHeld = true;
 				for (USHORT k : bind.comboKeys) {
@@ -1760,6 +1761,7 @@ namespace RadarKeys {
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
 				if (isAssigningModKey) ImGui::BeginDisabled();
+
 				if (capturedInstantMode) ImGui::BeginDisabled();
 				ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
 				if (capturedInstantMode && ImGui::IsItemHovered()) {
@@ -2547,7 +2549,7 @@ namespace RadarKeys {
 							capturedInstantMode = bindings[i].isInstant;
 							capturedInstantTriggerType = bindings[i].instantTriggerType;
 							capturedRepeatAccelMult = bindings[i].repeatAccelMult;
-							capturedInstantUserSet = true; // editing an existing binding - these came from it, not a default
+							capturedInstantUserSet = true;
 							capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 							capturedHasFuncOff = !bindings[i].functionOff.empty();
 
