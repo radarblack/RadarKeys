@@ -261,14 +261,16 @@ namespace RadarKeys {
 		void LogActivity(const std::string& message, bool success) {
 			EnsureActivityLogReady();
 
-			auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::duration<double>(ImGui::GetTime()));
-			auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
-			duration -= hours;
-			auto minutes = std::chrono::duration_cast<std::chrono::minutes>(duration);
-			duration -= minutes;
+			auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<double>(ImGui::GetTime()));
+			auto hours = std::chrono::duration_cast<std::chrono::hours>(durationMs);
+			durationMs -= hours;
+			auto minutes = std::chrono::duration_cast<std::chrono::minutes>(durationMs);
+			durationMs -= minutes;
+			auto seconds = std::chrono::duration_cast<std::chrono::seconds>(durationMs);
+			durationMs -= seconds;
 
 			char timeBuf[32];
-			snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d", (int)hours.count(), (int)minutes.count(), (int)duration.count());
+			snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d.%03d", (int)hours.count(), (int)minutes.count(), (int)seconds.count(), (int)durationMs.count());
 
 			AppendActivityLogLine(std::string("[") + timeBuf + "] [" + (success ? "OK" : "FAIL") + "] " + message + "\n");
 		}
