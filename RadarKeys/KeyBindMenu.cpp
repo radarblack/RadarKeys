@@ -63,14 +63,8 @@ namespace RadarKeys {
 		static const char* UI_OPT_REPEAT = "Repeat";
 		static const char* UI_TIP_REPEAT_ACCEL =
 			"Acceleration multiplier for the Repeat interval.\n"
-			"Each time the repeat fires, the wait before the next fire\n"
-			"is divided by this amount - values above 1.00x make it fire\n"
-			"progressively faster the longer the key is held (acceleration);\n"
-			"values below 1.00x make it fire progressively slower instead\n"
-			"(deceleration).\n"
-			"1.00x = constant rate (no acceleration or deceleration).\n"
-			"e.g. 1.20x ramps up gradually; 2.00x ramps up quickly;\n"
-			"0.80x eases off gradually; 0.20x slows down quickly.";
+			"- ? > 1.00: Faster\n"
+			"- ? < 1.00: Slower";
 		static const char* UI_TXT_DETECTED_READ_ONLY = "Detected from the script - read only";
 		static const char* UI_LBL_READY = "[ READY ]";
 		static const char* UI_LBL_UNFIT = "[ UNFIT ]";
