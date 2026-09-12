@@ -16,6 +16,7 @@ namespace RadarKeys {
 		constexpr double kRepeatRateSeconds = 0.85;
 		constexpr double kIncrementMultIncrementMult = 1.5;
 		constexpr double kMaxIncrementMult = 50.0;
+		constexpr int kMaxQueuedEdges = 8;
 
 		struct KeyDescription {
 			bool hasToggleState = false;
@@ -33,10 +34,10 @@ namespace RadarKeys {
 		struct KeyPollState {
 			bool registered = false;
 			bool isPressed = false;
-			bool downEdgePending = false;
-			bool upEdgePending = false;
-			bool physicalDownEdgePending = false;
-			bool physicalUpEdgePending = false;
+			int downEdgePending = 0;
+			int upEdgePending = 0;
+			int physicalDownEdgePending = 0;
+			int physicalUpEdgePending = 0;
 			bool heldStartSet = false;
 			bool onHoldStartSet = false;
 			bool repeatStartSet = false;
@@ -143,8 +144,8 @@ namespace RadarKeys {
 			KeyPollState& s = states[vKey];
 			if (ev == RawInput::BUTTONEVENT::ONDOWN) {
 				s.isPressed = true;
-				s.downEdgePending = true;
-				s.physicalDownEdgePending = true;
+				if (s.downEdgePending < kMaxQueuedEdges) s.downEdgePending++;
+				if (s.physicalDownEdgePending < kMaxQueuedEdges) s.physicalDownEdgePending++;
 				clock::time_point now = clock::now();
 				s.heldStart = now;
 				s.heldStartSet = true;
@@ -156,8 +157,8 @@ namespace RadarKeys {
 			}
 			else if (ev == RawInput::BUTTONEVENT::ONUP) {
 				s.isPressed = false;
-				s.upEdgePending = true;
-				s.physicalUpEdgePending = true;
+				if (s.upEdgePending < kMaxQueuedEdges) s.upEdgePending++;
+				if (s.physicalUpEdgePending < kMaxQueuedEdges) s.physicalUpEdgePending++;
 				s.heldStartSet = false;
 				s.onHoldStartSet = false;
 				s.repeatStartSet = false;
@@ -212,11 +213,11 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			if (IsSuppressed(vKey)) {
-				s.physicalDownEdgePending = false;
+				s.physicalDownEdgePending = 0;
 				return false;
 			}
-			if (s.physicalDownEdgePending) {
-				s.physicalDownEdgePending = false;
+			if (s.physicalDownEdgePending > 0) {
+				s.physicalDownEdgePending--;
 				return true;
 			}
 			return false;
@@ -231,11 +232,11 @@ namespace RadarKeys {
 			KeyPollState& s = states[vKey];
 			s.pendingUsesOnPress = true;
 			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
-				s.downEdgePending = false;
+				s.downEdgePending = 0;
 				return false;
 			}
-			if (s.downEdgePending) {
-				s.downEdgePending = false;
+			if (s.downEdgePending > 0) {
+				s.downEdgePending--;
 				return true;
 			}
 			return false;
@@ -248,11 +249,11 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			if (IsSuppressed(vKey)) {
-				s.physicalUpEdgePending = false;
+				s.physicalUpEdgePending = 0;
 				return false;
 			}
-			if (s.physicalUpEdgePending) {
-				s.physicalUpEdgePending = false;
+			if (s.physicalUpEdgePending > 0) {
+				s.physicalUpEdgePending--;
 				return true;
 			}
 			return false;
@@ -267,11 +268,11 @@ namespace RadarKeys {
 			KeyPollState& s = states[vKey];
 			s.pendingUsesOnRelease = true;
 			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
-				s.upEdgePending = false;
+				s.upEdgePending = 0;
 				return false;
 			}
-			if (s.upEdgePending) {
-				s.upEdgePending = false;
+			if (s.upEdgePending > 0) {
+				s.upEdgePending--;
 				return true;
 			}
 			return false;
