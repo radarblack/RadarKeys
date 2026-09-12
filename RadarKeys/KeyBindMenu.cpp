@@ -864,7 +864,7 @@ namespace RadarKeys {
 				} else if (!holdBind && tapBind && tapBind->isInstant && tapBind->instantTriggerType == 2) {
 					repeatBind = tapBind;
 				}
-				if (repeatBind && !suppressedByCombo) {
+				if (repeatBind && !suppressedByCombo && RawInput::IsKeyHeldReal(vKey)) {
 					double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.lastRepeatTime).count();
 					double effectiveInterval = kRepeatIntervalSeconds / pending.repeatSpeedMult;
 					if (sinceLastRepeat >= effectiveInterval) {
@@ -940,7 +940,7 @@ namespace RadarKeys {
 						}
 					}
 
-					bool repeatEligible = bind.isInstant && bind.instantTriggerType == 2 && (hasHold ? bind.comboHoldFired : true);
+					bool repeatEligible = allHeld && bind.isInstant && bind.instantTriggerType == 2 && (hasHold ? bind.comboHoldFired : true);
 					if (repeatEligible) {
 						double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - bind.comboLastRepeatTime).count();
 						double effectiveInterval = kRepeatIntervalSeconds / bind.runtimeRepeatSpeedMult;
