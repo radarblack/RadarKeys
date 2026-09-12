@@ -119,7 +119,7 @@ namespace RadarKeys {
 		static const char* UI_POPUP_RESET_MOD_KEY = "Reset Mod Key?";
 		static const char* UI_FMT_RESET_CONFIRM = "Reset \"%s [%s]\" to the mod's default key?";
 		static const char* UI_TXT_CLEARS_REASSIGNMENT = "This clears the reassignment made in this menu.";
-		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Clear All Hotkeys";
+		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Reset/Remove All";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_POPUP_CLEAR_ALL_CONFIRM = "Clear All Hotkeys?";
 		static const char* UI_TXT_CLEAR_ALL_CONFIRM = "Reset all mod key overrides to their defaults and remove every manually-assigned binding?";
