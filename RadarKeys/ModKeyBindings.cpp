@@ -7,13 +7,18 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <mutex>
 
 namespace RadarKeys {
 	namespace ModKeyBindings {
 		static std::map<std::string, std::map<std::string, std::string>> overrides;
 		static std::map<std::string, std::map<std::string, bool>> disabledMap;
 		static bool loaded = false;
+
+		static std::recursive_mutex g_overridesMutex;
+
 		static bool TryMigrateLegacyFile() {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			std::filesystem::path legacyPath = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radar_keybinds_mod.conf";
 			std::ifstream inFile(legacyPath);
 			if (!inFile) {
@@ -59,6 +64,7 @@ namespace RadarKeys {
 		}
 
 		void Load() {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			if (loaded) {
 				return;
 			}
@@ -66,6 +72,7 @@ namespace RadarKeys {
 		}
 
 		std::vector<OverrideEntry> GetAllOverrides() {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			std::vector<OverrideEntry> result;
 			std::map<std::string, std::map<std::string, bool>> seen;
 			for (const auto& scriptEntry : overrides) {
@@ -90,6 +97,7 @@ namespace RadarKeys {
 		}
 
 		void LoadFromEntries(const std::vector<OverrideEntry>& entries) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			overrides.clear();
 			disabledMap.clear();
 			for (const auto& e : entries) {
@@ -119,6 +127,7 @@ namespace RadarKeys {
 		}
 
 		std::string GetOverride(const std::string& scriptName, const std::string& functionName) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			if (!loaded) {
 				Load();
 			}
@@ -134,6 +143,7 @@ namespace RadarKeys {
 		}
 
 		void SetOverride(const std::string& scriptName, const std::string& functionName, const std::string& keyName) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			if (!loaded) {
 				Load();
 			}
@@ -142,6 +152,7 @@ namespace RadarKeys {
 		}
 
 		bool IsDisabled(const std::string& scriptName, const std::string& functionName) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			if (!loaded) {
 				Load();
 			}
@@ -157,6 +168,7 @@ namespace RadarKeys {
 		}
 
 		void SetDisabled(const std::string& scriptName, const std::string& functionName, bool disabled) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			if (!loaded) {
 				Load();
 			}
