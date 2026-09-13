@@ -72,7 +72,6 @@ namespace RadarKeys {
 		{ 0x6F1D2B82, 0xD5A0, 0x11CF, { 0xBF, 0xC7, 0x44, 0x45, 0x53, 0x54 } };
 		static const GUID kGuidSysKeyboardEm2 =
 		{ 0x6F1D2B83, 0xD5A0, 0x11CF, { 0xBF, 0xC7, 0x44, 0x45, 0x53, 0x54 } };
-		// DIPROP_RANGE
 		static const GUID kGuidPropRange =
 		{ 0x13517C81, 0x6E81, 0x11CF, { 0x9C, 0x3E, 0x00, 0xAA, 0x00, 0x4A, 0x48, 0xA4 } };
 
@@ -126,11 +125,13 @@ namespace RadarKeys {
 			switch (caps.dwDevType & 0xFF) {
 			case DI8DEVTYPE_KEYBOARD: kind = DeviceKind::Keyboard; break;
 			case DI8DEVTYPE_MOUSE:    kind = DeviceKind::Mouse; break;
-			case DI8DEVTYPE_GAMECTRL:
+			case DI8DEVTYPE_JOYSTICK:
+			case DI8DEVTYPE_GAMEPAD:
 			case DI8DEVTYPE_1STPERSON:
 			case DI8DEVTYPE_DRIVING:
 			case DI8DEVTYPE_FLIGHT:
 			case DI8DEVTYPE_SUPPLEMENTAL:
+			case 4: // legacy DIDEVTYPE_JOYSTICK
 				kind = DeviceKind::Joystick;
 				break;
 			default:
