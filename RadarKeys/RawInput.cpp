@@ -7,19 +7,22 @@
 #include <cstdlib>
 #include <algorithm>
 #include <utility>
+#include <mutex>
+#include <vector>
+#include <atomic>
+#include <list>
 #pragma comment(lib, "Xinput.lib")
 
 namespace RadarKeys {
 	namespace RawInput {
 		const USHORT vKeyMax = 256; // virtual keycode max (VK_OEM_CLEAR      0xFE)
 		USHORT currFlags[vKeyMax]; // indexed by Virtual Keycode
-		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys
-		bool blockGameKeys[vKeyMax] = { false }; // block game from recieving message
-
-		bool realStateHeld[vKeyMax] = { false }; 
-
+		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys (written once, before input starts)
+		std::atomic<unsigned char> blockGameKeys[vKeyMax]{}; // block game from recieving message
+		std::atomic<unsigned char> realStateHeld[vKeyMax]{};
 		std::list<std::pair<ActionHandle, ButtonAction>>* buttonActions[vKeyMax] = { nullptr };
-		ActionHandle nextActionHandle = 1; // 0 reserved as an "invalid/none" sentinel if ever needed
+		ActionHandle nextActionHandle = 1;
+		std::recursive_mutex g_actionMutex;
 
 		void BlockMouseClick() {
 			blockGameKeys[VK_LBUTTON] = true;
@@ -82,7 +85,7 @@ namespace RadarKeys {
 			for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
 				XINPUT_STATE s{};
 				if (XInputGetState(i, &s) != ERROR_SUCCESS) {
-					continue; // this slot has no controller connected
+					continue;
 				}
 				anyConnected = true;
 				buttons |= s.Gamepad.wButtons;
@@ -281,13 +284,21 @@ namespace RadarKeys {
 
 		//IN/SIDE: buttonActions
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
-			std::list<std::pair<ActionHandle, ButtonAction>>* actions = buttonActions[vKey];
-			if (actions != nullptr) {
-				// this fires by default, regardless of the debug option. that should not happen. fixed it.
+			std::vector<ButtonAction> snapshot;
+			{
+				std::lock_guard<std::recursive_mutex> lock(g_actionMutex);
+				std::list<std::pair<ActionHandle, ButtonAction>>* actions = buttonActions[vKey];
+				if (actions != nullptr) {
+					snapshot.reserve(actions->size());
+					for (const auto& entry : *actions) {
+						snapshot.push_back(entry.second);
+					}
+				}
+			}
+			if (!snapshot.empty()) {
 				spdlog::trace("RawInput DoActions for vKey:{}", vKey);
-				for (auto it = actions->begin(); it != actions->end(); ++it) {
-					ButtonAction Action = it->second;
-					Action(buttonEvent);
+				for (ButtonAction& action : snapshot) {
+					action(buttonEvent);
 				}
 			}
 		}//DoActions
@@ -299,6 +310,7 @@ namespace RadarKeys {
 				return 0;
 			}
 			spdlog::debug("RawInput RegisterAction for vKey:{}", vKey);
+			std::lock_guard<std::recursive_mutex> lock(g_actionMutex);
 			if (buttonActions[vKey] == nullptr) {
 				buttonActions[vKey] = new std::list<std::pair<ActionHandle, ButtonAction>>();
 			}
@@ -312,11 +324,12 @@ namespace RadarKeys {
 			if (vKey >= vKeyMax) {
 				return;
 			}
+			std::lock_guard<std::recursive_mutex> lock(g_actionMutex);
 			if (buttonActions[vKey] == nullptr) {
 				spdlog::warn("RawInput UnRegisterAction: No actions for vKey {}", vKey);
 				return;
 			}
-			else { // HWL TODO: haven't checked if this works properly
+			else {
 				buttonActions[vKey]->clear();
 				delete buttonActions[vKey];
 				buttonActions[vKey] = nullptr;
@@ -327,6 +340,7 @@ namespace RadarKeys {
 			if (vKey >= vKeyMax || handle == 0) {
 				return;
 			}
+			std::lock_guard<std::recursive_mutex> lock(g_actionMutex);
 			std::list<std::pair<ActionHandle, ButtonAction>>* actions = buttonActions[vKey];
 			if (actions == nullptr) {
 				spdlog::warn("RawInput UnRegisterAction: No actions for vKey {}", vKey);
@@ -437,8 +451,6 @@ namespace RadarKeys {
 			std::fill_n(currFlags, vKeyMax, static_cast<USHORT>(RI_KEY_BREAK));
 
 			InitIgnoreKeys();
-
-			// No fixed actions; dynamically registers KeyBindMenu/DebuggerMenu via RegisterAction (F4 toggle + persisted bindings).
 		}
 
 		//CULL not needed, the game will have set up it's own
