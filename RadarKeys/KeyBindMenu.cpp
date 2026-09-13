@@ -1680,9 +1680,8 @@ namespace RadarKeys {
 							if (ImGui::IsKeyPressed((ImGuiKey)i)) { pressedKey = (USHORT)i; break; }
 						}
 						if (pressedKey == 0) {
-							for (USHORT gpKey : RawInput::GamepadVKeys()) {
-								if (LuaKeyState::PhysicalOnButtonDown(gpKey)) { pressedKey = gpKey; break; }
-							}
+						    for (USHORT gpKey : RawInput::GamepadVKeys()) {
+						        if (RawInput::IsKeyHeldReal(gpKey)) { pressedKey = gpKey; break; }
 						}
 					}
 					if (pressedKey != 0) {
