@@ -326,9 +326,9 @@ namespace RadarKeys {
 			{"Print Screen", VK_SNAPSHOT}, {"Pause", VK_PAUSE}, {"Menu Key", VK_APPS},
 
 			// Media Buttons
-			{"Volume Up", VK_VOLUME_UP}, {"Volume Down", VK_VOLUME_DOWN}, {"Volume Mute", VK_VOLUME_MUTE},
-			{"Media Play/Pause", VK_MEDIA_PLAY_PAUSE}, {"Media Stop", VK_MEDIA_STOP},
-			{"Media Next", VK_MEDIA_NEXT_TRACK}, {"Media Previous", VK_MEDIA_PREV_TRACK},
+			{"Volume Up", VK_VOLUME_UP}, {"Volume Down", VK_VOLUME_DOWN}, {"Mute", VK_VOLUME_MUTE},
+			{"Play/Pause", VK_MEDIA_PLAY_PAUSE}, {"Stop", VK_MEDIA_STOP},
+			{"Next", VK_MEDIA_NEXT_TRACK}, {"Previous", VK_MEDIA_PREV_TRACK},
 
 			// Modifiers
 			{"Ctrl", VK_CONTROL}, {"Shift", VK_SHIFT}, {"Alt", VK_MENU},
