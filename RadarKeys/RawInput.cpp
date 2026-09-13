@@ -3,6 +3,7 @@
 
 #include "RawInput.h"
 #include "spdlog/spdlog.h"
+#include <MinHook.h>
 #include <Xinput.h>
 #include <cstdlib>
 #include <algorithm>
@@ -11,6 +12,7 @@
 #include <vector>
 #include <atomic>
 #include <list>
+#include <array>
 #pragma comment(lib, "Xinput.lib")
 
 namespace RadarKeys {
@@ -20,28 +22,51 @@ namespace RadarKeys {
 		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys (written once, before input starts)
 		std::atomic<unsigned char> blockGameKeys[vKeyMax]{}; // block game from recieving message
 		std::atomic<unsigned char> realStateHeld[vKeyMax]{};
+		std::atomic<unsigned char> g_keyboardBlockedToGame{ false };
+		std::atomic<unsigned char> g_mouseBlockedToGame{ false };
+		std::atomic<unsigned char> g_gamepadBlockedToGame{ false };
+
+		bool IsKeyboardBlockedToGame() { return g_keyboardBlockedToGame.load() != false; }
+		bool IsMouseBlockedToGame() { return g_mouseBlockedToGame.load() != false; }
+		bool IsGamepadBlockedToGame() { return g_gamepadBlockedToGame.load() != false; }
+		void SetGamepadBlockedToGame(bool blocked) { g_gamepadBlockedToGame.store(blocked ? 1 : 0); }
+
 		std::list<std::pair<ActionHandle, ButtonAction>>* buttonActions[vKeyMax] = { nullptr };
 		ActionHandle nextActionHandle = 1;
 		std::recursive_mutex g_actionMutex;
 
 		void BlockMouseClick() {
 			blockGameKeys[VK_LBUTTON] = true;
+			blockGameKeys[VK_RBUTTON] = true;
+			blockGameKeys[VK_MBUTTON] = true;
+			blockGameKeys[VK_XBUTTON1] = true;
+			blockGameKeys[VK_XBUTTON2] = true;
+			g_mouseBlockedToGame.store(1);
 		}
 
 		void UnBlockMouseClick() {
 			blockGameKeys[VK_LBUTTON] = false;
+			blockGameKeys[VK_RBUTTON] = false;
+			blockGameKeys[VK_MBUTTON] = false;
+			blockGameKeys[VK_XBUTTON1] = false;
+			blockGameKeys[VK_XBUTTON2] = false;
+			g_mouseBlockedToGame.store(0);
 		}
 
 		void BlockAll() {
 			for (int i = 0; i < vKeyMax; i++) {
 				blockGameKeys[i] = true;
 			}
+			g_keyboardBlockedToGame.store(1);
+			g_mouseBlockedToGame.store(1);
 		}
 
 		void UnBlockAll() {
 			for (int i = 0; i < vKeyMax; i++) {
 				blockGameKeys[i] = false;
 			}
+			g_keyboardBlockedToGame.store(0);
+			g_mouseBlockedToGame.store(0);
 		}
 
 		void BlockKeyboard() {
@@ -49,12 +74,14 @@ namespace RadarKeys {
 				blockGameKeys[i] = true;
 			}
 			blockGameKeys[VK_ESCAPE] = false;
+			g_keyboardBlockedToGame.store(1);
 		}
 
 		void UnBlockKeyboard() {
 			for (USHORT i = VK_BACK; i < 256; i++) {
 				blockGameKeys[i] = false;
 			}
+			g_keyboardBlockedToGame.store(0);
 		}
 
 		const std::vector<USHORT>& GamepadVKeys() {
@@ -75,8 +102,79 @@ namespace RadarKeys {
 
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
 
+		typedef DWORD(WINAPI* XInputGetStateFunc)(DWORD, XINPUT_STATE*);
+		static XInputGetStateFunc g_origXInputGetState = nullptr;
+		static std::atomic<bool> g_xinputHookInstalled{ false };
+		static bool g_xinputHookAttempted = false;
+
+		struct PadCacheEntry {
+			std::mutex mutex;
+			XINPUT_STATE state{};
+			bool connected = false;
+		};
+		static std::array<PadCacheEntry, XUSER_MAX_COUNT> g_padCache;
+
+		DWORD WINAPI Hooked_XInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
+			DWORD result = ERROR_DEVICE_NOT_CONNECTED;
+			if (g_origXInputGetState && pState) {
+				result = g_origXInputGetState(dwUserIndex, pState);
+			}
+
+			if (dwUserIndex < XUSER_MAX_COUNT) {
+				PadCacheEntry& entry = g_padCache[dwUserIndex];
+				std::lock_guard<std::mutex> lock(entry.mutex);
+				if (result == ERROR_SUCCESS && pState) {
+					entry.state = *pState;
+					entry.connected = true;
+				} else {
+					entry.connected = false;
+				}
+			}
+
+			if (result == ERROR_SUCCESS && pState && g_gamepadBlockedToGame.load()) {
+				ZeroMemory(&pState->Gamepad, sizeof(XINPUT_GAMEPAD));
+			}
+			return result;
+		}
+
+		void EnsureXInputHook() {
+			if (g_xinputHookAttempted) {
+				return; // hooked one module already, or hooking it definitively failed
+			}
+
+			static const wchar_t* kModuleNames[] = {
+				L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll", L"xinput1_2.dll", L"xinput1_1.dll"
+			};
+
+			for (const wchar_t* moduleName : kModuleNames) {
+				HMODULE module = GetModuleHandleW(moduleName);
+				if (!module) {
+					continue;
+				}
+				g_xinputHookAttempted = true;
+				void* target = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetState"));
+				if (!target) {
+					target = reinterpret_cast<void*>(GetProcAddress(module, reinterpret_cast<LPCSTR>(100)));
+				}
+				if (!target) {
+					spdlog::warn("RawInput: XInputGetState export not found - gamepad suppression will not work");
+					break;
+				}
+				if (MH_CreateHook(target, reinterpret_cast<LPVOID>(&Hooked_XInputGetState), reinterpret_cast<LPVOID*>(&g_origXInputGetState)) == MH_OK &&
+					MH_EnableHook(target) == MH_OK) {
+					g_xinputHookInstalled.store(true);
+					spdlog::info("RawInput: hooked XInputGetState for gamepad suppression");
+				} else {
+					spdlog::warn("RawInput: failed to hook XInputGetState - gamepad suppression will not work");
+				}
+				break;
+			}
+		}
+
 		bool g_anyGamepadConnected = false;
 		void PollGamepad() {
+			EnsureXInputHook();
+
 			WORD buttons = 0;
 			BYTE leftTrigger = 0, rightTrigger = 0;
 			SHORT lx = 0, ly = 0, rx = 0, ry = 0;
@@ -84,7 +182,18 @@ namespace RadarKeys {
 
 			for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
 				XINPUT_STATE s{};
-				if (XInputGetState(i, &s) != ERROR_SUCCESS) {
+				bool connected = false;
+				if (g_xinputHookInstalled.load()) {
+					PadCacheEntry& entry = g_padCache[i];
+					std::lock_guard<std::mutex> lock(entry.mutex);
+					if (entry.connected) {
+						s = entry.state;
+						connected = true;
+					}
+				} else if (XInputGetState(i, &s) == ERROR_SUCCESS) {
+					connected = true; // this slot has a controller connected
+				}
+				if (!connected) {
 					continue;
 				}
 				anyConnected = true;
@@ -451,6 +560,8 @@ namespace RadarKeys {
 			std::fill_n(currFlags, vKeyMax, static_cast<USHORT>(RI_KEY_BREAK));
 
 			InitIgnoreKeys();
+
+			// No fixed actions; dynamically registers KeyBindMenu/DebuggerMenu via RegisterAction (F4 toggle + persisted bindings).
 		}
 
 		//CULL not needed, the game will have set up it's own
