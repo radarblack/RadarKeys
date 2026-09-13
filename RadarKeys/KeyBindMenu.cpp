@@ -1679,10 +1679,11 @@ namespace RadarKeys {
 							if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
 							if (ImGui::IsKeyPressed((ImGuiKey)i)) { pressedKey = (USHORT)i; break; }
 						} 
-						if (pressedKey == 0) {
-						   for (USHORT gpKey : RawInput::GamepadVKeys()) {
-						      if (RawInput::IsKeyHeldReal(gpKey)) { pressedKey = gpKey; break; }
-					    }
+							if (pressedKey == 0) {
+							   for (USHORT gpKey : RawInput::GamepadVKeys()) {
+							      if (RawInput::IsKeyHeldReal(gpKey)) { pressedKey = gpKey; break; }
+						    }
+						}
 					}
 					if (pressedKey != 0) {
 						singleHoldKey = pressedKey;
