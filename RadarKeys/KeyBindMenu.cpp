@@ -808,6 +808,15 @@ namespace RadarKeys {
 		}
 
 		void Update() {
+			static bool lastGamepadConnected = false;
+			bool nowGamepadConnected = RawInput::IsAnyGamepadConnected();
+			if (nowGamepadConnected != lastGamepadConnected) {
+				LogActivity(nowGamepadConnected
+					? "Gamepad detected (XInput)"
+					: "Gamepad no longer detected (XInput)", true);
+				lastGamepadConnected = nowGamepadConnected;
+			}
+
 			LuaKeyState::SetSuppressedVKeys(ComputeConflictedVKeys());
 			LuaKeyState::SetDisabledVKeys(ComputeDisabledModVKeys());
 			LuaKeyState::SetDisabledCombos(ComputeDisabledModCombos());
