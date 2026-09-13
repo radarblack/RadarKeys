@@ -1,6 +1,7 @@
 #pragma once
 #include "windowsapi.h"
 #include <functional>
+#include <vector>
 
 namespace RadarKeys {
 	namespace RawInput {
@@ -28,5 +29,7 @@ namespace RadarKeys {
 		void UnBlockMouseClick();
 		void BlockKeyboard();
 		void UnBlockKeyboard();
+		void PollGamepad();
+		const std::vector<USHORT>& GamepadVKeys();
 	}
 }
