@@ -32,5 +32,9 @@ namespace RadarKeys {
 		void PollGamepad();
 		bool IsAnyGamepadConnected();
 		const std::vector<USHORT>& GamepadVKeys();
+		void SetGamepadBlockedToGame(bool blocked);
+		bool IsGamepadBlockedToGame();
+		bool IsKeyboardBlockedToGame();
+		bool IsMouseBlockedToGame();
 	}
 }
