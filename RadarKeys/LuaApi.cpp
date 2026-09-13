@@ -77,12 +77,16 @@ namespace RadarKeys {
 		static bool loggedDirectCallAvailability = false;
 		if (!loggedDirectCallAvailability) {
 			loggedDirectCallAvailability = true;
+#if RADARKEYS_ALLOW_DIRECT_LUA_CALL
 			bool directCallReady = g_lua_getfield && g_lua_pcall && g_lua_settop && g_lua_type;
 			if (directCallReady) {
 				spdlog::info("ResolveLuaApi: direct (non-queued) Lua call path is available");
 			} else {
 				spdlog::info("ResolveLuaApi: direct Lua call path unavailable (ADDR_lua_getfield/pcall/settop/type not set) - manual key binds will use the queued path");
 			}
+#else
+			spdlog::info("ResolveLuaApi: direct Lua call path compiled out (RADARKEYS_ALLOW_DIRECT_LUA_CALL=0) - manual key binds use the Lua-thread queued path");
+#endif
 		}
 
 		return ok;
@@ -178,6 +182,14 @@ namespace RadarKeys {
 			return LuaDirectCallResult::NotFound;
 		}
 
+#if !RADARKEYS_ALLOW_DIRECT_LUA_CALL
+		static bool loggedDirectCallDisabled = false;
+		if (!loggedDirectCallDisabled) {
+			loggedDirectCallDisabled = true;
+			spdlog::info("LuaCallGlobalFunction: direct (off-thread) Lua calls are compiled out (RADARKEYS_ALLOW_DIRECT_LUA_CALL=0); using queued CallFunction path");
+		}
+		return LuaDirectCallResult::NotAvailable;
+#else
 		lua_State* L = g_CapturedLuaState;
 		if (!L || !g_lua_getfield || !g_lua_pcall || !g_lua_settop || !g_lua_type || !g_lua_gettop) {
 			return LuaDirectCallResult::NotAvailable;
@@ -200,5 +212,6 @@ namespace RadarKeys {
 
 		g_lua_settop(L, top);
 		return LuaDirectCallResult::Success;
+#endif
 	}
 }
