@@ -4,6 +4,10 @@
 #include <cstdint>
 #include <string>
 
+#ifndef RADARKEYS_ALLOW_DIRECT_LUA_CALL
+#define RADARKEYS_ALLOW_DIRECT_LUA_CALL 0
+#endif
+
 extern "C" {
 #include "lua.h"
 #include "lauxlib.h"
