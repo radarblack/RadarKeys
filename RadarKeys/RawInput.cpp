@@ -72,16 +72,19 @@ namespace RadarKeys {
 
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent); // forward decl - PollGamepad below needs it; full definition is further down, same as ProcessKey already relies on
 
+		bool g_anyGamepadConnected = false;
 		void PollGamepad() {
 			WORD buttons = 0;
 			BYTE leftTrigger = 0, rightTrigger = 0;
 			SHORT lx = 0, ly = 0, rx = 0, ry = 0;
+			bool anyConnected = false;
 
 			for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
 				XINPUT_STATE s{};
 				if (XInputGetState(i, &s) != ERROR_SUCCESS) {
-					continue;
+					continue; // this slot has no controller connected
 				}
+				anyConnected = true;
 				buttons |= s.Gamepad.wButtons;
 				leftTrigger = (std::max)(leftTrigger, s.Gamepad.bLeftTrigger);
 				rightTrigger = (std::max)(rightTrigger, s.Gamepad.bRightTrigger);
@@ -129,6 +132,12 @@ namespace RadarKeys {
 				currFlags[vKey] = isDown ? RI_KEY_MAKE : RI_KEY_BREAK;
 				DoActions(vKey, isDown ? BUTTONEVENT::ONDOWN : BUTTONEVENT::ONUP);
 			}
+
+			g_anyGamepadConnected = anyConnected;
+		}
+
+		bool IsAnyGamepadConnected() {
+			return g_anyGamepadConnected;
 		}
 
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
