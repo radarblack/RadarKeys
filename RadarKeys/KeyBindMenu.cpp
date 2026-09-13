@@ -92,6 +92,14 @@ namespace RadarKeys {
 		static const char* UI_LOG_DEBUGGER_CLOSED = "Debugger Overlay closed";
 		static const char* UI_LBL_MENU_HOTKEY_PREFIX = "Menu Hotkey: [";
 		static const char* UI_LBL_MENU_HOTKEY_SUFFIX = "]";
+		static const char* UI_HDR_CAPTURE_SUPPRESSION = "Block game input while assigning:";
+		static const char* UI_CHK_SUPPRESS_KEYBOARD = "Keyboard";
+		static const char* UI_CHK_SUPPRESS_MOUSE = "Mouse";
+		static const char* UI_CHK_SUPPRESS_GAMEPAD = "Gamepad";
+		static const char* UI_TIP_CAPTURE_SUPPRESSION =
+			"While the key-assignment window is open, selected devices are hidden from the game so your character doesn't move, "
+			"aim or fire while you bind a key.\n"
+			"RadarKeys still receives everything, so key capture and these menus keep working normally.";
 		static const char* UI_HDR_KEY_BINDINGS = "Key Bindings";
 		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Keys described from the mod script will put the information in the list.";
 		static const char* UI_TXT_NO_KEYS_ASSIGNED = "(No Keys are assigned yet.)";
@@ -446,6 +454,9 @@ namespace RadarKeys {
 		USHORT menuToggleVKey = VK_F7;
 		RawInput::ActionHandle menuToggleHandle = 0;
 		bool menuOpen = false;
+		bool captureSuppressKeyboard = true;
+		bool captureSuppressMouse = true;
+		bool captureSuppressGamepad = true;
 
 		std::unordered_set<USHORT> activeBindVKeys;
 		void OnMenuToggleKeyPressed(RawInput::BUTTONEVENT buttonEvent) {
@@ -1032,6 +1043,10 @@ namespace RadarKeys {
 			}
 			
 			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
+			outFile << "CAPTUREBLOCK|"
+				<< (captureSuppressKeyboard ? "1|" : "0|")
+				<< (captureSuppressMouse ? "1|" : "0|")
+				<< (captureSuppressGamepad ? "1" : "0") << "\n";
 			std::string gameDirStr = std::filesystem::path(GetGameDirectory()).generic_string() + "/";
 			for (auto b : bindings) {
 				std::string genericOn = b.scriptPathOn.empty() ? "" : std::filesystem::path(b.scriptPathOn).generic_string();
@@ -1102,6 +1117,11 @@ namespace RadarKeys {
 						spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
 						LogActivity("Unknown MENUKEY name '" + parts[1] + "', keeping default", false);
 					}
+				}
+				else if (parts[0] == "CAPTUREBLOCK" && parts.size() >= 4) {
+					captureSuppressKeyboard = trim(parts[1]) == "1";
+					captureSuppressMouse = trim(parts[2]) == "1";
+					captureSuppressGamepad = trim(parts[3]) == "1";
 				}
 				else if (parts[0] == "MODKEY" && parts.size() >= 4) {
 					ModKeyBindings::OverrideEntry entry;
@@ -2310,6 +2330,36 @@ namespace RadarKeys {
 				isAssigningMenuToggleKey = showCapturePrompt = true; 
 				requestCaptureFocus = true;
 				LogActivity("Menu Key Reassignment Prompt opened");
+			}
+			ImGui::Separator();
+
+			ImGui::AlignTextToFramePadding();
+			ImGui::TextUnformatted(UI_HDR_CAPTURE_SUPPRESSION);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(?)");
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("%s", UI_TIP_CAPTURE_SUPPRESSION);
+			}
+			{
+				const bool prevKb = captureSuppressKeyboard;
+				const bool prevMouse = captureSuppressMouse;
+				const bool prevPad = captureSuppressGamepad;
+
+				ImGui::Checkbox(UI_CHK_SUPPRESS_KEYBOARD, &captureSuppressKeyboard);
+				ImGui::SameLine();
+				ImGui::Checkbox(UI_CHK_SUPPRESS_MOUSE, &captureSuppressMouse);
+				ImGui::SameLine();
+				ImGui::Checkbox(UI_CHK_SUPPRESS_GAMEPAD, &captureSuppressGamepad);
+
+				if (captureSuppressKeyboard != prevKb ||
+					captureSuppressMouse != prevMouse ||
+					captureSuppressGamepad != prevPad) {
+					SaveBindings();
+					LogActivity(std::string("Capture suppression set - ") +
+						UI_CHK_SUPPRESS_KEYBOARD + ": " + (captureSuppressKeyboard ? "on" : "off") + ", " +
+						UI_CHK_SUPPRESS_MOUSE + ": " + (captureSuppressMouse ? "on" : "off") + ", " +
+						UI_CHK_SUPPRESS_GAMEPAD + ": " + (captureSuppressGamepad ? "on" : "off"));
+				}
 			}
 			ImGui::Separator();
 
