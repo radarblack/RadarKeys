@@ -70,7 +70,7 @@ namespace RadarKeys {
 			return keys;
 		}
 
-		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent); // forward decl - PollGamepad below needs it; full definition is further down, same as ProcessKey already relies on
+		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
 
 		bool g_anyGamepadConnected = false;
 		void PollGamepad() {
