@@ -283,15 +283,18 @@ namespace RadarKeys {
 
 		struct VkNameEntry { const char* name; USHORT vKey; };
 		const VkNameEntry vkNameTable[] = {
+			// Alphabeticals
 			{"A", 'A'}, {"B", 'B'}, {"C", 'C'}, {"D", 'D'}, {"E", 'E'}, {"F", 'F'},
 			{"G", 'G'}, {"H", 'H'}, {"I", 'I'}, {"J", 'J'}, {"K", 'K'}, {"L", 'L'},
 			{"M", 'M'}, {"N", 'N'}, {"O", 'O'}, {"P", 'P'}, {"Q", 'Q'}, {"R", 'R'},
 			{"S", 'S'}, {"T", 'T'}, {"U", 'U'}, {"V", 'V'}, {"W", 'W'}, {"X", 'X'},
 			{"Y", 'Y'}, {"Z", 'Z'},
 
+			// Numericals
 			{"0", '0'}, {"1", '1'}, {"2", '2'}, {"3", '3'}, {"4", '4'},
 			{"5", '5'}, {"6", '6'}, {"7", '7'}, {"8", '8'}, {"9", '9'},
 
+			// Functions (added all of them cause for some reason, there are 24 of them in the Virtual Key Codes list. lmao)
 			{"F1", VK_F1}, {"F2", VK_F2}, {"F3", VK_F3}, {"F4", VK_F4},
 			{"F5", VK_F5}, {"F6", VK_F6}, {"F7", VK_F7}, {"F8", VK_F8},
 			{"F9", VK_F9}, {"F10", VK_F10}, {"F11", VK_F11}, {"F12", VK_F12},
@@ -299,31 +302,38 @@ namespace RadarKeys {
 			{"F17", VK_F17}, {"F18", VK_F18}, {"F19", VK_F19}, {"F20", VK_F20},
 			{"F21", VK_F21}, {"F22", VK_F22}, {"F23", VK_F23}, {"F24", VK_F24},
 
+			// Navigationals
 			{"Space", VK_SPACE}, {"Tab", VK_TAB}, {"Enter", VK_RETURN}, {"Backspace", VK_BACK},
 			{"Insert", VK_INSERT}, {"Delete", VK_DELETE},
 			{"Home", VK_HOME}, {"End", VK_END},
 			{"Page Up", VK_PRIOR}, {"Page Down", VK_NEXT},
 			{"Up", VK_UP}, {"Down", VK_DOWN}, {"Left", VK_LEFT}, {"Right", VK_RIGHT},
 
+			// Numpad
 			{"Numpad 0", VK_NUMPAD0}, {"Numpad 1", VK_NUMPAD1}, {"Numpad 2", VK_NUMPAD2},
 			{"Numpad 3", VK_NUMPAD3}, {"Numpad 4", VK_NUMPAD4}, {"Numpad 5", VK_NUMPAD5},
 			{"Numpad 6", VK_NUMPAD6}, {"Numpad 7", VK_NUMPAD7}, {"Numpad 8", VK_NUMPAD8},
 			{"Numpad 9", VK_NUMPAD9}, {"Numpad *", VK_MULTIPLY}, {"Numpad +", VK_ADD}, 
 			{"Numpad -", VK_SUBTRACT}, {"Numpad .", VK_DECIMAL}, {"Numpad /", VK_DIVIDE},
 
+			// Typo-Graphics and Punctuation Symbols
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
 			{";", VK_OEM_1}, {"=", VK_OEM_PLUS}, {"-", VK_OEM_MINUS}, {"/", VK_OEM_2},
 			{"`", VK_OEM_3}, {"[", VK_OEM_4}, {"\\", VK_OEM_5}, {"]", VK_OEM_6}, {"'", VK_OEM_7},
 
+			// Utility
 			{"Caps Lock", VK_CAPITAL}, {"Num Lock", VK_NUMLOCK}, {"Scroll Lock", VK_SCROLL},
 			{"Print Screen", VK_SNAPSHOT}, {"Pause", VK_PAUSE}, {"Menu Key", VK_APPS},
 
+			// Media Buttons
 			{"Volume Up", VK_VOLUME_UP}, {"Volume Down", VK_VOLUME_DOWN}, {"Volume Mute", VK_VOLUME_MUTE},
 			{"Media Play/Pause", VK_MEDIA_PLAY_PAUSE}, {"Media Stop", VK_MEDIA_STOP},
 			{"Media Next", VK_MEDIA_NEXT_TRACK}, {"Media Previous", VK_MEDIA_PREV_TRACK},
 
+			// Modifiers
 			{"Ctrl", VK_CONTROL}, {"Shift", VK_SHIFT}, {"Alt", VK_MENU},
 
+			// Mouse
 			{"Mouse Wheel", VK_MBUTTON},
 			{"Mouse 4", VK_XBUTTON1},
 			{"Mouse 5", VK_XBUTTON2},
@@ -342,6 +352,7 @@ namespace RadarKeys {
 			{"LS Left", VK_GAMEPAD_LEFT_THUMBSTICK_LEFT}, {"RS Left", VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT},
 			{"LS Right", VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT}, {"RS Right", VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT},
 			{"LS Click", VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON}, {"RS Click", VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON}
+			// There's no such thing for Playstation/Switch Keys as far as I can search.
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
