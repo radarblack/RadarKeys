@@ -119,7 +119,7 @@ namespace RadarKeys {
 		static const char* UI_POPUP_RESET_MOD_KEY = "Reset Mod Key?";
 		static const char* UI_FMT_RESET_CONFIRM = "Reset \"%s [%s]\" to the mod's default key?";
 		static const char* UI_TXT_CLEARS_REASSIGNMENT = "This clears the reassignment made in this menu.";
-		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Reset/Remove All";
+		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Clear All Hotkeys";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_POPUP_CLEAR_ALL_CONFIRM = "Clear All Hotkeys?";
 		static const char* UI_TXT_CLEAR_ALL_CONFIRM = "Reset all mod key overrides to their defaults and remove every manually-assigned binding?";
@@ -327,7 +327,25 @@ namespace RadarKeys {
 			{"Mouse Wheel", VK_MBUTTON},
 			{"Mouse 4", VK_XBUTTON1},
 			{"Mouse 5", VK_XBUTTON2},
-			{"Right Click", VK_RBUTTON}
+			{"Right Click", VK_RBUTTON},
+
+			{"Gamepad A", VK_GAMEPAD_A}, {"Gamepad B", VK_GAMEPAD_B},
+			{"Gamepad X", VK_GAMEPAD_X}, {"Gamepad Y", VK_GAMEPAD_Y},
+			{"Gamepad LB", VK_GAMEPAD_LEFT_SHOULDER}, {"Gamepad RB", VK_GAMEPAD_RIGHT_SHOULDER},
+			{"Gamepad LT", VK_GAMEPAD_LEFT_TRIGGER}, {"Gamepad RT", VK_GAMEPAD_RIGHT_TRIGGER},
+			{"Gamepad Menu", VK_GAMEPAD_MENU}, {"Gamepad View", VK_GAMEPAD_VIEW},
+			{"Gamepad LS Click", VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON},
+			{"Gamepad RS Click", VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON},
+			{"D-Pad Up", VK_GAMEPAD_DPAD_UP}, {"D-Pad Down", VK_GAMEPAD_DPAD_DOWN},
+			{"D-Pad Left", VK_GAMEPAD_DPAD_LEFT}, {"D-Pad Right", VK_GAMEPAD_DPAD_RIGHT},
+			{"Left Stick Up", VK_GAMEPAD_LEFT_THUMBSTICK_UP},
+			{"Left Stick Down", VK_GAMEPAD_LEFT_THUMBSTICK_DOWN},
+			{"Left Stick Left", VK_GAMEPAD_LEFT_THUMBSTICK_LEFT},
+			{"Left Stick Right", VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT},
+			{"Right Stick Up", VK_GAMEPAD_RIGHT_THUMBSTICK_UP},
+			{"Right Stick Down", VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN},
+			{"Right Stick Left", VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT},
+			{"Right Stick Right", VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
@@ -1651,6 +1669,11 @@ namespace RadarKeys {
 								continue;
 							if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
 							if (ImGui::IsKeyPressed((ImGuiKey)i)) { pressedKey = (USHORT)i; break; }
+						}
+						if (pressedKey == 0) {
+							for (USHORT gpKey : RawInput::GamepadVKeys()) {
+								if (LuaKeyState::PhysicalOnButtonDown(gpKey)) { pressedKey = gpKey; break; }
+							}
 						}
 					}
 					if (pressedKey != 0) {
