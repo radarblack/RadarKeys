@@ -1476,6 +1476,23 @@ namespace RadarKeys {
 			singleHoldActive = false;
 		}
 
+		void CancelCaptureIfActive() {
+			if (!showCapturePrompt) {
+				return;
+			}
+
+			capturedVKey = 0; capturedHoldSeconds = 0.0f;
+			capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
+			capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
+			capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
+			capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
+			capturedInstantUserSet = false;
+			ResetComboCaptureState();
+			captureIsCombo = false;
+			showCapturePrompt = isAssigningMenuToggleKey = isAssigningModKey = false; editingBindingIndex = -1;
+			LogActivity("Key Assignment Prompt cancelled");
+		}
+
 		std::vector<USHORT> ScanCurrentlyHeldKeys() {
 			std::vector<USHORT> held;
 			for (int i = 0; i < vkNameTableCount; i++) {
@@ -2243,16 +2260,7 @@ namespace RadarKeys {
 			ImGui::SameLine(targetCancelX);
 			
 			if (ImGui::Button(UI_BTN_CANCEL, ImVec2(145, buttonHeight))) {
-				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
-				capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
-				capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
-				capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
-				capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
-				capturedInstantUserSet = false;
-				ResetComboCaptureState();
-				captureIsCombo = false;
-				showCapturePrompt = isAssigningMenuToggleKey = isAssigningModKey = false; editingBindingIndex = -1;
-				LogActivity("Key Assignment Prompt cancelled");
+				CancelCaptureIfActive();
 			}
 
 			if (isAssigningModKey) {
@@ -2319,7 +2327,13 @@ namespace RadarKeys {
 			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, minWindowHeightFloor), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, minWindowHeightFloor), ImVec2(FLT_MAX, FLT_MAX));
 
-			if (!ImGui::Begin(UI_WINDOW_TITLE, p_open)) { ImGui::End(); return; }
+			bool wasOpenBeforeBegin = p_open ? *p_open : true;
+			bool windowIsOpen = ImGui::Begin(UI_WINDOW_TITLE, p_open);
+			bool closedThisFrame = p_open ? (wasOpenBeforeBegin && !*p_open) : false;
+			if (closedThisFrame) {
+				CancelCaptureIfActive();
+			}
+			if (!windowIsOpen) { ImGui::End(); return; }
 			if (ImGui::Button(UI_BTN_DEBUGGER)) {
 				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 				LogActivity(DebuggerMenu::menuOpen ? UI_LOG_DEBUGGER_OPENED : UI_LOG_DEBUGGER_CLOSED);
