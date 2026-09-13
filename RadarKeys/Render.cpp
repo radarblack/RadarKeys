@@ -199,6 +199,7 @@ namespace RadarKeys {
 		}
 
 		void OnFrame() {
+			RawInput::PollGamepad();
 			KeyBindMenu::Update();
 			if (!frameInitialized) {
 				if (!FrameInitialize()) {
