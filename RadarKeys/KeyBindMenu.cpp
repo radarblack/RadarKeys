@@ -98,7 +98,8 @@ namespace RadarKeys {
 		static const char* UI_CHK_SUPPRESS_GAMEPAD = "Gamepad";
 		static const char* UI_TIP_CAPTURE_SUPPRESSION =
 			"While the key-assignment window is open, selected devices are hidden from the game so your character doesn't move, "
-			"aim or fire while you bind a key.\n"
+			"aim or fire while you bind a key. Input is blocked at the window-message, XInput and DirectInput layers, and is "
+			"compatible with IHHook's dinput8 proxy.\n"
 			"RadarKeys still receives everything, so key capture and these menus keep working normally.";
 		static const char* UI_HDR_KEY_BINDINGS = "Key Bindings";
 		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Keys described from the mod script will put the information in the list.";
