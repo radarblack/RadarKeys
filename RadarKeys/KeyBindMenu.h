@@ -54,5 +54,8 @@ namespace RadarKeys {
 
 		extern std::vector<KeyBind> bindings;
 		extern bool menuOpen;
+		extern bool captureSuppressKeyboard;
+		extern bool captureSuppressMouse;
+		extern bool captureSuppressGamepad;
 	}
 }
