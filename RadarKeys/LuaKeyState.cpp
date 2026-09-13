@@ -13,7 +13,6 @@
 namespace RadarKeys {
 	namespace LuaKeyState {
 		using clock = std::chrono::steady_clock;
-
 		namespace {
 			std::recursive_mutex g_keyStateMutex;
 		}
