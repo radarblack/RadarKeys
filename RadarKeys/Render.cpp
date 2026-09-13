@@ -70,24 +70,49 @@ namespace RadarKeys {
 				return true;
 			}
 
+			bool mouseRawProcessedHere = false;
 			if (message == WM_INPUT && (IsUnlockCursor() || showCapturePrompt)) {
 				RAWINPUT raw{};
 				UINT size = sizeof(RAWINPUT);
-				
+
 				// Windows Input API...
 				if (GetRawInputData((HRAWINPUT)l_param, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER)) != (UINT)-1) {
 					if (raw.header.dwType == RIM_TYPEMOUSE) {
 						RawInput::ProcessMouseButtons(&raw);
-						return false;
+						mouseRawProcessedHere = true;
+						bool swallowForGame;
+						if (showCapturePrompt) {
+							swallowForGame = RawInput::IsMouseBlockedToGame();
+						} else {
+							swallowForGame = true;
+						}
+						if (swallowForGame) {
+							return false;
+						}
 					}
 				}
 			}
 
-			bool handledMessage = !RawInput::OnMessage(wnd, message, w_param, l_param);
+			bool handledMessage = false;
+			if (!mouseRawProcessedHere) {
+				handledMessage = !RawInput::OnMessage(wnd, message, w_param, l_param);
+			}
 
 			if (IsUnlockCursor() && ImGui_ImplWin32_WndProcHandler(wnd, message, w_param, l_param) != 0) {
 				auto& io = ImGui::GetIO();
 				if (io.WantCaptureMouse || io.WantCaptureKeyboard || io.WantTextInput) {
+					handledMessage = true;
+				}
+			}
+
+			if (showCapturePrompt) {
+				if (RawInput::IsKeyboardBlockedToGame() &&
+					message >= WM_KEYFIRST && message <= WM_KEYLAST &&
+					w_param != VK_ESCAPE) {
+					handledMessage = true;
+				}
+				if (RawInput::IsMouseBlockedToGame() &&
+					message >= WM_MOUSEFIRST && message <= WM_MOUSELAST) {
 					handledMessage = true;
 				}
 			}
@@ -173,19 +198,27 @@ namespace RadarKeys {
 			auto& io = ImGui::GetIO();
 			bool unlock = IsUnlockCursor();
 
-			if (io.WantCaptureMouse) {
+			const bool captureActive = showCapturePrompt;
+			const bool blockMouse = io.WantCaptureMouse ||
+				(captureActive && KeyBindMenu::captureSuppressMouse);
+			const bool blockKeyboard = io.WantCaptureKeyboard ||
+				(captureActive && KeyBindMenu::captureSuppressKeyboard);
+
+			if (blockMouse) {
 				RawInput::BlockMouseClick();
 			}
 			else {
 				RawInput::UnBlockMouseClick();
 			}
 
-			if (io.WantCaptureKeyboard) {
+			if (blockKeyboard) {
 				RawInput::BlockKeyboard();
 			}
 			else {
 				RawInput::UnBlockKeyboard();
 			}
+
+			RawInput::SetGamepadBlockedToGame(captureActive && KeyBindMenu::captureSuppressGamepad);
 
 			io.MouseDrawCursor = unlock;
 
