@@ -2,6 +2,7 @@
 //the solution there would be to have another state array and have the input events set up,down and querry that with the assumption that down is held
 
 #include "RawInput.h"
+#include "DirectInputHook.h"
 #include "spdlog/spdlog.h"
 #include <MinHook.h>
 #include <Xinput.h>
@@ -13,6 +14,7 @@
 #include <atomic>
 #include <list>
 #include <array>
+#include <unordered_set>
 #pragma comment(lib, "Xinput.lib")
 
 namespace RadarKeys {
@@ -103,71 +105,68 @@ namespace RadarKeys {
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
 
 		typedef DWORD(WINAPI* XInputGetStateFunc)(DWORD, XINPUT_STATE*);
-		static XInputGetStateFunc g_origXInputGetState = nullptr;
-		static std::atomic<bool> g_xinputHookInstalled{ false };
-		static bool g_xinputHookAttempted = false;
+		static constexpr int kMaxXInputModules = 5;
+		static XInputGetStateFunc g_origXInputGetState[kMaxXInputModules] = {};
+		static int g_xinputModuleCount = 0;
+		static std::unordered_set<void*> g_xinputHookedTargets;
 
-		struct PadCacheEntry {
-			std::mutex mutex;
-			XINPUT_STATE state{};
-			bool connected = false;
-		};
-		static std::array<PadCacheEntry, XUSER_MAX_COUNT> g_padCache;
-
-		DWORD WINAPI Hooked_XInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
+		template <int N>
+		DWORD WINAPI HookedXInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
 			DWORD result = ERROR_DEVICE_NOT_CONNECTED;
-			if (g_origXInputGetState && pState) {
-				result = g_origXInputGetState(dwUserIndex, pState);
+			if (g_origXInputGetState[N]) {
+				result = g_origXInputGetState[N](dwUserIndex, pState);
 			}
-
-			if (dwUserIndex < XUSER_MAX_COUNT) {
-				PadCacheEntry& entry = g_padCache[dwUserIndex];
-				std::lock_guard<std::mutex> lock(entry.mutex);
-				if (result == ERROR_SUCCESS && pState) {
-					entry.state = *pState;
-					entry.connected = true;
-				} else {
-					entry.connected = false;
-				}
-			}
-
 			if (result == ERROR_SUCCESS && pState && g_gamepadBlockedToGame.load()) {
 				ZeroMemory(&pState->Gamepad, sizeof(XINPUT_GAMEPAD));
 			}
 			return result;
 		}
 
-		void EnsureXInputHook() {
-			if (g_xinputHookAttempted) {
-				return;
-			}
+		static XInputGetStateFunc g_xinputDetours[kMaxXInputModules] = {
+			&HookedXInputGetState<0>, &HookedXInputGetState<1>,
+			&HookedXInputGetState<2>, &HookedXInputGetState<3>,
+			&HookedXInputGetState<4>,
+		};
 
+		void EnsureXInputHook() {
 			static const wchar_t* kModuleNames[] = {
 				L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll", L"xinput1_2.dll", L"xinput1_1.dll"
 			};
+			static bool loadAttemptedFor[kMaxXInputModules] = {};
 
-			for (const wchar_t* moduleName : kModuleNames) {
+			for (int nameIndex = 0; nameIndex < kMaxXInputModules; ++nameIndex) {
+				if (g_xinputModuleCount >= kMaxXInputModules) {
+					break;
+				}
+				const wchar_t* moduleName = kModuleNames[nameIndex];
 				HMODULE module = GetModuleHandleW(moduleName);
+				if (!module && !loadAttemptedFor[nameIndex]) {
+					loadAttemptedFor[nameIndex] = true;
+					module = LoadLibraryW(moduleName);
+				}
 				if (!module) {
 					continue;
 				}
-				g_xinputHookAttempted = true;
 				void* target = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetState"));
 				if (!target) {
 					target = reinterpret_cast<void*>(GetProcAddress(module, reinterpret_cast<LPCSTR>(100)));
 				}
-				if (!target) {
-					spdlog::warn("RawInput: XInputGetState export not found - gamepad suppression will not work");
-					break;
+				if (!target || g_xinputHookedTargets.count(target) != 0) {
+					continue; // forwarding stub, or already hooked
 				}
-				if (MH_CreateHook(target, reinterpret_cast<LPVOID>(&Hooked_XInputGetState), reinterpret_cast<LPVOID*>(&g_origXInputGetState)) == MH_OK &&
+
+				int slot = g_xinputModuleCount;
+				XInputGetStateFunc* origSlot = &g_origXInputGetState[slot];
+				if (MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
+					reinterpret_cast<LPVOID*>(origSlot)) == MH_OK &&
 					MH_EnableHook(target) == MH_OK) {
-					g_xinputHookInstalled.store(true);
-					spdlog::info("RawInput: hooked XInputGetState for gamepad suppression");
+					g_xinputHookedTargets.insert(target);
+					++g_xinputModuleCount;
+					spdlog::info("RawInput: hooked XInputGetState in an XInput module for gamepad suppression ({} module(s))",
+						g_xinputModuleCount);
 				} else {
-					spdlog::warn("RawInput: failed to hook XInputGetState - gamepad suppression will not work");
+					spdlog::warn("RawInput: failed to hook XInputGetState in an XInput module");
 				}
-				break;
 			}
 		}
 
@@ -180,22 +179,13 @@ namespace RadarKeys {
 			SHORT lx = 0, ly = 0, rx = 0, ry = 0;
 			bool anyConnected = false;
 
-			for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
-				XINPUT_STATE s{};
-				bool connected = false;
-				if (g_xinputHookInstalled.load()) {
-					PadCacheEntry& entry = g_padCache[i];
-					std::lock_guard<std::mutex> lock(entry.mutex);
-					if (entry.connected) {
-						s = entry.state;
-						connected = true;
+			for (int m = 0; m < g_xinputModuleCount; ++m) {
+				for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
+					XINPUT_STATE s{};
+					XInputGetStateFunc orig = g_origXInputGetState[m];
+					if (!orig || orig(i, &s) != ERROR_SUCCESS) {
+						continue;
 					}
-				} else if (XInputGetState(i, &s) == ERROR_SUCCESS) {
-					connected = true; // this slot has a controller connected
-				}
-				if (!connected) {
-					continue;
-				}
 				anyConnected = true;
 				buttons |= s.Gamepad.wButtons;
 				leftTrigger = (std::max)(leftTrigger, s.Gamepad.bLeftTrigger);
@@ -204,6 +194,40 @@ namespace RadarKeys {
 				if (abs((int)s.Gamepad.sThumbLY) > abs((int)ly)) ly = s.Gamepad.sThumbLY;
 				if (abs((int)s.Gamepad.sThumbRX) > abs((int)rx)) rx = s.Gamepad.sThumbRX;
 				if (abs((int)s.Gamepad.sThumbRY) > abs((int)ry)) ry = s.Gamepad.sThumbRY;
+				}
+			}
+
+			anyConnected = anyConnected || DirectInputHook::HasJoystickDevice();
+			for (USHORT gpKey : GamepadVKeys()) {
+				if (!DirectInputHook::IsGamepadButtonHeld(gpKey)) {
+					continue;
+				}
+				switch (gpKey) {
+				case VK_GAMEPAD_A:                       buttons |= XINPUT_GAMEPAD_A; break;
+				case VK_GAMEPAD_B:                       buttons |= XINPUT_GAMEPAD_B; break;
+				case VK_GAMEPAD_X:                       buttons |= XINPUT_GAMEPAD_X; break;
+				case VK_GAMEPAD_Y:                       buttons |= XINPUT_GAMEPAD_Y; break;
+				case VK_GAMEPAD_LEFT_SHOULDER:           buttons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
+				case VK_GAMEPAD_RIGHT_SHOULDER:          buttons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
+				case VK_GAMEPAD_DPAD_UP:                 buttons |= XINPUT_GAMEPAD_DPAD_UP; break;
+				case VK_GAMEPAD_DPAD_DOWN:               buttons |= XINPUT_GAMEPAD_DPAD_DOWN; break;
+				case VK_GAMEPAD_DPAD_LEFT:               buttons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
+				case VK_GAMEPAD_DPAD_RIGHT:              buttons |= XINPUT_GAMEPAD_DPAD_RIGHT; break;
+				case VK_GAMEPAD_MENU:                    buttons |= XINPUT_GAMEPAD_START; break;
+				case VK_GAMEPAD_VIEW:                    buttons |= XINPUT_GAMEPAD_BACK; break;
+				case VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON:  buttons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON: buttons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
+				case VK_GAMEPAD_LEFT_TRIGGER:            leftTrigger = (std::max)(leftTrigger, (BYTE)255); break;
+				case VK_GAMEPAD_RIGHT_TRIGGER:           rightTrigger = (std::max)(rightTrigger, (BYTE)255); break;
+				case VK_GAMEPAD_LEFT_THUMBSTICK_UP:      ly = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1; break;
+				case VK_GAMEPAD_LEFT_THUMBSTICK_DOWN:    ly = -(SHORT)(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1); break;
+				case VK_GAMEPAD_LEFT_THUMBSTICK_LEFT:    lx = -(SHORT)(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1); break;
+				case VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT:   lx = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1; break;
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_UP:     ry = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1; break;
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN:   ry = -(SHORT)(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1); break;
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT:   rx = -(SHORT)(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1); break;
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT:  rx = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1; break;
+				}
 			}
 
 			const std::pair<USHORT, bool> nowState[] = {
@@ -238,7 +262,7 @@ namespace RadarKeys {
 				bool isDown = entry.second;
 				bool wasDown = realStateHeld[vKey];
 				if (isDown == wasDown) {
-					continue; // no transition this frame - leave it alone
+					continue;
 				}
 				realStateHeld[vKey] = isDown;
 				currFlags[vKey] = isDown ? RI_KEY_MAKE : RI_KEY_BREAK;
@@ -391,7 +415,6 @@ namespace RadarKeys {
 			return true;
 		}
 
-		//IN/SIDE: buttonActions
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
 			std::vector<ButtonAction> snapshot;
 			{
@@ -560,8 +583,6 @@ namespace RadarKeys {
 			std::fill_n(currFlags, vKeyMax, static_cast<USHORT>(RI_KEY_BREAK));
 
 			InitIgnoreKeys();
-
-			// No fixed actions; dynamically registers KeyBindMenu/DebuggerMenu via RegisterAction (F4 toggle + persisted bindings).
 		}
 
 		//CULL not needed, the game will have set up it's own
@@ -571,12 +592,10 @@ namespace RadarKeys {
 
 			Rid[0].usUsagePage = 0x01;
 			Rid[0].usUsage = 0x02;
-			// Rid[0].dwFlags = RIDEV_NOLEGACY;   // adds HID mouse and also ignores legacy mouse messages
 			Rid[0].hwndTarget = 0;
 
 			Rid[1].usUsagePage = 0x01;
 			Rid[1].usUsage = 0x06;
-			// Rid[1].dwFlags = RIDEV_NOLEGACY;   // adds HID keyboard and also ignores legacy keyboard messages
 			Rid[1].hwndTarget = 0;
 
 			if (RegisterRawInputDevices(Rid, 2, sizeof(Rid[0])) == FALSE) {
