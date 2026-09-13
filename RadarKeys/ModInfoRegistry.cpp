@@ -1,5 +1,6 @@
 #include "ModInfoRegistry.h"
 #include <algorithm>
+#include <mutex>
 
 namespace RadarKeys {
 	namespace ModInfoRegistry {
@@ -10,6 +11,7 @@ namespace RadarKeys {
 			};
 
 			std::vector<Entry> entries;
+			std::mutex g_entriesMutex;
 
 			Entry* FindByScript(const std::string& scriptName) {
 				for (Entry& e : entries) {
@@ -26,6 +28,7 @@ namespace RadarKeys {
 				return;
 			}
 
+			std::lock_guard<std::mutex> lock(g_entriesMutex);
 			Entry* existing = FindByScript(scriptName);
 			if (existing) {
 				existing->info.modName = modName;
@@ -49,6 +52,7 @@ namespace RadarKeys {
 		}
 
 		void SweepStale() {
+			std::lock_guard<std::mutex> lock(g_entriesMutex);
 			entries.erase(
 				std::remove_if(entries.begin(), entries.end(), [](const Entry& e) { return !e.touchedSinceSweep; }),
 				entries.end()
@@ -59,6 +63,7 @@ namespace RadarKeys {
 		}
 
 		std::vector<ModInfo> GetTrackedModInfo() {
+			std::lock_guard<std::mutex> lock(g_entriesMutex);
 			std::vector<ModInfo> result;
 			result.reserve(entries.size());
 			for (const Entry& e : entries) {
