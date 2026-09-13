@@ -3,6 +3,11 @@
 
 #include "RawInput.h"
 #include "spdlog/spdlog.h"
+#include <Xinput.h>
+#include <cstdlib>
+#include <algorithm>
+#include <utility>
+#pragma comment(lib, "Xinput.lib")
 
 namespace RadarKeys {
 	namespace RawInput {
@@ -49,32 +54,82 @@ namespace RadarKeys {
 			}
 		}
 
-		USHORT gamepadKeys[]{
-			VK_GAMEPAD_A                         ,
-			VK_GAMEPAD_B                         ,
-			VK_GAMEPAD_X                         ,
-			VK_GAMEPAD_Y                         ,
-			VK_GAMEPAD_RIGHT_SHOULDER            ,
-			VK_GAMEPAD_LEFT_SHOULDER             ,
-			VK_GAMEPAD_LEFT_TRIGGER              ,
-			VK_GAMEPAD_RIGHT_TRIGGER             ,
-			VK_GAMEPAD_DPAD_UP                   ,
-			VK_GAMEPAD_DPAD_DOWN                 ,
-			VK_GAMEPAD_DPAD_LEFT                 ,
-			VK_GAMEPAD_DPAD_RIGHT                ,
-			VK_GAMEPAD_MENU                      ,
-			VK_GAMEPAD_VIEW                      ,
-			VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON    ,
-			VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON   ,
-			VK_GAMEPAD_LEFT_THUMBSTICK_UP        ,
-			VK_GAMEPAD_LEFT_THUMBSTICK_DOWN      ,
-			VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT     ,
-			VK_GAMEPAD_LEFT_THUMBSTICK_LEFT      ,
-			VK_GAMEPAD_RIGHT_THUMBSTICK_UP       ,
-			VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN     ,
-			VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT    ,
-			VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT     ,
-		};
+		const std::vector<USHORT>& GamepadVKeys() {
+			static const std::vector<USHORT> keys = {
+				VK_GAMEPAD_A, VK_GAMEPAD_B, VK_GAMEPAD_X, VK_GAMEPAD_Y,
+				VK_GAMEPAD_LEFT_SHOULDER, VK_GAMEPAD_RIGHT_SHOULDER,
+				VK_GAMEPAD_LEFT_TRIGGER, VK_GAMEPAD_RIGHT_TRIGGER,
+				VK_GAMEPAD_DPAD_UP, VK_GAMEPAD_DPAD_DOWN, VK_GAMEPAD_DPAD_LEFT, VK_GAMEPAD_DPAD_RIGHT,
+				VK_GAMEPAD_MENU, VK_GAMEPAD_VIEW,
+				VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON, VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON,
+				VK_GAMEPAD_LEFT_THUMBSTICK_UP, VK_GAMEPAD_LEFT_THUMBSTICK_DOWN,
+				VK_GAMEPAD_LEFT_THUMBSTICK_LEFT, VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT,
+				VK_GAMEPAD_RIGHT_THUMBSTICK_UP, VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN,
+				VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT, VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT,
+			};
+			return keys;
+		}
+
+		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent); // forward decl - PollGamepad below needs it; full definition is further down, same as ProcessKey already relies on
+
+		void PollGamepad() {
+			WORD buttons = 0;
+			BYTE leftTrigger = 0, rightTrigger = 0;
+			SHORT lx = 0, ly = 0, rx = 0, ry = 0;
+
+			for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
+				XINPUT_STATE s{};
+				if (XInputGetState(i, &s) != ERROR_SUCCESS) {
+					continue;
+				}
+				buttons |= s.Gamepad.wButtons;
+				leftTrigger = (std::max)(leftTrigger, s.Gamepad.bLeftTrigger);
+				rightTrigger = (std::max)(rightTrigger, s.Gamepad.bRightTrigger);
+				if (abs((int)s.Gamepad.sThumbLX) > abs((int)lx)) lx = s.Gamepad.sThumbLX;
+				if (abs((int)s.Gamepad.sThumbLY) > abs((int)ly)) ly = s.Gamepad.sThumbLY;
+				if (abs((int)s.Gamepad.sThumbRX) > abs((int)rx)) rx = s.Gamepad.sThumbRX;
+				if (abs((int)s.Gamepad.sThumbRY) > abs((int)ry)) ry = s.Gamepad.sThumbRY;
+			}
+
+			const std::pair<USHORT, bool> nowState[] = {
+				{ VK_GAMEPAD_A,                       (buttons & XINPUT_GAMEPAD_A) != 0 },
+				{ VK_GAMEPAD_B,                       (buttons & XINPUT_GAMEPAD_B) != 0 },
+				{ VK_GAMEPAD_X,                       (buttons & XINPUT_GAMEPAD_X) != 0 },
+				{ VK_GAMEPAD_Y,                       (buttons & XINPUT_GAMEPAD_Y) != 0 },
+				{ VK_GAMEPAD_RIGHT_SHOULDER,          (buttons & XINPUT_GAMEPAD_RIGHT_SHOULDER) != 0 },
+				{ VK_GAMEPAD_LEFT_SHOULDER,           (buttons & XINPUT_GAMEPAD_LEFT_SHOULDER) != 0 },
+				{ VK_GAMEPAD_LEFT_TRIGGER,            leftTrigger  > XINPUT_GAMEPAD_TRIGGER_THRESHOLD },
+				{ VK_GAMEPAD_RIGHT_TRIGGER,           rightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD },
+				{ VK_GAMEPAD_DPAD_UP,                 (buttons & XINPUT_GAMEPAD_DPAD_UP) != 0 },
+				{ VK_GAMEPAD_DPAD_DOWN,               (buttons & XINPUT_GAMEPAD_DPAD_DOWN) != 0 },
+				{ VK_GAMEPAD_DPAD_LEFT,               (buttons & XINPUT_GAMEPAD_DPAD_LEFT) != 0 },
+				{ VK_GAMEPAD_DPAD_RIGHT,              (buttons & XINPUT_GAMEPAD_DPAD_RIGHT) != 0 },
+				{ VK_GAMEPAD_MENU,                    (buttons & XINPUT_GAMEPAD_START) != 0 },
+				{ VK_GAMEPAD_VIEW,                    (buttons & XINPUT_GAMEPAD_BACK) != 0 },
+				{ VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON,  (buttons & XINPUT_GAMEPAD_LEFT_THUMB) != 0 },
+				{ VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON, (buttons & XINPUT_GAMEPAD_RIGHT_THUMB) != 0 },
+				{ VK_GAMEPAD_LEFT_THUMBSTICK_UP,      ly >  XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE },
+				{ VK_GAMEPAD_LEFT_THUMBSTICK_DOWN,    ly < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE },
+				{ VK_GAMEPAD_LEFT_THUMBSTICK_LEFT,    lx < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE },
+				{ VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT,   lx >  XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE },
+				{ VK_GAMEPAD_RIGHT_THUMBSTICK_UP,     ry >  XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE },
+				{ VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN,   ry < -XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE },
+				{ VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT,   rx < -XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE },
+				{ VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT,  rx >  XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE },
+			};
+
+			for (const auto& entry : nowState) {
+				USHORT vKey = entry.first;
+				bool isDown = entry.second;
+				bool wasDown = realStateHeld[vKey];
+				if (isDown == wasDown) {
+					continue; // no transition this frame - leave it alone
+				}
+				realStateHeld[vKey] = isDown;
+				currFlags[vKey] = isDown ? RI_KEY_MAKE : RI_KEY_BREAK;
+				DoActions(vKey, isDown ? BUTTONEVENT::ONDOWN : BUTTONEVENT::ONUP);
+			}
+		}
 
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
 
@@ -433,9 +488,6 @@ namespace RadarKeys {
 						return true;
 					}
 
-					// Always update RadarKeys' internal state, including key-up events,
-					// before deciding whether the game itself should receive the input.
-					// Otherwise blocking the game can leave realStateHeld[] stuck true.
 					if (!ignore[vKey]) {
 						ProcessKey(pRaw);
 					}
