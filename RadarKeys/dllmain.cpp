@@ -8,6 +8,7 @@
 #include "LuaKeyState.h"
 #include "ModKeyBindings.h"
 #include "ModInfoRegistry.h"
+#include "DirectInputHook.h"
 #include <MinHook.h>
 
 #include "spdlog/spdlog.h"
@@ -57,6 +58,7 @@ namespace RadarKeys {
 
 		Render::CreateD3DHook();
 		InitCursorHook();
+		DirectInputHook::Install();
 
 		spdlog::info("RadarKeys frame initialized");
 	}
