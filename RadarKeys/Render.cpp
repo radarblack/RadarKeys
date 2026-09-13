@@ -105,7 +105,7 @@ namespace RadarKeys {
 				}
 			}
 
-			if (showCapturePrompt) {
+			if (IsUnlockCursor() || showCapturePrompt) {
 				if (RawInput::IsKeyboardBlockedToGame() &&
 					message >= WM_KEYFIRST && message <= WM_KEYLAST &&
 					w_param != VK_ESCAPE) {
@@ -198,10 +198,12 @@ namespace RadarKeys {
 			auto& io = ImGui::GetIO();
 			bool unlock = IsUnlockCursor();
 			const bool captureActive = showCapturePrompt;
-			const bool blockMouse = io.WantCaptureMouse ||
+			const bool blockMouse = unlock || io.WantCaptureMouse ||
 				(captureActive && KeyBindMenu::captureSuppressMouse);
-			const bool blockKeyboard = io.WantCaptureKeyboard ||
+			const bool blockKeyboard = unlock || io.WantCaptureKeyboard ||
 				(captureActive && KeyBindMenu::captureSuppressKeyboard);
+			const bool blockGamepad = unlock ||
+				(captureActive && KeyBindMenu::captureSuppressGamepad);
 
 			if (blockMouse) {
 				RawInput::BlockMouseClick();
@@ -217,7 +219,7 @@ namespace RadarKeys {
 				RawInput::UnBlockKeyboard();
 			}
 
-			RawInput::SetGamepadBlockedToGame(captureActive && KeyBindMenu::captureSuppressGamepad);
+			RawInput::SetGamepadBlockedToGame(blockGamepad);
 
 			io.MouseDrawCursor = unlock;
 
