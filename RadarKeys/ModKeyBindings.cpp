@@ -14,7 +14,6 @@ namespace RadarKeys {
 		static std::map<std::string, std::map<std::string, std::string>> overrides;
 		static std::map<std::string, std::map<std::string, bool>> disabledMap;
 		static bool loaded = false;
-
 		static std::recursive_mutex g_overridesMutex;
 
 		static bool TryMigrateLegacyFile() {
