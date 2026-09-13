@@ -199,8 +199,6 @@ namespace RadarKeys {
 		}
 
 		void OnFrame() {
-			RawInput::PollGamepad();
-			KeyBindMenu::Update();
 			if (!frameInitialized) {
 				if (!FrameInitialize()) {
 					spdlog::error("Failed to frame initialize RadarKeys");
@@ -210,6 +208,9 @@ namespace RadarKeys {
 				frameInitialized = true;
 				return;
 			}
+
+			RawInput::PollGamepad();
+			KeyBindMenu::Update();
 
 			ImGui_ImplDX11_NewFrame();
 			ImGui_ImplWin32_NewFrame();
