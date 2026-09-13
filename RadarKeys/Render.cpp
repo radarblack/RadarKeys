@@ -197,7 +197,6 @@ namespace RadarKeys {
 
 			auto& io = ImGui::GetIO();
 			bool unlock = IsUnlockCursor();
-
 			const bool captureActive = showCapturePrompt;
 			const bool blockMouse = io.WantCaptureMouse ||
 				(captureActive && KeyBindMenu::captureSuppressMouse);
