@@ -6,12 +6,18 @@
 #include <chrono>
 #include <algorithm>
 #include <map>
+#include <mutex>
 #include <set>
 #include <sstream>
 
 namespace RadarKeys {
 	namespace LuaKeyState {
 		using clock = std::chrono::steady_clock;
+
+		namespace {
+			std::recursive_mutex g_keyStateMutex;
+		}
+		using KeyStateLock = std::lock_guard<std::recursive_mutex>;
 		constexpr double kHoldTimeSeconds = 0.9;
 		constexpr double kRepeatRateSeconds = 0.85;
 		constexpr double kIncrementMultIncrementMult = 1.5;
@@ -80,6 +86,7 @@ namespace RadarKeys {
 		}
 
 		void SetSuppressedVKeys(const std::vector<USHORT>& vKeys) {
+			KeyStateLock lock(g_keyStateMutex);
 			for (int i = 0; i < 256; ++i) {
 				suppressed[i] = false;
 			}
@@ -97,6 +104,7 @@ namespace RadarKeys {
 		}
 
 		void SetDisabledVKeys(const std::vector<USHORT>& vKeys) {
+			KeyStateLock lock(g_keyStateMutex);
 			for (int i = 0; i < 256; ++i) {
 				disabledVKey[i] = false;
 			}
@@ -141,6 +149,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return;
 			}
+			KeyStateLock lock(g_keyStateMutex);
 			KeyPollState& s = states[vKey];
 			if (ev == RawInput::BUTTONEVENT::ONDOWN) {
 				s.isPressed = true;
@@ -181,6 +190,7 @@ namespace RadarKeys {
 		}
 
 		void RetireIfUndescribed(USHORT vKey) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return;
 			}
@@ -194,6 +204,7 @@ namespace RadarKeys {
 		}
 
 		bool ButtonDown(USHORT vKey) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
@@ -207,6 +218,7 @@ namespace RadarKeys {
 		}
 
 		bool PhysicalOnButtonDown(USHORT vKey) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
@@ -224,6 +236,7 @@ namespace RadarKeys {
 		}
 
 		bool OnButtonDown(USHORT vKey) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
@@ -243,6 +256,7 @@ namespace RadarKeys {
 		}
 
 		bool PhysicalOnButtonUp(USHORT vKey) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
@@ -260,6 +274,7 @@ namespace RadarKeys {
 		}
 
 		bool OnButtonUp(USHORT vKey) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
@@ -279,6 +294,7 @@ namespace RadarKeys {
 		}
 
 		bool ButtonHeld(USHORT vKey, double holdSecondsOverride) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
@@ -299,6 +315,7 @@ namespace RadarKeys {
 		}
 
 		bool PhysicalOnButtonHoldTime(USHORT vKey, double holdSecondsOverride) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
@@ -320,6 +337,7 @@ namespace RadarKeys {
 		}
 
 		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
@@ -344,6 +362,7 @@ namespace RadarKeys {
 		}
 
 		bool OnButtonRepeat(USHORT vKey) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
 			}
@@ -375,6 +394,7 @@ namespace RadarKeys {
 		}
 
 		double GetRepeatMult(USHORT vKey) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return 1.0;
 			}
@@ -412,6 +432,7 @@ namespace RadarKeys {
 		}
 
 		void SetDisabledCombos(const std::vector<std::vector<USHORT>>& combos) {
+			KeyStateLock lock(g_keyStateMutex);
 			disabledComboKeys.clear();
 			for (const auto& combo : combos) {
 				if (ValidCombo(combo)) {
@@ -422,6 +443,7 @@ namespace RadarKeys {
 
 		std::map<std::string, std::vector<USHORT>> comboRedirectTarget;
 		std::vector<USHORT> ResolveActiveCombo(const std::vector<USHORT>& vKeys) {
+			KeyStateLock lock(g_keyStateMutex);
 			auto it = comboRedirectTarget.find(ComboStateKey(vKeys));
 			if (it != comboRedirectTarget.end() && ValidCombo(it->second)) {
 				return it->second;
@@ -459,6 +481,7 @@ namespace RadarKeys {
 		}
 
 		bool ComboButtonDown(const std::vector<USHORT>& vKeys) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
 			if (!ValidCombo(active) || IsComboDisabled(active)) return false;
@@ -467,6 +490,7 @@ namespace RadarKeys {
 		}
 
 		bool OnComboButtonDown(const std::vector<USHORT>& vKeys) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
 			if (!ValidCombo(active) || IsComboDisabled(active)) return false;
@@ -494,6 +518,7 @@ namespace RadarKeys {
 		}
 
 		bool OnComboButtonUp(const std::vector<USHORT>& vKeys) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
 			if (!ValidCombo(active) || IsComboDisabled(active)) return false;
@@ -512,6 +537,7 @@ namespace RadarKeys {
 		}
 
 		bool ComboButtonHeld(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
 			if (!ValidCombo(active) || IsComboDisabled(active) || !RawComboAllHeld(active)) return false;
@@ -528,6 +554,7 @@ namespace RadarKeys {
 		}
 
 		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
 			if (!ValidCombo(active) || IsComboDisabled(active) || !RawComboAllHeld(active)) return false;
@@ -548,6 +575,7 @@ namespace RadarKeys {
 		}
 
 		bool OnComboButtonRepeat(const std::vector<USHORT>& vKeys) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
 			if (!ValidCombo(active) || IsComboDisabled(active) || !RawComboAllHeld(active)) return false;
@@ -565,6 +593,7 @@ namespace RadarKeys {
 		}
 
 		double GetComboRepeatMult(const std::vector<USHORT>& vKeys) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return 1.0;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
 			if (!ValidCombo(active) || IsComboDisabled(active)) return 1.0;
@@ -573,6 +602,7 @@ namespace RadarKeys {
 		}
 
 		void ResetComboRepeat(const std::vector<USHORT>& vKeys) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
 			if (!ValidCombo(active)) return;
@@ -597,6 +627,7 @@ namespace RadarKeys {
 		std::map<std::string, ComboKeyDescription> comboDescriptions;
 
 		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) {
 				return;
 			}
@@ -627,6 +658,7 @@ namespace RadarKeys {
 		}
 
 		void SweepStaleComboDescriptions() {
+			KeyStateLock lock(g_keyStateMutex);
 			for (auto it = comboDescriptions.begin(); it != comboDescriptions.end(); ) {
 				if (!it->second.touchedSinceSweep) {
 					comboRedirectTarget.erase(ComboStateKey(it->second.nativeKeys));
@@ -644,6 +676,7 @@ namespace RadarKeys {
 		}
 
 		std::vector<TrackedComboKeyInfo> GetTrackedComboKeyInfo() {
+			KeyStateLock lock(g_keyStateMutex);
 			std::vector<TrackedComboKeyInfo> result;
 			for (const auto& entry : comboDescriptions) {
 				const ComboKeyDescription& d = entry.second;
@@ -665,6 +698,7 @@ namespace RadarKeys {
 		}
 
 		void ResetRepeat(USHORT vKey) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return;
 			}
@@ -677,6 +711,7 @@ namespace RadarKeys {
 		}
 
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return;
 			}
@@ -726,6 +761,7 @@ namespace RadarKeys {
 		}
 
 		void SweepStaleDescriptions() {
+			KeyStateLock lock(g_keyStateMutex);
 			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
 				std::vector<KeyDescription>& descs = states[vKeyInt].descriptions;
 				if (!descs.empty()) {
@@ -742,6 +778,7 @@ namespace RadarKeys {
 		}
 
 		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName) {
+			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(oldVKey) || !ValidVKey(newVKey) || oldVKey == newVKey) {
 				return;
 			}
@@ -763,6 +800,7 @@ namespace RadarKeys {
 		}
 
 		std::vector<TrackedKeyInfo> GetTrackedKeyInfo() {
+			KeyStateLock lock(g_keyStateMutex);
 			std::vector<TrackedKeyInfo> result;
 			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
 				const KeyPollState& s = states[vKeyInt];
