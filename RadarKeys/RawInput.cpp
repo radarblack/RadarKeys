@@ -139,7 +139,7 @@ namespace RadarKeys {
 
 		void EnsureXInputHook() {
 			if (g_xinputHookAttempted) {
-				return; // hooked one module already, or hooking it definitively failed
+				return;
 			}
 
 			static const wchar_t* kModuleNames[] = {
