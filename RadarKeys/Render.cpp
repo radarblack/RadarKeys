@@ -71,7 +71,7 @@ namespace RadarKeys {
 			}
 
 			bool mouseRawProcessedHere = false;
-			if (message == WM_INPUT && (IsUnlockCursor() || showCapturePrompt)) {
+			if (message == WM_INPUT) {
 				RAWINPUT raw{};
 				UINT size = sizeof(RAWINPUT);
 
@@ -80,13 +80,7 @@ namespace RadarKeys {
 					if (raw.header.dwType == RIM_TYPEMOUSE) {
 						RawInput::ProcessMouseButtons(&raw);
 						mouseRawProcessedHere = true;
-						bool swallowForGame;
-						if (showCapturePrompt) {
-							swallowForGame = RawInput::IsMouseBlockedToGame();
-						} else {
-							swallowForGame = true;
-						}
-						if (swallowForGame) {
+						if (RawInput::IsMouseBlockedToGame()) {
 							return false;
 						}
 					}
@@ -105,16 +99,14 @@ namespace RadarKeys {
 				}
 			}
 
-			if (IsUnlockCursor() || showCapturePrompt) {
-				if (RawInput::IsKeyboardBlockedToGame() &&
-					message >= WM_KEYFIRST && message <= WM_KEYLAST &&
-					w_param != VK_ESCAPE) {
-					handledMessage = true;
-				}
-				if (RawInput::IsMouseBlockedToGame() &&
-					message >= WM_MOUSEFIRST && message <= WM_MOUSELAST) {
-					handledMessage = true;
-				}
+			if (RawInput::IsKeyboardBlockedToGame() &&
+				message >= WM_KEYFIRST && message <= WM_KEYLAST &&
+				w_param != VK_ESCAPE) {
+				handledMessage = true;
+			}
+			if (RawInput::IsMouseBlockedToGame() &&
+				message >= WM_MOUSEFIRST && message <= WM_MOUSELAST) {
+				handledMessage = true;
 			}
 
 			if (handledMessage) {
@@ -197,13 +189,10 @@ namespace RadarKeys {
 
 			auto& io = ImGui::GetIO();
 			bool unlock = IsUnlockCursor();
-			const bool captureActive = showCapturePrompt;
-			const bool blockMouse = unlock || io.WantCaptureMouse ||
-				(captureActive && KeyBindMenu::captureSuppressMouse);
-			const bool blockKeyboard = unlock || io.WantCaptureKeyboard ||
-				(captureActive && KeyBindMenu::captureSuppressKeyboard);
-			const bool blockGamepad = unlock ||
-				(captureActive && KeyBindMenu::captureSuppressGamepad);
+
+			const bool blockMouse = KeyBindMenu::captureSuppressMouse;
+			const bool blockKeyboard = KeyBindMenu::captureSuppressKeyboard;
+			const bool blockGamepad = KeyBindMenu::captureSuppressGamepad;
 
 			if (blockMouse) {
 				RawInput::BlockMouseClick();
