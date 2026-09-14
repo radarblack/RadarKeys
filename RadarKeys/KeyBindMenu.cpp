@@ -92,14 +92,16 @@ namespace RadarKeys {
 		static const char* UI_LOG_DEBUGGER_CLOSED = "Debugger Overlay closed";
 		static const char* UI_LBL_MENU_HOTKEY_PREFIX = "Menu Hotkey: [";
 		static const char* UI_LBL_MENU_HOTKEY_SUFFIX = "]";
-		static const char* UI_HDR_CAPTURE_SUPPRESSION = "Suppress input to game:";
+		static const char* UI_HDR_CAPTURE_SUPPRESSION = "Suppress input to game (while this menu is open):";
 		static const char* UI_CHK_SUPPRESS_KEYBOARD = "Keyboard";
 		static const char* UI_CHK_SUPPRESS_MOUSE = "Mouse";
 		static const char* UI_CHK_SUPPRESS_GAMEPAD = "Gamepad";
 		static const char* UI_TIP_CAPTURE_SUPPRESSION =
-			"While checked, the selected device is hidden from the game at all times (menu open or closed) so your "
-			"character doesn't move, aim or fire. Input is blocked at the window-message, XInput and DirectInput layers, "
-			"and is compatible with IHHook's dinput8 proxy.\n"
+			"While this menu (or the Debugger overlay) is open, checking a device here hides it from the game right "
+			"away so your character doesn't move, aim or fire - unchecking it restores that device right away too, no "
+			"need to close the menu or restart the game. Suppression only ever applies while this window is visibly "
+			"open; closing it always restores all input to the game. Input is blocked at the window-message, XInput "
+			"and DirectInput layers, and is compatible with IHHook's dinput8 proxy.\n"
 			"RadarKeys still receives everything regardless of these checkboxes, so key capture and these menus keep working normally.";
 		static const char* UI_HDR_KEY_BINDINGS = "Key Bindings";
 		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Keys described from the mod script will put the information in the list.";
