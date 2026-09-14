@@ -55,7 +55,7 @@ namespace RadarKeys {
 		static const char* UI_BTN_MINUS = " - ";
 		static const char* UI_BTN_PLUS = " + ";
 		static const char* UI_CHK_INSTANT = "Instant";
-		static const char* UI_TIP_UNCHECK_TOGGLE_FIRST = "Uncheck Toggle and Long Press first to use Instant.";
+		static const char* UI_TIP_UNCHECK_TOGGLE_FIRST = "Uncheck Toggle or Long Press first to use Instant.";
 		static const char* UI_OPT_ON_PRESS = "On Press";
 		static const char* UI_OPT_ON_RELEASE = "On Release";
 		static const char* UI_OPT_REPEAT = "Repeat";
@@ -98,10 +98,10 @@ namespace RadarKeys {
 		static const char* UI_CHK_SUPPRESS_GAMEPAD = "Gamepad";
 		static const char* UI_TIP_CAPTURE_SUPPRESSION =
 			"While this menu (or the Debugger overlay) is open, checking a device here hides it from the game right\n"
-			"away so Venom Snake doesn't move, aim or fire - unchecking it restores that device right away too\n"
+			"away so Venom Snake doesn't move, aim or fire - unchecking it restores that device right away too.\n"
 			"Suppression only ever applies while this window is visibly open. Closing it always restores all input to the game.\n";
 		static const char* UI_HDR_KEY_BINDINGS = "Key Bindings";
-		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Keys described from the mod script will put the information in the list.";
+		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Described information will be displayed when the script names are hovered by the mouse.";
 		static const char* UI_TXT_NO_KEYS_ASSIGNED = "(No Keys are assigned yet.)";
 		static const char* UI_TXT_NOT_YET_DESCRIBED = "-> (Key is not yet described through RadarKeys module.)";
 		static const char* UI_BTN_ENABLE = "Enable";
@@ -127,7 +127,7 @@ namespace RadarKeys {
 		static const char* UI_POPUP_RESET_MOD_KEY = "Reset Mod Key?";
 		static const char* UI_FMT_RESET_CONFIRM = "Reset \"%s [%s]\" to the mod's default key?";
 		static const char* UI_TXT_CLEARS_REASSIGNMENT = "This clears the reassignment made in this menu.";
-		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Clear All Hotkeys";
+		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Disable All Hotkeys";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_POPUP_CLEAR_ALL_CONFIRM = "Clear All Hotkeys?";
 		static const char* UI_TXT_CLEAR_ALL_CONFIRM = "Reset all mod key overrides to their defaults and remove every manually-assigned binding?";
