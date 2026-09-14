@@ -210,7 +210,7 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			states[vKey].pendingUsesOnPress = true;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
 				return false;
 			}
 			return RawInput::IsKeyHeldReal(vKey);
@@ -243,7 +243,7 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			s.pendingUsesOnPress = true;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
 				s.downEdgePending = 0;
 				return false;
 			}
@@ -281,7 +281,7 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			s.pendingUsesOnRelease = true;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
 				s.upEdgePending = 0;
 				return false;
 			}
@@ -302,7 +302,7 @@ namespace RadarKeys {
 			double heldHoldTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			states[vKey].pendingUsesHoldTime = true;
 			states[vKey].pendingLastHoldSeconds = heldHoldTime;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
 				return false;
 			}
 			KeyPollState& s = states[vKey];
@@ -346,7 +346,7 @@ namespace RadarKeys {
 			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			s.pendingUsesHoldTime = true;
 			s.pendingLastHoldSeconds = holdTime;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
 				s.onHoldStartSet = false;
 				return false;
 			}
@@ -369,7 +369,7 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			s.pendingUsesRepeat = true;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
 				s.repeatStartSet = false;
 				s.currentIncrementMult = 1.0;
 				return false;
@@ -398,7 +398,7 @@ namespace RadarKeys {
 				return 1.0;
 			}
 			vKey = ResolveActive(vKey);
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey)) {
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
 				return 1.0;
 			}
 			return states[vKey].currentIncrementMult;
@@ -483,7 +483,7 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt) return false;
 			for (USHORT vKey : active) EnsureTracked(vKey);
 			return RawComboAllHeld(active);
 		}
@@ -492,7 +492,7 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt) return false;
 			for (USHORT vKey : active) EnsureTracked(vKey);
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
@@ -520,7 +520,7 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesOnRelease = true;
@@ -539,7 +539,7 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active) || !RawComboAllHeld(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesHoldTime = true;
@@ -556,7 +556,7 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active) || !RawComboAllHeld(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesHoldTime = true;
@@ -577,7 +577,7 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active) || !RawComboAllHeld(active)) return false;
+			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesRepeat = true;
@@ -595,7 +595,7 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return 1.0;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active)) return 1.0;
+			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt) return 1.0;
 			auto it = comboStates.find(ComboStateKey(active));
 			return it == comboStates.end() ? 1.0 : it->second.currentIncrementMult;
 		}
