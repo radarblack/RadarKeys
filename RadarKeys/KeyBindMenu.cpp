@@ -92,15 +92,15 @@ namespace RadarKeys {
 		static const char* UI_LOG_DEBUGGER_CLOSED = "Debugger Overlay closed";
 		static const char* UI_LBL_MENU_HOTKEY_PREFIX = "Menu Hotkey: [";
 		static const char* UI_LBL_MENU_HOTKEY_SUFFIX = "]";
-		static const char* UI_HDR_CAPTURE_SUPPRESSION = "Block game input while assigning:";
+		static const char* UI_HDR_CAPTURE_SUPPRESSION = "Suppress input to game:";
 		static const char* UI_CHK_SUPPRESS_KEYBOARD = "Keyboard";
 		static const char* UI_CHK_SUPPRESS_MOUSE = "Mouse";
 		static const char* UI_CHK_SUPPRESS_GAMEPAD = "Gamepad";
 		static const char* UI_TIP_CAPTURE_SUPPRESSION =
-			"While the key-assignment window is open, selected devices are hidden from the game so your character doesn't move, "
-			"aim or fire while you bind a key. Input is blocked at the window-message, XInput and DirectInput layers, and is "
-			"compatible with IHHook's dinput8 proxy.\n"
-			"RadarKeys still receives everything, so key capture and these menus keep working normally.";
+			"While checked, the selected device is hidden from the game at all times (menu open or closed) so your "
+			"character doesn't move, aim or fire. Input is blocked at the window-message, XInput and DirectInput layers, "
+			"and is compatible with IHHook's dinput8 proxy.\n"
+			"RadarKeys still receives everything regardless of these checkboxes, so key capture and these menus keep working normally.";
 		static const char* UI_HDR_KEY_BINDINGS = "Key Bindings";
 		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Keys described from the mod script will put the information in the list.";
 		static const char* UI_TXT_NO_KEYS_ASSIGNED = "(No Keys are assigned yet.)";
