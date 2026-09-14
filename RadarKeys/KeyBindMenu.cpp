@@ -97,12 +97,9 @@ namespace RadarKeys {
 		static const char* UI_CHK_SUPPRESS_MOUSE = "Mouse";
 		static const char* UI_CHK_SUPPRESS_GAMEPAD = "Gamepad";
 		static const char* UI_TIP_CAPTURE_SUPPRESSION =
-			"While this menu (or the Debugger overlay) is open, checking a device here hides it from the game right "
-			"away so your character doesn't move, aim or fire - unchecking it restores that device right away too, no "
-			"need to close the menu or restart the game. Suppression only ever applies while this window is visibly "
-			"open; closing it always restores all input to the game. Input is blocked at the window-message, XInput "
-			"and DirectInput layers, and is compatible with IHHook's dinput8 proxy.\n"
-			"RadarKeys still receives everything regardless of these checkboxes, so key capture and these menus keep working normally.";
+			"While this menu (or the Debugger overlay) is open, checking a device here hides it from the game right\n"
+			"away so Venom Snake doesn't move, aim or fire - unchecking it restores that device right away too\n"
+			"Suppression only ever applies while this window is visibly open. Closing it always restores all input to the game.\n";
 		static const char* UI_HDR_KEY_BINDINGS = "Key Bindings";
 		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Keys described from the mod script will put the information in the list.";
 		static const char* UI_TXT_NO_KEYS_ASSIGNED = "(No Keys are assigned yet.)";
