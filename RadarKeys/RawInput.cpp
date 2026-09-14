@@ -536,6 +536,7 @@ namespace RadarKeys {
 
 			ignore[VK_OEM_NEC_EQUAL] = true;
 
+
 			ignore[VK_OEM_FJ_JISHO] = true;
 			ignore[VK_OEM_FJ_MASSHOU] = true;
 			ignore[VK_OEM_FJ_TOUROKU] = true;
