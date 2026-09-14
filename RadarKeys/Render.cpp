@@ -189,10 +189,9 @@ namespace RadarKeys {
 
 			auto& io = ImGui::GetIO();
 			bool unlock = IsUnlockCursor();
-
-			const bool blockMouse = KeyBindMenu::captureSuppressMouse;
-			const bool blockKeyboard = KeyBindMenu::captureSuppressKeyboard;
-			const bool blockGamepad = KeyBindMenu::captureSuppressGamepad;
+			const bool blockMouse = unlock && KeyBindMenu::captureSuppressMouse;
+			const bool blockKeyboard = unlock && KeyBindMenu::captureSuppressKeyboard;
+			const bool blockGamepad = unlock && KeyBindMenu::captureSuppressGamepad;
 
 			if (blockMouse) {
 				RawInput::BlockMouseClick();
