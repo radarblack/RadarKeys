@@ -412,7 +412,7 @@ namespace RadarKeys {
 
 			//wprintf(wcTextBuffer);
 #endif // _DEBUG
-			return true;
+			return allowGameInput;
 		}
 
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
@@ -535,7 +535,6 @@ namespace RadarKeys {
 			ignore[VK_NAVIGATION_CANCEL] = true;
 
 			ignore[VK_OEM_NEC_EQUAL] = true;
-
 
 			ignore[VK_OEM_FJ_JISHO] = true;
 			ignore[VK_OEM_FJ_MASSHOU] = true;
