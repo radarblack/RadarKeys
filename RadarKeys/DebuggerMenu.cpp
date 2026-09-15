@@ -6,6 +6,8 @@
 
 #include <filesystem>
 #include <deque>
+#include <mutex>
+#include <vector>
 #include <ctime>
 
 namespace RadarKeys {
@@ -22,9 +24,12 @@ namespace RadarKeys {
 		};
 		const size_t maxLogEntries = 300;
 		std::deque<LogEntry> logEntries;
+		std::mutex g_logMutex;
 
 		std::string CurrentTimestamp() {
-			auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<double>(ImGui::GetTime()));
+			using clock = std::chrono::steady_clock;
+			static const auto bootTime = clock::now();
+			auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - bootTime);
 			auto hours = std::chrono::duration_cast<std::chrono::hours>(durationMs);
 			durationMs -= hours;
 			auto minutes = std::chrono::duration_cast<std::chrono::minutes>(durationMs);
@@ -33,11 +38,12 @@ namespace RadarKeys {
 			durationMs -= seconds;
 
 			char timestr[32];
-			snprintf(timestr, sizeof(timestr), "%02d:%02d:%02d.%03d", hours.count(), minutes.count(), seconds.count(), durationMs.count());
+			snprintf(timestr, sizeof(timestr), "%02d:%02d:%02d.%03d", static_cast<int>(hours.count()), static_cast<int>(minutes.count()), static_cast<int>(seconds.count()), static_cast<int>(durationMs.count())); // L3: %d needs int
 			return std::string(timestr);
 		}
 
 		void AddLogEntry(std::string text) {
+			std::lock_guard<std::mutex> lock(g_logMutex);
 			logEntries.emplace_back(LogEntry{ CurrentTimestamp(), std::move(text) });
 			
 			while (logEntries.size() > maxLogEntries) {
@@ -140,11 +146,17 @@ namespace RadarKeys {
 
 			ImGui::Separator();
 			if (ImGui::Button("Clear Log")) {
+				std::lock_guard<std::mutex> lock(g_logMutex);
 				logEntries.clear();
 			}
 
+			std::vector<LogEntry> logSnapshot;
+			{
+				std::lock_guard<std::mutex> lock(g_logMutex);
+				logSnapshot.assign(logEntries.begin(), logEntries.end());
+			}
 			ImGui::BeginChild("DebuggerLog", ImVec2(0, 0), true);
-			for (const LogEntry& entry : logEntries) {
+			for (const LogEntry& entry : logSnapshot) {
 				ImGui::TextWrapped("[%s] %s", entry.timestamp.c_str(), entry.text.c_str());
 			}
 
