@@ -30,10 +30,10 @@ namespace RadarKeys {
 	inline const std::string& GetGameDirectory() {
 		static std::string cached;
 		if (cached.empty()) {
-			wchar_t exePathBuf[MAX_PATH]{};
-			GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
-			std::filesystem::path exePath(exePathBuf);
-			cached = exePath.parent_path().string();
+			wchar_t exePathBuf[32768]{};
+			DWORD exePathLen = GetModuleFileNameW(nullptr, exePathBuf, (DWORD)(sizeof(exePathBuf) / sizeof(exePathBuf[0])));
+			std::filesystem::path exePath(exePathLen ? std::wstring(exePathBuf, exePathLen) : std::wstring());
+			cached = exePath.parent_path().u8string();
 		}
 		return cached;
 	}
