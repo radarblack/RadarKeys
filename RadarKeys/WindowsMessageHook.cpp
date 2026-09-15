@@ -12,7 +12,7 @@ LRESULT WINAPI window_proc(HWND wnd, UINT message, WPARAM w_param, LPARAM l_para
     std::lock_guard _{ g_proc_mutex };
 
     if (g_windows_message_hook == nullptr) {
-        return 0;
+        return DefWindowProc(wnd, message, w_param, l_param);
     }
 
     auto& on_message = g_windows_message_hook->on_message;
