@@ -106,7 +106,6 @@ copy /Y "$(TargetDir)$(TargetName).dll" "$(SolutionDir)makebite\GameDir\$(Target
     <ClCompile Include="imguiimpl\imgui_impl_dx11.cpp" />
     <ClCompile Include="imguiimpl\imgui_impl_win32.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
-    <ClCompile Include="imgui\imgui_demo.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
