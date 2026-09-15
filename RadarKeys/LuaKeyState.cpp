@@ -22,11 +22,12 @@ namespace RadarKeys {
 		constexpr double kIncrementMultIncrementMult = 1.5;
 		constexpr double kMaxIncrementMult = 50.0;
 		constexpr int kMaxQueuedEdges = 8;
+		constexpr double kDescriptionStaleSeconds = 5.0;
 
 		struct KeyDescription {
 			bool hasToggleState = false;
 			bool toggleEnabled = false;
-			bool touchedSinceSweep = true;
+			clock::time_point lastTouched = clock::now();
 			bool usesOnPress = false;
 			bool usesHoldTime = false;
 			bool usesRepeat = false;
@@ -183,6 +184,15 @@ namespace RadarKeys {
 				return;
 			}
 			s.isPressed = RawInput::IsKeyHeldReal(vKey);
+			if (s.isPressed) {
+				clock::time_point now = clock::now();
+				s.heldStart = now;
+				s.heldStartSet = true;
+				s.onHoldStart = now;
+				s.onHoldStartSet = true;
+				s.repeatStart = now;
+				s.repeatStartSet = true;
+			}
 			s.actionHandle = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnRawEvent(vKey, ev); });
 			s.registered = true;
 			spdlog::debug("LuaKeyState EnsureTracked: now tracking vKey:{}", vKey);
@@ -195,6 +205,10 @@ namespace RadarKeys {
 			}
 			KeyPollState& s = states[vKey];
 			if (!s.registered || !s.descriptions.empty()) {
+				return;
+			}
+			if (s.isPressed || s.downEdgePending > 0 || s.upEdgePending > 0 ||
+				s.physicalDownEdgePending > 0 || s.physicalUpEdgePending > 0) {
 				return;
 			}
 			RawInput::UnRegisterAction(vKey, s.actionHandle);
@@ -299,7 +313,7 @@ namespace RadarKeys {
 			}
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
-			double heldHoldTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			double heldHoldTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			states[vKey].pendingUsesHoldTime = true;
 			states[vKey].pendingLastHoldSeconds = heldHoldTime;
 			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
@@ -320,9 +334,8 @@ namespace RadarKeys {
 			}
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
-			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			if (IsSuppressed(vKey)) {
-				s.onHoldStartSet = false;
 				return false;
 			}
 			if (s.isPressed && s.onHoldStartSet) {
@@ -343,11 +356,10 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
-			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			s.pendingUsesHoldTime = true;
 			s.pendingLastHoldSeconds = holdTime;
 			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
-				s.onHoldStartSet = false;
 				return false;
 			}
 			if (s.isPressed && s.onHoldStartSet) {
@@ -370,8 +382,6 @@ namespace RadarKeys {
 			KeyPollState& s = states[vKey];
 			s.pendingUsesRepeat = true;
 			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
-				s.repeatStartSet = false;
-				s.currentIncrementMult = 1.0;
 				return false;
 			}
 			if (!s.isPressed) {
@@ -472,19 +482,11 @@ namespace RadarKeys {
 			return true;
 		}
 
-		bool ComboAllHeld(const std::vector<USHORT>& vKeys) {
-			if (!ValidCombo(vKeys)) return false;
-			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active)) return false;
-			return RawComboAllHeld(active);
-		}
-
 		bool ComboButtonDown(const std::vector<USHORT>& vKeys) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
 			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt) return false;
-			for (USHORT vKey : active) EnsureTracked(vKey);
 			return RawComboAllHeld(active);
 		}
 
@@ -493,7 +495,6 @@ namespace RadarKeys {
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
 			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt) return false;
-			for (USHORT vKey : active) EnsureTracked(vKey);
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesOnPress = true;
@@ -525,6 +526,14 @@ namespace RadarKeys {
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesOnRelease = true;
 			bool allHeld = RawComboAllHeld(active);
+			if (allHeld && !state.active) {
+				state.active = true;
+				state.pressTime = clock::now();
+				state.repeatStart = state.pressTime;
+				state.holdStartSet = true;
+				state.repeatStartSet = true;
+				state.currentIncrementMult = 1.0;
+			}
 			if (state.active && !allHeld) {
 				state.active = false;
 				state.holdStartSet = false;
@@ -548,7 +557,7 @@ namespace RadarKeys {
 				state.pressTime = clock::now();
 				state.holdStartSet = true;
 			}
-			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds; // L46: explicit 0 = immediate
 			return state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime;
 		}
 
@@ -565,7 +574,7 @@ namespace RadarKeys {
 				state.pressTime = clock::now();
 				state.holdStartSet = true;
 			}
-			double holdTime = (holdSecondsOverride > 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds; // L46: explicit 0 = immediate
 			if (state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime) {
 				state.holdStartSet = false;
 				return true;
@@ -581,7 +590,14 @@ namespace RadarKeys {
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesRepeat = true;
-			if (!state.active) return false;
+			if (!state.active) {
+				state.active = true;
+				state.pressTime = clock::now();
+				state.repeatStart = state.pressTime;
+				state.holdStartSet = true;
+				state.repeatStartSet = true;
+				state.currentIncrementMult = 1.0;
+			}
 			if (state.repeatStartSet && std::chrono::duration<double>(clock::now() - state.repeatStart).count() >= kRepeatRateSeconds) {
 				state.repeatStart = clock::now();
 				state.currentIncrementMult *= kIncrementMultIncrementMult;
@@ -614,7 +630,7 @@ namespace RadarKeys {
 		struct ComboKeyDescription {
 			bool hasToggleState = false;
 			bool toggleEnabled = false;
-			bool touchedSinceSweep = true;
+			clock::time_point lastTouched = clock::now();
 			bool usesOnPress = false;
 			bool usesHoldTime = false;
 			bool usesRepeat = false;
@@ -653,22 +669,26 @@ namespace RadarKeys {
 			d.usesHoldTime = obsHoldTime;
 			d.usesRepeat = obsRepeat;
 			d.usesOnRelease = obsOnRelease;
-			d.touchedSinceSweep = true;
+			d.lastTouched = clock::now();
 		}
 
 		void SweepStaleComboDescriptions() {
 			KeyStateLock lock(g_keyStateMutex);
+			const clock::time_point now = clock::now();
 			for (auto it = comboDescriptions.begin(); it != comboDescriptions.end(); ) {
-				if (!it->second.touchedSinceSweep) {
-					comboRedirectTarget.erase(ComboStateKey(it->second.nativeKeys));
-					ComboPollState& state = comboStates[ComboStateKey(ResolveActiveCombo(it->second.nativeKeys))];
-					state.pendingUsesOnPress = false;
-					state.pendingUsesHoldTime = false;
-					state.pendingUsesRepeat = false;
-					state.pendingUsesOnRelease = false;
-					it = comboDescriptions.erase(it);
+				const double ageSeconds = std::chrono::duration<double>(now - it->second.lastTouched).count();
+				if (ageSeconds > kDescriptionStaleSeconds) {
+				std::string eraseActiveKey = ComboStateKey(ResolveActiveCombo(it->second.nativeKeys));
+				auto eraseState = comboStates.find(eraseActiveKey);
+				if (eraseState != comboStates.end()) {
+					eraseState->second.pendingUsesOnPress = false;
+					eraseState->second.pendingUsesHoldTime = false;
+					eraseState->second.pendingUsesRepeat = false;
+					eraseState->second.pendingUsesOnRelease = false;
+				}
+				comboRedirectTarget.erase(ComboStateKey(it->second.nativeKeys));
+				it = comboDescriptions.erase(it);
 				} else {
-					it->second.touchedSinceSweep = false;
 					++it;
 				}
 			}
@@ -735,7 +755,7 @@ namespace RadarKeys {
 				if (d.scriptName == scriptName && d.functionName == functionName) {
 					d.hasToggleState = hasToggleState;
 					d.toggleEnabled = toggleEnabled;
-					d.touchedSinceSweep = true;
+					d.lastTouched = clock::now();
 					d.usesOnPress = obsOnPress;
 					d.usesHoldTime = obsHoldTime;
 					d.lastHoldSeconds = obsHoldSeconds;
@@ -750,7 +770,7 @@ namespace RadarKeys {
 			d.functionName = functionName;
 			d.hasToggleState = hasToggleState;
 			d.toggleEnabled = toggleEnabled;
-			d.touchedSinceSweep = true;
+			d.lastTouched = clock::now();
 			d.usesOnPress = obsOnPress;
 			d.usesHoldTime = obsHoldTime;
 			d.lastHoldSeconds = obsHoldSeconds;
@@ -761,16 +781,16 @@ namespace RadarKeys {
 
 		void SweepStaleDescriptions() {
 			KeyStateLock lock(g_keyStateMutex);
+			const clock::time_point now = clock::now();
 			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
 				std::vector<KeyDescription>& descs = states[vKeyInt].descriptions;
 				if (!descs.empty()) {
 					descs.erase(
-						std::remove_if(descs.begin(), descs.end(), [](const KeyDescription& d) { return !d.touchedSinceSweep; }),
+						std::remove_if(descs.begin(), descs.end(), [&](const KeyDescription& d) {
+							return std::chrono::duration<double>(now - d.lastTouched).count() > kDescriptionStaleSeconds;
+						}),
 						descs.end()
 					);
-					for (KeyDescription& d : descs) {
-						d.touchedSinceSweep = false;
-					}
 				}
 				RetireIfUndescribed(static_cast<USHORT>(vKeyInt));
 			}
@@ -791,9 +811,13 @@ namespace RadarKeys {
 				EnsureTracked(newVKey);
 				KeyPollState& newState = states[newVKey];
 				KeyDescription movedDesc = *it;
-				movedDesc.touchedSinceSweep = true;
+				movedDesc.lastTouched = clock::now();
 				newState.descriptions.push_back(std::move(movedDesc));
 				oldState.descriptions.erase(it);
+			oldState.downEdgePending = 0;
+			oldState.upEdgePending = 0;
+			oldState.physicalDownEdgePending = 0;
+			oldState.physicalUpEdgePending = 0;
 				RetireIfUndescribed(oldVKey);
 			}
 		}
@@ -849,5 +873,43 @@ namespace RadarKeys {
 			}
 			return result;
 		}
+
+		void OnFocusLost() {
+			KeyStateLock lock(g_keyStateMutex);
+			for (int i = 0; i < 256; ++i) {
+				KeyPollState& s = states[i];
+				s.isPressed = false;
+				s.downEdgePending = 0;
+				s.upEdgePending = 0;
+				s.physicalDownEdgePending = 0;
+				s.physicalUpEdgePending = 0;
+				s.heldStartSet = false;
+				s.onHoldStartSet = false;
+				s.repeatStartSet = false;
+				s.currentIncrementMult = 1.0;
+			}
+			for (auto& entry : comboStates) {
+				entry.second.active = false;
+				entry.second.holdStartSet = false;
+				entry.second.repeatStartSet = false;
+				entry.second.currentIncrementMult = 1.0;
+			}
+		}
+
+
+		USHORT FindRedirectSource(USHORT activeVKey) {
+			KeyStateLock lock(g_keyStateMutex);
+			if (!ValidVKey(activeVKey)) return 0;
+			for (int i = 1; i < 256; ++i) {
+				if (redirectTarget[i] == activeVKey) return (USHORT)i;
+				}
+			return activeVKey;
+		}
+
+		void ClearComboRedirect(const std::vector<USHORT>& nativeVKeys) {
+			KeyStateLock lock(g_keyStateMutex);
+			comboRedirectTarget.erase(ComboStateKey(nativeVKeys));
+		}
+
 	}
 }
