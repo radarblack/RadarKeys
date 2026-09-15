@@ -16,7 +16,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
-#include <dxgi1_3.h>
+#include <dxgi1_4.h>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 namespace RadarKeys {
