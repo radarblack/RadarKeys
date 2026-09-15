@@ -1,11 +1,14 @@
 name: Build RadarKeys.dll
 
 on:
+  push:
+    branches: [main, main_IHintegration_test]
+  pull_request:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: windows-latest   # only Windows runners have MSVC/MSBuild available
+    runs-on: windows-2022   # only Windows runners have MSVC/MSBuild available
 
     steps:
 
