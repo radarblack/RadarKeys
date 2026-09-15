@@ -1,5 +1,4 @@
 //D3D11Hook.cpp - from RE2Framework
-//Hooks by creating a dummy device and swapchain to get the addresses of present and resizebuffers from the swapchains dummy swapchain's virtual method table
 #include <algorithm>
 #include <spdlog/spdlog.h>
 #include "D3D11Hook.hpp"
@@ -23,11 +22,6 @@ bool D3D11Hook::hook() {
 
     g_d3d11_hook = this;
 
-    // GetDesktopWindow() was used here originally, matching the stock
-    // RE2Framework technique. That works against real D3D11
-    // process does not own. It does not work against DXVK: DXVK's
-    // Vulkan-backed swapchain creation returns VK_ERROR_INITIALIZATION_FAILED
-    // when asked to build a surface/swapchain against a window it doesn't control 
     HWND h_wnd = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 1, 1, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (h_wnd == nullptr) {
         spdlog::error("Failed to create dummy window for D3D11 hook. GetLastError={0:x}", GetLastError());
@@ -98,6 +92,10 @@ bool D3D11Hook::unhook() {
 HRESULT WINAPI D3D11Hook::present(IDXGISwapChain* swap_chain, UINT sync_interval, UINT flags) {
     auto d3d11 = g_d3d11_hook;
 
+    if (!d3d11 || !d3d11->m_present_hook) {
+        return swap_chain->Present(sync_interval, flags);
+    }
+
     d3d11->m_swap_chain = swap_chain;
 
     ID3D11Device* device = nullptr;
@@ -124,6 +122,10 @@ HRESULT WINAPI D3D11Hook::present(IDXGISwapChain* swap_chain, UINT sync_interval
 
 HRESULT WINAPI D3D11Hook::resize_buffers(IDXGISwapChain* swap_chain, UINT buffer_count, UINT width, UINT height, DXGI_FORMAT new_format, UINT swap_chain_flags) {
     auto d3d11 = g_d3d11_hook;
+
+    if (!d3d11 || !d3d11->m_resize_buffers_hook) {
+        return swap_chain->ResizeBuffers(buffer_count, width, height, new_format, swap_chain_flags);
+    }
 
     if (d3d11->m_on_resize_buffers) {
         d3d11->m_on_resize_buffers(*d3d11);
