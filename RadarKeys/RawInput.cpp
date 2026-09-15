@@ -15,12 +15,13 @@
 #include <list>
 #include <array>
 #include <unordered_set>
-#pragma comment(lib, "Xinput.lib")
 
 namespace RadarKeys {
 	namespace RawInput {
 		const USHORT vKeyMax = 256; // virtual keycode max (VK_OEM_CLEAR      0xFE)
 		USHORT currFlags[vKeyMax]; // indexed by Virtual Keycode
+		namespace { struct CurrFlagsFiller { CurrFlagsFiller() { std::fill_n(currFlags, vKeyMax, static_cast<USHORT>(RI_KEY_BREAK)); } }; }
+		static CurrFlagsFiller g_currFlagsFiller;
 		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys (written once, before input starts)
 		std::atomic<unsigned char> blockGameKeys[vKeyMax]{}; // block game from recieving message
 		std::atomic<unsigned char> realStateHeld[vKeyMax]{};
@@ -31,6 +32,7 @@ namespace RadarKeys {
 		bool IsKeyboardBlockedToGame() { return g_keyboardBlockedToGame.load() != false; }
 		bool IsMouseBlockedToGame() { return g_mouseBlockedToGame.load() != false; }
 		bool IsGamepadBlockedToGame() { return g_gamepadBlockedToGame.load() != false; }
+
 		void SetGamepadBlockedToGame(bool blocked) { g_gamepadBlockedToGame.store(blocked ? 1 : 0); }
 
 		std::list<std::pair<ActionHandle, ButtonAction>>* buttonActions[vKeyMax] = { nullptr };
@@ -52,22 +54,6 @@ namespace RadarKeys {
 			blockGameKeys[VK_MBUTTON] = false;
 			blockGameKeys[VK_XBUTTON1] = false;
 			blockGameKeys[VK_XBUTTON2] = false;
-			g_mouseBlockedToGame.store(0);
-		}
-
-		void BlockAll() {
-			for (int i = 0; i < vKeyMax; i++) {
-				blockGameKeys[i] = true;
-			}
-			g_keyboardBlockedToGame.store(1);
-			g_mouseBlockedToGame.store(1);
-		}
-
-		void UnBlockAll() {
-			for (int i = 0; i < vKeyMax; i++) {
-				blockGameKeys[i] = false;
-			}
-			g_keyboardBlockedToGame.store(0);
 			g_mouseBlockedToGame.store(0);
 		}
 
@@ -109,6 +95,7 @@ namespace RadarKeys {
 		static XInputGetStateFunc g_origXInputGetState[kMaxXInputModules] = {};
 		static int g_xinputModuleCount = 0;
 		static std::unordered_set<void*> g_xinputHookedTargets;
+		static std::unordered_set<void*> g_xinputFailedTargets;
 
 		template <int N>
 		DWORD WINAPI HookedXInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
@@ -151,8 +138,9 @@ namespace RadarKeys {
 				if (!target) {
 					target = reinterpret_cast<void*>(GetProcAddress(module, reinterpret_cast<LPCSTR>(100)));
 				}
-				if (!target || g_xinputHookedTargets.count(target) != 0) {
-					continue; // forwarding stub, or already hooked
+				if (!target || g_xinputHookedTargets.count(target) != 0 ||
+					g_xinputFailedTargets.count(target) != 0) {
+					continue; // forwarding stub, already hooked, or hook failed before
 				}
 
 				int slot = g_xinputModuleCount;
@@ -165,12 +153,14 @@ namespace RadarKeys {
 					spdlog::info("RawInput: hooked XInputGetState in an XInput module for gamepad suppression ({} module(s))",
 						g_xinputModuleCount);
 				} else {
+					MH_RemoveHook(target);
+					g_xinputFailedTargets.insert(target);
 					spdlog::warn("RawInput: failed to hook XInputGetState in an XInput module");
 				}
 			}
 		}
 
-		bool g_anyGamepadConnected = false;
+		std::atomic<bool> g_anyGamepadConnected{ false };
 		void PollGamepad() {
 			EnsureXInputHook();
 
@@ -273,7 +263,7 @@ namespace RadarKeys {
 		}
 
 		bool IsAnyGamepadConnected() {
-			return g_anyGamepadConnected;
+			return g_anyGamepadConnected.load();
 		}
 
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
@@ -497,19 +487,6 @@ namespace RadarKeys {
 		}//IsKeyDown
 
 		//DEBUG
-		void TestAction(BUTTONEVENT buttonEvent) {
-			spdlog::debug("ButtonEvent: {:d}, Action: TestAction", buttonEvent);
-			if (buttonEvent == BUTTONEVENT::ONDOWN) {
-				spdlog::debug("TestAction on ONDOWN");
-			}
-			else if (buttonEvent == BUTTONEVENT::ONUP) {
-				spdlog::debug("TestAction on ONUP");
-			}
-			else  if (buttonEvent == BUTTONEVENT::HELD) {
-				spdlog::debug("TestAction on HELD");
-			}
-		}//TestAction
-
 		//tex: don't process key //DEBUGNOW what am I doing here?
 		void InitIgnoreKeys() {
 			ignore[VK_KANA] = true;
@@ -585,25 +562,6 @@ namespace RadarKeys {
 			InitIgnoreKeys();
 		}
 
-		//CULL not needed, the game will have set up it's own
-		//Could use it to allow funky controllers though
-		void InitializeRawInputDevices() {
-			RAWINPUTDEVICE Rid[2];
-
-			Rid[0].usUsagePage = 0x01;
-			Rid[0].usUsage = 0x02;
-			Rid[0].hwndTarget = 0;
-
-			Rid[1].usUsagePage = 0x01;
-			Rid[1].usUsage = 0x06;
-			Rid[1].hwndTarget = 0;
-
-			if (RegisterRawInputDevices(Rid, 2, sizeof(Rid[0])) == FALSE) {
-				spdlog::warn("register raw input devices failed {}", GetLastError());
-			}
-
-		}//InitializeRawInput
-
 		bool OnMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 			switch (uMsg) {
 			case WM_INPUT:
@@ -663,26 +621,22 @@ namespace RadarKeys {
 			return true;
 		}//OnMessage
 
-		//
-		WNDPROC WndProc_Orig = NULL;
-
-		LRESULT CALLBACK WndProc_Hook(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-			if (!OnMessage(hwnd, uMsg, wParam, lParam)) {
-				return 0L;
-			}
-
-			return CallWindowProc(WndProc_Orig, hwnd, uMsg, wParam, lParam);
-		}//WndProc_Hook
-
-		void HookWndProc(HWND hWnd) {
-			//Redirect WndProc for hWnd
-			WndProc_Orig = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WndProc_Hook);
-		}
-
 		bool IsKeyHeldReal(USHORT vKey) {
 			// this is for the hold function.
 			if (vKey >= vKeyMax) return false;
 			return realStateHeld[vKey];
 		}
+
+		void OnFocusLost() {
+			for (int i = 0; i < vKeyMax; ++i) {
+				if (realStateHeld[i].exchange(0)) {
+					currFlags[i] = RI_KEY_BREAK;
+					DoActions((USHORT)i, BUTTONEVENT::ONUP);
+				} else {
+					currFlags[i] = RI_KEY_BREAK;
+				}
+			}
+		}
+
 	}
 }
