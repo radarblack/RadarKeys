@@ -17,14 +17,11 @@ namespace RadarKeys {
 		typedef std::function<void(BUTTONEVENT buttonEvent)> ButtonAction;
 		typedef unsigned long long ActionHandle;
 		void InitializeInput();
-		void HookWndProc(HWND hWnd);
 		ActionHandle RegisterAction(USHORT vKey, ButtonAction action);
 		void UnRegisterAction(USHORT vKey);
 		void UnRegisterAction(USHORT vKey, ActionHandle handle);
 		bool IsKeyDown(USHORT vKey);
 		bool OnMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-		void BlockAll();
-		void UnBlockAll();
 		void BlockMouseClick(); 
 		void UnBlockMouseClick();
 		void BlockKeyboard();
@@ -36,5 +33,6 @@ namespace RadarKeys {
 		bool IsGamepadBlockedToGame();
 		bool IsKeyboardBlockedToGame();
 		bool IsMouseBlockedToGame();
+		void OnFocusLost();
 	}
 }
