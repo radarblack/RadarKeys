@@ -354,15 +354,15 @@ namespace RadarKeys {
 
 			const DWORD povOffsets[] = { DIJOFS_POV(0), DIJOFS_POV(1), DIJOFS_POV(2), DIJOFS_POV(3) };
 			for (DWORD i = 0; i < *pdwInOut; ++i) {
-				if (rgdod[i].dwData == 0) {
-					continue;
-				}
-				bool isPov = false;
-				for (DWORD pov : povOffsets) {
-					if (rgdod[i].dwOfs == pov) { isPov = true; break; }
-				}
-				rgdod[i].dwData = isPov ? 0xFFFFFFFFu : 0;
-			}
+			    bool isPov = false;
+			    for (DWORD pov : povOffsets) {
+			        if (rgdod[i].dwOfs == pov) { isPov = true; break; }
+			    }
+			    if (!isPov && rgdod[i].dwData == 0) {
+			        continue;
+			    }
+			    rgdod[i].dwData = isPov ? 0xFFFFFFFFu : 0;
+			}								
 			return hr;
 		}
 
