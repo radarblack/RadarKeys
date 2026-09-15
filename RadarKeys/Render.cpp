@@ -2,6 +2,7 @@
 #include "D3D11Hook.hpp"
 #include "WindowsMessageHook.hpp"
 #include "RawInput.h"
+#include "LuaKeyState.h"
 #include "LuaBridge.h"
 #include "KeyBindMenu.h"
 #include "DebuggerMenu.h"
@@ -14,6 +15,8 @@
 #include <memory>
 #include <filesystem>
 #include <string>
+#include <vector>
+#include <dxgi1_3.h>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 namespace RadarKeys {
@@ -24,7 +27,8 @@ namespace RadarKeys {
 		bool d3dHooked = false;
 
 		HWND hwnd = nullptr;
-		ID3D11RenderTargetView* mainRenderTargetView = nullptr;
+		std::vector<ID3D11RenderTargetView*> backBufferRTVs;
+		IDXGISwapChain* rtvSwapChain = nullptr;
 		bool ImGuiInitialized = false;
 		bool frameInitialized = false;
 		bool firstFrame = true;
@@ -36,35 +40,79 @@ namespace RadarKeys {
 		void CleanupRenderTarget() {
 			spdlog::trace("CleanupRenderTarget");
 
-			if (mainRenderTargetView != nullptr) {
-				mainRenderTargetView->Release();
-				mainRenderTargetView = nullptr;
+			for (ID3D11RenderTargetView* rtv : backBufferRTVs) {
+				if (rtv != nullptr) {
+					rtv->Release();
+				}
 			}
+			backBufferRTVs.clear();
+			rtvSwapChain = nullptr;
 		}
 
-		void CreateRenderTarget() {
-			CleanupRenderTarget();
+		ID3D11RenderTargetView* EnsureRenderTarget() {
 			if (!d3d11Hook || !d3d11Hook->get_swap_chain() || !d3d11Hook->get_device()) {
-				spdlog::warn("CreateRenderTarget: D3D11 hook/device/swap chain unavailable");
-				return;
+				return nullptr;
 			}
 
-			ID3D11Texture2D* backBuffer{ nullptr };
-			HRESULT hr = d3d11Hook->get_swap_chain()->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&backBuffer);
-			if (FAILED(hr) || !backBuffer) {
-				spdlog::warn("CreateRenderTarget: GetBuffer failed: 0x{:08X}", static_cast<unsigned>(hr));
-				return;
+			IDXGISwapChain* swapChain = d3d11Hook->get_swap_chain();
+			if (swapChain != rtvSwapChain) {
+				CleanupRenderTarget();
+				rtvSwapChain = swapChain;
 			}
 
-			hr = d3d11Hook->get_device()->CreateRenderTargetView(backBuffer, nullptr, &mainRenderTargetView);
-		backBuffer->Release();
-		if (FAILED(hr)) {
-			mainRenderTargetView = nullptr;
-			spdlog::warn("CreateRenderTarget: CreateRenderTargetView failed: 0x{:08X}", static_cast<unsigned>(hr));
-		}
+			UINT bufferCount = 1;
+			DXGI_SWAP_CHAIN_DESC swapDesc{};
+			if (SUCCEEDED(swapChain->GetDesc(&swapDesc)) && swapDesc.BufferCount > 0) {
+				bufferCount = swapDesc.BufferCount;
+				if (bufferCount > D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT) {
+					bufferCount = D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;
+				}
+			}
+
+			UINT bufferIndex = 0;
+			IDXGISwapChain3* swapChain3 = nullptr;
+			if (SUCCEEDED(swapChain->QueryInterface(__uuidof(IDXGISwapChain3), reinterpret_cast<void**>(&swapChain3))) && swapChain3 != nullptr) {
+				bufferIndex = swapChain3->GetCurrentBackBufferIndex();
+				swapChain3->Release();
+				if (bufferIndex >= bufferCount) {
+					bufferIndex = 0;
+				}
+			}
+
+			if (backBufferRTVs.size() != bufferCount) {
+				CleanupRenderTarget();
+				rtvSwapChain = swapChain;
+				backBufferRTVs.assign(bufferCount, nullptr);
+			}
+
+			if (backBufferRTVs[bufferIndex] == nullptr) {
+				ID3D11Texture2D* backBuffer{ nullptr };
+				HRESULT hr = swapChain->GetBuffer(bufferIndex, __uuidof(ID3D11Texture2D), reinterpret_cast<LPVOID*>(&backBuffer));
+				if (FAILED(hr) || backBuffer == nullptr) {
+					spdlog::warn("EnsureRenderTarget: GetBuffer({}) failed: 0x{:08X}", bufferIndex, static_cast<unsigned>(hr));
+					return nullptr;
+				}
+
+				hr = d3d11Hook->get_device()->CreateRenderTargetView(backBuffer, nullptr, &backBufferRTVs[bufferIndex]);
+				backBuffer->Release();
+				if (FAILED(hr)) {
+					backBufferRTVs[bufferIndex] = nullptr;
+					spdlog::warn("EnsureRenderTarget: CreateRenderTargetView failed: 0x{:08X}", static_cast<unsigned>(hr));
+					return nullptr;
+				}
+			}
+
+			return backBufferRTVs[bufferIndex];
 		}
 
 		bool OnMessage(HWND wnd, UINT message, WPARAM w_param, LPARAM l_param) {
+			if (message == WM_KILLFOCUS ||
+				(message == WM_ACTIVATE && LOWORD(w_param) == WA_INACTIVE) ||
+				(message == WM_ACTIVATEAPP && w_param == 0)) {
+				RawInput::OnFocusLost();
+				LuaKeyState::OnFocusLost();
+				return true;
+			}
 
 			if (!frameInitialized) {
 				return true;
@@ -110,10 +158,12 @@ namespace RadarKeys {
 			}
 
 			if (handledMessage) {
-			    if (message == WM_KEYUP) {
-			        return true;
-			    }
-			    return false;
+				if (message == WM_KEYUP || message == WM_SYSKEYUP ||
+					message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
+					message == WM_MBUTTONUP || message == WM_XBUTTONUP) {
+					return true;
+				}
+				return false;
 			}
 			return true;
 		}
@@ -139,6 +189,9 @@ namespace RadarKeys {
 			DXGI_SWAP_CHAIN_DESC swapDesc{};
 			swapChain->GetDesc(&swapDesc);
 			hwnd = swapDesc.OutputWindow;
+			if (hwnd == nullptr) {
+				spdlog::warn("FrameInitialize: swap chain has no output window - input hook skipped");
+			}
 			windowsMessageHook.reset();
 			windowsMessageHook = std::make_unique<WindowsMessageHook>(hwnd);
 			windowsMessageHook->on_message = [](auto wnd, auto msg, auto wParam, auto lParam) {
@@ -146,7 +199,7 @@ namespace RadarKeys {
 			};
 
 			spdlog::info("Creating render target");
-			CreateRenderTarget();
+			EnsureRenderTarget();
 
 			spdlog::info("Window Handle: {0:x}", (uintptr_t)hwnd);
 
@@ -243,11 +296,30 @@ namespace RadarKeys {
 			ImGui::EndFrame();
 			ImGui::Render();
 
+			ID3D11RenderTargetView* frameRTV = EnsureRenderTarget();
+			if (frameRTV == nullptr) {
+				return;
+			}
+
 			ID3D11DeviceContext* context = nullptr;
 			d3d11Hook->get_device()->GetImmediateContext(&context);
-			context->OMSetRenderTargets(1, &mainRenderTargetView, NULL);
-			context->Release();
+			ID3D11RenderTargetView* savedRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+			ID3D11DepthStencilView* savedDSV = nullptr;
+			context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, &savedDSV);
+
+			context->OMSetRenderTargets(1, &frameRTV, nullptr);
 			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+			context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, savedDSV);
+			for (UINT i = 0; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) {
+				if (savedRTVs[i] != nullptr) {
+					savedRTVs[i]->Release();
+				}
+			}
+			if (savedDSV != nullptr) {
+				savedDSV->Release();
+			}
+			context->Release();
 		}
 
 		void OnReset() {
