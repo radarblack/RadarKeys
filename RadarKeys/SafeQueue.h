@@ -33,8 +33,10 @@ public:
     SafeQueue& operator=(const SafeQueue<T>&) = delete;
 
     SafeQueue(SafeQueue<T>&& other) noexcept(false) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (!empty()) {
+        std::lock(mutex_, other.mutex_);
+        std::lock_guard<std::mutex> selfLock(mutex_, std::adopt_lock);
+        std::lock_guard<std::mutex> otherLock(other.mutex_, std::adopt_lock);
+        if (!queue_.empty()) {
             throw non_empty_queue("Moving into a non-empty queue");
         }
         queue_ = std::move(other.queue_);
