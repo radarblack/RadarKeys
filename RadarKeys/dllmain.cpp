@@ -45,6 +45,7 @@ namespace RadarKeys {
 
 	// DLL_PROCESS_ATTACH runs under the loader lock - heavy initialization
 	void InitThread() {
+		KeyBindMenu::InitDiagnostics();
 		spdlog::info("RadarKeys InitThread starting");
 
 		if (MH_Initialize() != MH_OK) {
@@ -112,7 +113,9 @@ namespace RadarKeys {
 
 	static bool ArgIsCombo(lua_State* L) {
 		const char* raw = LuaToString(L, 1);
-		return raw && std::strchr(raw, '+') != nullptr;
+		if (!raw) return false;
+		if (KeyBindMenu::VKeyForName(raw) >= 0) return false;
+		return std::strchr(raw, '+') != nullptr;
 	}
 
 	static double ResolveHoldSecondsArg(lua_State* L) {
@@ -271,6 +274,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "OnButtonDown", RadarKeys::l_OnButtonDown },
 		{ "OnButtonUp", RadarKeys::l_OnButtonUp },
 		{ "IsButtonHeld", RadarKeys::l_ButtonHeld },
+		{ "ButtonDown", RadarKeys::l_ButtonDown },
+		{ "ButtonHeld", RadarKeys::l_ButtonHeld },
 		{ "OnButtonHoldTime", RadarKeys::l_OnButtonHoldTime },
 		{ "OnButtonRepeat", RadarKeys::l_OnButtonRepeat },
 		{ "GetRepeatMult", RadarKeys::l_GetRepeatMult },
@@ -306,6 +311,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		break;
 	case DLL_PROCESS_DETACH:
 		RadarKeys::KeyBindMenu::LogCleanShutdown();
+		spdlog::shutdown();
 		break;
 	}
 	return TRUE;
