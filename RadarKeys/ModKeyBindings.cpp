@@ -146,8 +146,40 @@ namespace RadarKeys {
 			if (!loaded) {
 				Load();
 			}
-			overrides[scriptName][functionName] = keyName;
+			if (keyName.empty()) {
+				auto scriptIt = overrides.find(scriptName);
+				if (scriptIt != overrides.end()) {
+					scriptIt->second.erase(functionName);
+					if (scriptIt->second.empty()) overrides.erase(scriptIt);
+				}
+			} else {
+				overrides[scriptName][functionName] = keyName;
+			}
 			KeyBindMenu::SaveBindings();
+		}
+
+		void SetOverrideWithoutSave(const std::string& scriptName, const std::string& functionName, const std::string& keyName) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			if (!loaded) {
+				Load();
+			}
+			if (keyName.empty()) {
+				auto scriptIt = overrides.find(scriptName);
+				if (scriptIt != overrides.end()) {
+					scriptIt->second.erase(functionName);
+					if (scriptIt->second.empty()) overrides.erase(scriptIt);
+				}
+			} else {
+				overrides[scriptName][functionName] = keyName;
+			}
+		}
+
+		void SetDisabledWithoutSave(const std::string& scriptName, const std::string& functionName, bool disabled) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			if (!loaded) {
+				Load();
+			}
+			disabledMap[scriptName][functionName] = disabled;
 		}
 
 		bool IsDisabled(const std::string& scriptName, const std::string& functionName) {
