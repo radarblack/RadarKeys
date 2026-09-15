@@ -42,6 +42,7 @@ bool FunctionHook::create() {
     const auto destination = m_destination;
 
     if (MH_EnableHook((LPVOID)target) != MH_OK) {
+    MH_RemoveHook((LPVOID)target);
         m_original = 0;
         m_destination = 0;
         m_target = 0;
