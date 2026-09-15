@@ -14,6 +14,8 @@ namespace RadarKeys {
 		void Load();
 		std::string GetOverride(const std::string& scriptName, const std::string& functionName);
 		void SetOverride(const std::string& scriptName, const std::string& functionName, const std::string& keyName);
+		void SetOverrideWithoutSave(const std::string& scriptName, const std::string& functionName, const std::string& keyName);
+		void SetDisabledWithoutSave(const std::string& scriptName, const std::string& functionName, bool disabled);
 
 		bool IsDisabled(const std::string& scriptName, const std::string& functionName);
 		void SetDisabled(const std::string& scriptName, const std::string& functionName, bool disabled);
