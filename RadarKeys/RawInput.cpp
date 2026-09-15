@@ -15,6 +15,7 @@
 #include <list>
 #include <array>
 #include <unordered_set>
+#include <filesystem>
 
 namespace RadarKeys {
 	namespace RawInput {
@@ -119,6 +120,9 @@ namespace RadarKeys {
 			static const wchar_t* kModuleNames[] = {
 				L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll", L"xinput1_2.dll", L"xinput1_1.dll"
 			};
+			static const char* kModuleNamesNarrow[] = {
+				"xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll", "xinput1_2.dll", "xinput1_1.dll"
+			};
 			static bool loadAttemptedFor[kMaxXInputModules] = {};
 
 			for (int nameIndex = 0; nameIndex < kMaxXInputModules; ++nameIndex) {
@@ -126,6 +130,7 @@ namespace RadarKeys {
 					break;
 				}
 				const wchar_t* moduleName = kModuleNames[nameIndex];
+				const char* moduleNameNarrow = kModuleNamesNarrow[nameIndex];
 				HMODULE module = GetModuleHandleW(moduleName);
 				if (!module && !loadAttemptedFor[nameIndex]) {
 					loadAttemptedFor[nameIndex] = true;
@@ -134,13 +139,16 @@ namespace RadarKeys {
 				if (!module) {
 					continue;
 				}
+				wchar_t modulePathW[MAX_PATH] = L"";
+				GetModuleFileNameW(module, modulePathW, MAX_PATH);
+				std::string modulePath = std::filesystem::path(modulePathW).string();
 				void* target = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetState"));
 				if (!target) {
 					target = reinterpret_cast<void*>(GetProcAddress(module, reinterpret_cast<LPCSTR>(100)));
 				}
 				if (!target || g_xinputHookedTargets.count(target) != 0 ||
 					g_xinputFailedTargets.count(target) != 0) {
-					continue; // forwarding stub, already hooked, or hook failed before
+					continue;
 				}
 
 				int slot = g_xinputModuleCount;
@@ -150,12 +158,13 @@ namespace RadarKeys {
 					MH_EnableHook(target) == MH_OK) {
 					g_xinputHookedTargets.insert(target);
 					++g_xinputModuleCount;
-					spdlog::info("RawInput: hooked XInputGetState in an XInput module for gamepad suppression ({} module(s))",
-						g_xinputModuleCount);
+					spdlog::info("RawInput: hooked XInputGetState in {} (loaded from {}) for gamepad suppression ({} module(s))",
+						moduleNameNarrow, modulePath, g_xinputModuleCount);
 				} else {
 					MH_RemoveHook(target);
 					g_xinputFailedTargets.insert(target);
-					spdlog::warn("RawInput: failed to hook XInputGetState in an XInput module");
+					spdlog::warn("RawInput: failed to hook XInputGetState in {} (loaded from {})",
+						moduleNameNarrow, modulePath);
 				}
 			}
 		}
@@ -637,6 +646,5 @@ namespace RadarKeys {
 				}
 			}
 		}
-
 	}
 }
