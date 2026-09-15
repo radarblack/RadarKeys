@@ -4,9 +4,10 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <atomic>
 
 namespace RadarKeys {
-	extern bool showCapturePrompt;
+	extern std::atomic<bool> showCapturePrompt;
 
 	namespace KeyBindMenu {
 		struct KeyBind {
@@ -41,6 +42,7 @@ namespace RadarKeys {
 			bool IsCombo() const { return comboKeys.size() >= 2; }
 		};
 		void Init(const std::string& defaultMenuKeyName);
+		void InitDiagnostics();
 		void Draw(bool* p_open);
 		void Update();
 		void LogCleanShutdown();
