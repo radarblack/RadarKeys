@@ -5,10 +5,11 @@ local this = {}
 	end
 
 	local ok, RadarKeysOrErr = pcall(require, "RadarKeys")
-	if not ok then
-		InfCore.Log("RadarKeys_Core: failed to require RadarKeys: " .. tostring(RadarKeysOrErr), true, true)
-		return this
-	end
+        if not ok then
+            InfCore.Log("RadarKeys_Core: failed to require RadarKeys: " .. tostring(RadarKeysOrErr), true, true)
+            function this.Update() end
+            return this
+        end
 
 	local RK = RadarKeysOrErr
 	_G.RadarKeys = RK
@@ -92,25 +93,34 @@ local this = {}
 				table.insert(parts, part)
 			end
 			local cmd = parts[1]
-			if cmd == "DoScript" then
-				RunDoScript(parts[2])
+                if cmd == "DoScript" then
+                    if parts[2] then
+                        RunDoScript(parts[2])
+                    else
+                        InfCore.Log("RadarKeys_Core: bare DoScript message with no payload")
+                    end
 			elseif cmd == "CallFunction" then
 				local functionExpr = parts[2]
 				local scriptPath = parts[3]
 				local fn = ResolveFunction(functionExpr)
-				if fn then
-					local okCall, callErr = pcall(fn)
-					if not okCall then
-						InfCore.Log(tostring(callErr))
-					end
+                if fn then
+                    local okCall, callErr = pcall(fn)
+                    if okCall then
+                        RK.MenuMessage("DoScriptResult", "0|DoScriptResult|1|")
+                    else
+                        InfCore.Log(tostring(callErr))
+                        RK.MenuMessage("DoScriptResult", "0|DoScriptResult|0|" .. tostring(callErr))
+                    end
 				else
-					if scriptPath and scriptPath ~= "" then
-						RunDoScript(
-							"local f=loadfile([[" ..
-								scriptPath ..
-									"]]); if f then f(); local fn=" ..
-										tostring(functionExpr) .. '; if type(fn)=="function" then fn(); end end'
-						)
+            if scriptPath and scriptPath ~= "" then
+                local eq = ""
+                while scriptPath:find("]" .. eq .. "]", 1, true) do eq = eq .. "=" end
+                RunDoScript(
+                    "local f, ferr = loadfile([" .. eq .. "[[" ..
+                        scriptPath ..
+                            "]]" .. eq .. "]); assert(f, ferr); f(); local fn=" ..
+                                tostring(functionExpr) .. '; if type(fn)=="function" then fn(); end'
+                )
 					else
 						InfCore.Log("RadarKeys_Core: function not found: " .. tostring(functionExpr))
 					end
