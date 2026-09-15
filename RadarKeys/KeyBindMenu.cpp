@@ -32,6 +32,7 @@ namespace RadarKeys {
 	std::atomic<bool> showCapturePrompt{ false };
 	namespace KeyBindMenu {
 		std::vector<KeyBind> bindings;
+		bool EnsureBindsDirectory();
 		bool ManualSingleOverlapsCombo(USHORT vKey, unsigned singleMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = "");
 		bool ManualComboOverlapsSingle(const std::vector<USHORT>& comboKeys, unsigned comboMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = "");
 
