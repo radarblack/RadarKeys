@@ -16,7 +16,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
-#include <dxgi1_4.h>
+#include <dxgi1_3.h>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 namespace RadarKeys {
@@ -261,6 +261,13 @@ namespace RadarKeys {
 			}
 
 			RawInput::SetGamepadBlockedToGame(blockGamepad);
+
+			static bool lastBlockGamepad = false;
+			if (blockGamepad != lastBlockGamepad) {
+				spdlog::info("Gamepad block-to-game: {} (unlock={}, captureSuppressGamepad={})",
+					blockGamepad ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressGamepad);
+				lastBlockGamepad = blockGamepad;
+			}
 
 			io.MouseDrawCursor = unlock;
 
