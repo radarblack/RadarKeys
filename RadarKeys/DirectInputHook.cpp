@@ -6,6 +6,7 @@
 
 #include <dinput.h>
 #include <cstring>
+#include <cstdint>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -17,30 +18,33 @@ namespace RadarKeys {
 		static DirectInput8Create_t g_origDirectInput8Create = nullptr;
 
 		typedef HRESULT(STDMETHODCALLTYPE* GetCapabilities_t)(IDirectInputDevice8*, LPDIDEVCAPS);
+		typedef HRESULT(STDMETHODCALLTYPE* GetProperty_t)(IDirectInputDevice8*, REFGUID, LPDIPROPHEADER);
+		typedef ULONG(STDMETHODCALLTYPE* Release_t)(IDirectInputDevice8*);
 		typedef HRESULT(STDMETHODCALLTYPE* CreateDevice_t)(IDirectInputDevice8*, REFGUID, LPDIRECTINPUTDEVICE8*, LPUNKNOWN);
 		typedef HRESULT(STDMETHODCALLTYPE* SetProperty_t)(IDirectInputDevice8*, REFGUID, LPCDIPROPHEADER);
 		typedef HRESULT(STDMETHODCALLTYPE* Acquire_t)(IDirectInputDevice8*);
 		typedef HRESULT(STDMETHODCALLTYPE* GetDeviceState_t)(IDirectInputDevice8*, DWORD, LPVOID);
 		typedef HRESULT(STDMETHODCALLTYPE* GetDeviceData_t)(IDirectInputDevice8*, DWORD, DIDEVICEOBJECTDATA*, LPDWORD, DWORD);
-		typedef HRESULT(STDMETHODCALLTYPE* Poll_t)(IDirectInputDevice8*);
 
 		static GetCapabilities_t g_origGetCapabilities = nullptr;
+		static GetProperty_t g_origGetProperty = nullptr;
+		static Release_t g_origRelease = nullptr;
 		static CreateDevice_t g_origCreateDevice = nullptr;
 		static SetProperty_t g_origSetProperty = nullptr;
 		static Acquire_t g_origAcquire = nullptr;
 		static GetDeviceState_t g_origGetDeviceState = nullptr;
 		static GetDeviceData_t g_origGetDeviceData = nullptr;
-		static Poll_t g_origPoll = nullptr;
 
 		static constexpr size_t kDirectInput8VTableSize = 11;
 		static constexpr size_t kDeviceVTableSize = 29;
 		static constexpr size_t kSlotGetCapabilities = 3;
+		static constexpr size_t kSlotRelease = 2;
+		static constexpr size_t kSlotGetProperty = 5;
 		static constexpr size_t kSlotCreateDevice = 3;
 		static constexpr size_t kSlotSetProperty = 6;
 		static constexpr size_t kSlotAcquire = 7;
 		static constexpr size_t kSlotGetDeviceState = 9;
 		static constexpr size_t kSlotGetDeviceData = 10;
-		static constexpr size_t kSlotPoll = 25;
 
 		enum class DeviceKind { Unknown, Keyboard, Mouse, Joystick };
 
@@ -53,10 +57,13 @@ namespace RadarKeys {
 			BYTE realState[sizeof(DIJOYSTATE2)] = {};
 			DWORD realStateSize = 0;
 			bool hasRealState = false;
+			bool rangeQueried = false;
+			AxisRange observed[32];
 		};
 
 		static std::mutex g_mutex;
 		static std::unordered_set<void*> g_wrappedObjects;
+		static std::unordered_set<void*> g_vtableCopies;
 		static std::unordered_map<IDirectInputDevice8*, DeviceInfo> g_deviceInfo;
 
 		// GUIDs
@@ -72,8 +79,12 @@ namespace RadarKeys {
 		{ 0x6F1D2B82, 0xD5A0, 0x11CF, { 0xBF, 0xC7, 0x44, 0x45, 0x53, 0x54 } };
 		static const GUID kGuidSysKeyboardEm2 =
 		{ 0x6F1D2B83, 0xD5A0, 0x11CF, { 0xBF, 0xC7, 0x44, 0x45, 0x53, 0x54 } };
-		static const GUID kGuidPropRange =
-		{ 0x13517C81, 0x6E81, 0x11CF, { 0x9C, 0x3E, 0x00, 0xAA, 0x00, 0x4A, 0x48, 0xA4 } };
+		static bool IsDipropRangeGuid(REFGUID rguidProp) {
+			return reinterpret_cast<uintptr_t>(&rguidProp) == 4;
+		}
+		static const GUID* DipropRangeAsGuid() {
+			return reinterpret_cast<const GUID*>(4);
+		}
 
 		static bool SameGuid(REFGUID a, REFGUID b) {
 			return std::memcmp(&a, &b, sizeof(GUID)) == 0;
@@ -86,7 +97,7 @@ namespace RadarKeys {
 			}
 			std::lock_guard<std::mutex> lock(g_mutex);
 			if (g_wrappedObjects.find(object) != g_wrappedObjects.end()) {
-				return false; // already wrapped
+				return false;
 			}
 			void** originalVTable = *reinterpret_cast<void***>(object);
 
@@ -97,6 +108,7 @@ namespace RadarKeys {
 			}
 			*reinterpret_cast<void***>(object) = copy;
 			g_wrappedObjects.insert(object);
+			g_vtableCopies.insert(copy);
 			return true;
 		}
 
@@ -131,7 +143,7 @@ namespace RadarKeys {
 			case DI8DEVTYPE_DRIVING:
 			case DI8DEVTYPE_FLIGHT:
 			case DI8DEVTYPE_SUPPLEMENTAL:
-			case 4: // legacy DIDEVTYPE_JOYSTICK
+			case 4:
 				kind = DeviceKind::Joystick;
 				break;
 			default:
@@ -158,7 +170,7 @@ namespace RadarKeys {
 			REFGUID rguidProp, LPCDIPROPHEADER pdiph) {
 			HRESULT hr = g_origSetProperty(self, rguidProp, pdiph);
 
-			if (SUCCEEDED(hr) && pdiph && SameGuid(rguidProp, kGuidPropRange) &&
+			if (SUCCEEDED(hr) && pdiph && IsDipropRangeGuid(rguidProp) &&
 				pdiph->dwSize >= sizeof(DIPROPRANGE)) {
 				const DIPROPRANGE* range = reinterpret_cast<const DIPROPRANGE*>(pdiph);
 				std::lock_guard<std::mutex> lock(g_mutex);
@@ -194,6 +206,10 @@ namespace RadarKeys {
 				}
 				return r->minV;
 			}
+			if (idx < 32 && info.observed[idx].known) {
+				const AxisRange& obs = info.observed[idx];
+				return stickAxis ? obs.minV + (obs.maxV - obs.minV) / 2 : obs.minV;
+			}
 			return 0;
 		}
 
@@ -218,10 +234,6 @@ namespace RadarKeys {
 			}
 		}
 
-		static HRESULT STDMETHODCALLTYPE Hooked_Poll(IDirectInputDevice8* self) {
-			return g_origPoll(self);
-		}
-
 		static HRESULT STDMETHODCALLTYPE Hooked_GetDeviceState(IDirectInputDevice8* self,
 			DWORD cbData, LPVOID lpvData) {
 			HRESULT hr = g_origGetDeviceState(self, cbData, lpvData);
@@ -239,14 +251,56 @@ namespace RadarKeys {
 			}
 
 			if (kind == DeviceKind::Joystick) {
-				std::lock_guard<std::mutex> lock(g_mutex);
-				auto it = g_deviceInfo.find(self);
-				if (it != g_deviceInfo.end()) {
-					DWORD copyBytes = cbData < sizeof(it->second.realState)
-						? cbData : (DWORD)sizeof(it->second.realState);
-					std::memcpy(it->second.realState, lpvData, copyBytes);
-					it->second.realStateSize = copyBytes;
-					it->second.hasRealState = true;
+				bool needRangeQuery = false;
+				{
+					std::lock_guard<std::mutex> lock(g_mutex);
+					auto it = g_deviceInfo.find(self);
+					if (it != g_deviceInfo.end()) {
+						DWORD copyBytes = cbData < sizeof(it->second.realState)
+							? cbData : (DWORD)sizeof(it->second.realState);
+						std::memcpy(it->second.realState, lpvData, copyBytes);
+						it->second.realStateSize = copyBytes;
+						it->second.hasRealState = true;
+						if (cbData >= 8 * sizeof(LONG)) {
+							const LONG* axes = static_cast<const LONG*>(lpvData);
+							for (size_t a = 0; a < 8; ++a) {
+								AxisRange& obs = it->second.observed[a];
+								if (!obs.known) {
+									obs.known = true;
+									obs.minV = axes[a];
+									obs.maxV = axes[a];
+								} else {
+									if (axes[a] < obs.minV) obs.minV = axes[a];
+									if (axes[a] > obs.maxV) obs.maxV = axes[a];
+								}
+							}
+						}
+						needRangeQuery = g_origGetProperty && !it->second.deviceRange.known &&
+							!it->second.rangeQueried;
+					}
+				}
+				if (needRangeQuery) {
+					DIPROPRANGE queried{};
+					queried.diph.dwSize = sizeof(DIPROPRANGE);
+					queried.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+					queried.diph.dwObj = 0;
+					queried.diph.dwHow = DIPH_DEVICE;
+					if (SUCCEEDED(g_origGetProperty(self, *DipropRangeAsGuid(), &queried.diph))) {
+						std::lock_guard<std::mutex> lock(g_mutex);
+						auto it = g_deviceInfo.find(self);
+						if (it != g_deviceInfo.end()) {
+							it->second.deviceRange.known = true;
+							it->second.deviceRange.minV = queried.lMin;
+							it->second.deviceRange.maxV = queried.lMax;
+							it->second.rangeQueried = true;
+						}
+					} else {
+						std::lock_guard<std::mutex> lock(g_mutex);
+						auto it = g_deviceInfo.find(self);
+						if (it != g_deviceInfo.end()) {
+							it->second.rangeQueried = true;
+						}
+					}
 				}
 			}
 
@@ -300,6 +354,9 @@ namespace RadarKeys {
 
 			const DWORD povOffsets[] = { DIJOFS_POV(0), DIJOFS_POV(1), DIJOFS_POV(2), DIJOFS_POV(3) };
 			for (DWORD i = 0; i < *pdwInOut; ++i) {
+				if (rgdod[i].dwData == 0) {
+					continue;
+				}
 				bool isPov = false;
 				for (DWORD pov : povOffsets) {
 					if (rgdod[i].dwOfs == pov) { isPov = true; break; }
@@ -310,6 +367,26 @@ namespace RadarKeys {
 		}
 
 		// detour
+
+		static ULONG STDMETHODCALLTYPE Hooked_Release(IDirectInputDevice8* self) {
+			void** vtableCopy = nullptr;
+			{
+				std::lock_guard<std::mutex> lock(g_mutex);
+				if (g_wrappedObjects.find(self) != g_wrappedObjects.end()) {
+					vtableCopy = *reinterpret_cast<void***>(self);
+				}
+			}
+			ULONG refs = g_origRelease(self);
+			if (refs == 0) {
+				std::lock_guard<std::mutex> lock(g_mutex);
+				g_deviceInfo.erase(self);
+				g_wrappedObjects.erase(self);
+				if (vtableCopy && g_vtableCopies.erase(vtableCopy)) {
+					delete[] vtableCopy;
+				}
+			}
+			return refs;
+		}
 
 		static HRESULT STDMETHODCALLTYPE Hooked_CreateDevice(IDirectInputDevice8* self,
 			REFGUID rguid, LPDIRECTINPUTDEVICE8* lplpDevice, LPUNKNOWN pUnkOuter) {
@@ -337,10 +414,11 @@ namespace RadarKeys {
 					void** vtbl = *reinterpret_cast<void***>(device);
 					g_origGetCapabilities = reinterpret_cast<GetCapabilities_t>(vtbl[kSlotGetCapabilities]);
 					g_origSetProperty = reinterpret_cast<SetProperty_t>(vtbl[kSlotSetProperty]);
+					g_origGetProperty = reinterpret_cast<GetProperty_t>(vtbl[kSlotGetProperty]);
+					g_origRelease = reinterpret_cast<Release_t>(vtbl[kSlotRelease]);
 					g_origAcquire = reinterpret_cast<Acquire_t>(vtbl[kSlotAcquire]);
 					g_origGetDeviceState = reinterpret_cast<GetDeviceState_t>(vtbl[kSlotGetDeviceState]);
 					g_origGetDeviceData = reinterpret_cast<GetDeviceData_t>(vtbl[kSlotGetDeviceData]);
-					g_origPoll = reinterpret_cast<Poll_t>(vtbl[kSlotPoll]);
 				}
 			}
 
@@ -349,7 +427,7 @@ namespace RadarKeys {
 				{ kSlotAcquire,          reinterpret_cast<void*>(&Hooked_Acquire) },
 				{ kSlotGetDeviceState,   reinterpret_cast<void*>(&Hooked_GetDeviceState) },
 				{ kSlotGetDeviceData,    reinterpret_cast<void*>(&Hooked_GetDeviceData) },
-				{ kSlotPoll,             reinterpret_cast<void*>(&Hooked_Poll) },
+				{ kSlotRelease,          reinterpret_cast<void*>(&Hooked_Release) },
 			};
 			bool installed = OverrideObjectVTable(device, kDeviceVTableSize,
 				kDeviceOverrides, sizeof(kDeviceOverrides) / sizeof(kDeviceOverrides[0]));
@@ -402,10 +480,10 @@ namespace RadarKeys {
 				return false;
 			}
 			switch (direction) {
-			case 0: return pov <= 4500  || pov >= 31500; // up
-			case 1: return pov >= 13500 && pov <= 22500; // down
-			case 2: return pov >= 22500 && pov <= 31500; // left
-			case 3: return pov >= 4500  && pov <= 13500; // right
+			case 0: return pov <= 4500  || pov >= 31500;
+			case 1: return pov >= 13500 && pov <= 22500;
+			case 2: return pov >= 22500 && pov <= 31500;
+			case 3: return pov >= 4500  && pov <= 13500;
 			}
 			return false;
 		}
@@ -418,7 +496,8 @@ namespace RadarKeys {
 			size_t idx = offsetBytes / 4;
 			LONG low = 0, high = 0;
 			const AxisRange* r = (idx < 32 && info.perOffset[idx].known)
-				? &info.perOffset[idx] : (info.deviceRange.known ? &info.deviceRange : nullptr);
+				? &info.perOffset[idx] : (info.deviceRange.known ? &info.deviceRange :
+					(idx < 32 && info.observed[idx].known ? &info.observed[idx] : nullptr));
 			if (r && r->known) {
 				low = r->minV;
 				high = r->maxV;
@@ -435,7 +514,8 @@ namespace RadarKeys {
 			size_t offsetBytes = DIJOFS_SLIDER(which);
 			size_t idx = offsetBytes / 4;
 			const AxisRange* r = (idx < 32 && info.perOffset[idx].known)
-				? &info.perOffset[idx] : (info.deviceRange.known ? &info.deviceRange : nullptr);
+				? &info.perOffset[idx] : (info.deviceRange.known ? &info.deviceRange :
+					(idx < 32 && info.observed[idx].known ? &info.observed[idx] : nullptr));
 			if (r && r->known) {
 				return value >= r->minV + (r->maxV - r->minV) * 4 / 5;
 			}
