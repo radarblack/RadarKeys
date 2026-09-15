@@ -23,8 +23,6 @@ namespace RadarKeys {
 			messagesIn.push(message);
 		}
 
-		// IHHook-style IPC: pipe-separated "seq|cmd|payload..."
-        // args[0]=seq (unused), args[1]=cmd (dispatch key), args[2+]=payload
 		void DispatchMessage(const std::string& message) {
 			std::vector<std::string> args = split(message, "|");
 			if (args.size() < 2) {
@@ -38,7 +36,13 @@ namespace RadarKeys {
 				return;
 			}
 			MenuCommandFunc MenuCommand = it->second;
-			MenuCommand(args);
+			try {
+				MenuCommand(args);
+			} catch (const std::exception& e) {
+				spdlog::error("LuaBridge::DispatchMessage: handler for '{}' threw: {}", cmd, e.what());
+			} catch (...) {
+				spdlog::error("LuaBridge::DispatchMessage: handler for '{}' threw an unknown exception", cmd);
+			}
 		}
 
 		void ProcessMessages() {
