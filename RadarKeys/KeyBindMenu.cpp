@@ -32,6 +32,9 @@ namespace RadarKeys {
 	std::atomic<bool> showCapturePrompt{ false };
 	namespace KeyBindMenu {
 		std::vector<KeyBind> bindings;
+		bool ManualSingleOverlapsCombo(USHORT vKey, unsigned singleMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = "");
+		bool ManualComboOverlapsSingle(const std::vector<USHORT>& comboKeys, unsigned comboMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = "");
+
 		static float capturedHoldSeconds = 0.0f;
 		static bool capturedInstantMode = false;
 		static int capturedInstantTriggerType = 0;
@@ -678,9 +681,6 @@ namespace RadarKeys {
 			if (ManualComboOverlapsSingle(comboKeys, modMask, -1, scriptName, functionName)) return false;
 			return true;
 		}
-
-		bool ManualSingleOverlapsCombo(USHORT vKey, unsigned singleMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = ""); // H3 (defined below)
-		bool ManualComboOverlapsSingle(const std::vector<USHORT>& comboKeys, unsigned comboMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = ""); // H3 (defined below)
 
 		bool IsComboAvailable(USHORT vKey, bool needCtrl, bool needShift, bool needAlt, float holdSeconds, unsigned manualMask, int editingIndex = -1) {
 			if (IsReservedVKey(vKey)) return false;
