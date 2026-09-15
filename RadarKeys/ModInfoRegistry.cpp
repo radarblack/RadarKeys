@@ -1,13 +1,16 @@
 #include "ModInfoRegistry.h"
 #include <algorithm>
+#include <chrono>
 #include <mutex>
 
 namespace RadarKeys {
 	namespace ModInfoRegistry {
 		namespace {
+			constexpr double kModInfoStaleSeconds = 30.0;
+
 			struct Entry {
 				ModInfo info;
-				bool touchedSinceSweep = false;
+				std::chrono::steady_clock::time_point lastTouched = std::chrono::steady_clock::now();
 			};
 
 			std::vector<Entry> entries;
@@ -36,7 +39,7 @@ namespace RadarKeys {
 				existing->info.modCreator = modCreator;
 				existing->info.modVersion = modVersion;
 				existing->info.modLink = modLink;
-				existing->touchedSinceSweep = true;
+				existing->lastTouched = std::chrono::steady_clock::now();
 				return;
 			}
 
@@ -47,19 +50,19 @@ namespace RadarKeys {
 			e.info.modCreator = modCreator;
 			e.info.modVersion = modVersion;
 			e.info.modLink = modLink;
-			e.touchedSinceSweep = true;
+			e.lastTouched = std::chrono::steady_clock::now();
 			entries.push_back(std::move(e));
 		}
 
 		void SweepStale() {
 			std::lock_guard<std::mutex> lock(g_entriesMutex);
+			const auto now = std::chrono::steady_clock::now();
 			entries.erase(
-				std::remove_if(entries.begin(), entries.end(), [](const Entry& e) { return !e.touchedSinceSweep; }),
+				std::remove_if(entries.begin(), entries.end(), [&](const Entry& e) {
+					return std::chrono::duration<double>(now - e.lastTouched).count() > kModInfoStaleSeconds;
+				}),
 				entries.end()
 			);
-			for (Entry& e : entries) {
-				e.touchedSinceSweep = false;
-			}
 		}
 
 		std::vector<ModInfo> GetTrackedModInfo() {
