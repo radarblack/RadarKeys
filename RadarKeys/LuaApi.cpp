@@ -1,6 +1,7 @@
 #include "LuaApi.h"
 #include "HookUtils.h"
 #include "spdlog/spdlog.h"
+#include <atomic>
 
 namespace RadarKeys {
 
@@ -161,20 +162,20 @@ namespace RadarKeys {
 		return true;
 	}
 
-	static lua_State* g_CapturedLuaState = nullptr;
+static std::atomic<lua_State*> g_CapturedLuaState{ nullptr };
 
 	void LuaApiCaptureState(lua_State* L) {
 		if (!L) {
 			return;
 		}
-		if (!g_CapturedLuaState) {
+			if (!g_CapturedLuaState.load()) {
 			spdlog::info("LuaApiCaptureState: captured main lua_State for direct calls");
 		}
-		g_CapturedLuaState = L;
+			g_CapturedLuaState.store(L);
 	}
 
 	lua_State* LuaApiGetCapturedState() {
-		return g_CapturedLuaState;
+		return g_CapturedLuaState.load();
 	}
 
 	LuaDirectCallResult LuaCallGlobalFunction(const std::string& functionName) {
@@ -190,7 +191,7 @@ namespace RadarKeys {
 		}
 		return LuaDirectCallResult::NotAvailable;
 #else
-		lua_State* L = g_CapturedLuaState;
+		lua_State* L = g_CapturedLuaState.load();
 		if (!L || !g_lua_getfield || !g_lua_pcall || !g_lua_settop || !g_lua_type || !g_lua_gettop) {
 			return LuaDirectCallResult::NotAvailable;
 		}
