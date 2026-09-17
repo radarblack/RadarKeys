@@ -60,8 +60,8 @@ namespace RadarKeys {
 			RawInput::ActionHandle actionHandle = 0;
 		};
 
-		KeyPollState states[256];
-		USHORT redirectTarget[256] = {};
+		KeyPollState states[RawInput::kMaxVKey];
+		USHORT redirectTarget[RawInput::kMaxVKey] = {};
 
 		struct ComboPollState {
 			bool active = false;
@@ -77,17 +77,17 @@ namespace RadarKeys {
 		};
 		std::map<std::string, ComboPollState> comboStates;
 		bool ValidVKey(USHORT vKey) {
-			return vKey < 256;
+			return vKey < RawInput::kMaxVKey;
 		}
 
-		bool suppressed[256] = {};
+		bool suppressed[RawInput::kMaxVKey] = {};
 		bool IsSuppressed(USHORT vKey) {
 			return ValidVKey(vKey) && suppressed[vKey];
 		}
 
 		void SetSuppressedVKeys(const std::vector<USHORT>& vKeys) {
 			KeyStateLock lock(g_keyStateMutex);
-			for (int i = 0; i < 256; ++i) {
+			for (int i = 0; i < RawInput::kMaxVKey; ++i) {
 				suppressed[i] = false;
 			}
 			for (USHORT vKey : vKeys) {
@@ -97,7 +97,7 @@ namespace RadarKeys {
 			}
 		}
 
-		bool disabledVKey[256] = {};
+		bool disabledVKey[RawInput::kMaxVKey] = {};
 
 		bool IsDisabledVKey(USHORT vKey) {
 			return ValidVKey(vKey) && disabledVKey[vKey];
@@ -105,7 +105,7 @@ namespace RadarKeys {
 
 		void SetDisabledVKeys(const std::vector<USHORT>& vKeys) {
 			KeyStateLock lock(g_keyStateMutex);
-			for (int i = 0; i < 256; ++i) {
+			for (int i = 0; i < RawInput::kMaxVKey; ++i) {
 				disabledVKey[i] = false;
 			}
 			for (USHORT vKey : vKeys) {
@@ -782,7 +782,7 @@ namespace RadarKeys {
 		void SweepStaleDescriptions() {
 			KeyStateLock lock(g_keyStateMutex);
 			const clock::time_point now = clock::now();
-			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
+			for (int vKeyInt = 0; vKeyInt < RawInput::kMaxVKey; ++vKeyInt) {
 				std::vector<KeyDescription>& descs = states[vKeyInt].descriptions;
 				if (!descs.empty()) {
 					descs.erase(
@@ -825,7 +825,7 @@ namespace RadarKeys {
 		std::vector<TrackedKeyInfo> GetTrackedKeyInfo() {
 			KeyStateLock lock(g_keyStateMutex);
 			std::vector<TrackedKeyInfo> result;
-			for (int vKeyInt = 0; vKeyInt < 256; ++vKeyInt) {
+			for (int vKeyInt = 0; vKeyInt < RawInput::kMaxVKey; ++vKeyInt) {
 				const KeyPollState& s = states[vKeyInt];
 				if (!s.registered) {
 					continue;
@@ -876,7 +876,7 @@ namespace RadarKeys {
 
 		void OnFocusLost() {
 			KeyStateLock lock(g_keyStateMutex);
-			for (int i = 0; i < 256; ++i) {
+			for (int i = 0; i < RawInput::kMaxVKey; ++i) {
 				KeyPollState& s = states[i];
 				s.isPressed = false;
 				s.downEdgePending = 0;
@@ -900,9 +900,9 @@ namespace RadarKeys {
 		USHORT FindRedirectSource(USHORT activeVKey) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(activeVKey)) return 0;
-			for (int i = 1; i < 256; ++i) {
+			for (int i = 1; i < RawInput::kMaxVKey; ++i) {
 				if (redirectTarget[i] == activeVKey) return (USHORT)i;
-				}
+			}
 			return activeVKey;
 		}
 
