@@ -19,7 +19,7 @@
 
 namespace RadarKeys {
 	namespace RawInput {
-		const USHORT vKeyMax = 256; // virtual keycode max (VK_OEM_CLEAR      0xFE)
+		const USHORT vKeyMax = kMaxVKey;
 		USHORT currFlags[vKeyMax]; // indexed by Virtual Keycode
 		namespace { struct CurrFlagsFiller { CurrFlagsFiller() { std::fill_n(currFlags, vKeyMax, static_cast<USHORT>(RI_KEY_BREAK)); } }; }
 		static CurrFlagsFiller g_currFlagsFiller;
@@ -170,6 +170,7 @@ namespace RadarKeys {
 		}
 
 		std::atomic<bool> g_anyGamepadConnected{ false };
+		std::atomic<bool> g_xinputGamepadConnected{ false };
 		void PollGamepad() {
 			EnsureXInputHook();
 
@@ -177,6 +178,7 @@ namespace RadarKeys {
 			BYTE leftTrigger = 0, rightTrigger = 0;
 			SHORT lx = 0, ly = 0, rx = 0, ry = 0;
 			bool anyConnected = false;
+			bool xinputConnected = false;
 
 			for (int m = 0; m < g_xinputModuleCount; ++m) {
 				for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
@@ -186,6 +188,7 @@ namespace RadarKeys {
 						continue;
 					}
 				anyConnected = true;
+				xinputConnected = true;
 				buttons |= s.Gamepad.wButtons;
 				leftTrigger = (std::max)(leftTrigger, s.Gamepad.bLeftTrigger);
 				rightTrigger = (std::max)(rightTrigger, s.Gamepad.bRightTrigger);
@@ -269,10 +272,15 @@ namespace RadarKeys {
 			}
 
 			g_anyGamepadConnected = anyConnected;
+			g_xinputGamepadConnected = xinputConnected;
 		}
 
 		bool IsAnyGamepadConnected() {
 			return g_anyGamepadConnected.load();
+		}
+
+		bool HasXInputGamepad() {
+			return g_xinputGamepadConnected.load();
 		}
 
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
