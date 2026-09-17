@@ -1,5 +1,6 @@
 #include "KeyBindMenu.h"
 #include "RawInput.h"
+#include "DirectInputHook.h"
 #include "LuaBridge.h"
 #include "DebuggerMenu.h"
 #include "LuaKeyState.h"
@@ -326,7 +327,7 @@ namespace RadarKeys {
 		}
 
 		void LogCleanShutdown() {
-			std::lock_guard<std::recursive_mutex> lock(activityLogMutex); // H4
+			std::lock_guard<std::recursive_mutex> lock(activityLogMutex);
 			EnsureActivityLogReady();
 			AppendActivityLogLine("[STATE] CLEAN_EXIT\n");
 			FlushActivityLog();
@@ -402,8 +403,13 @@ namespace RadarKeys {
 			{"LS Down", VK_GAMEPAD_LEFT_THUMBSTICK_DOWN}, {"RS Down", VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN},
 			{"LS Left", VK_GAMEPAD_LEFT_THUMBSTICK_LEFT}, {"RS Left", VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT},
 			{"LS Right", VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT}, {"RS Right", VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT},
-			{"LS Click", VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON}, {"RS Click", VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON}
-			// There's no such thing for Playstation/Switch Keys as far as I can search.
+			{"LS Click", VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON}, {"RS Click", VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON},
+			{"PS Cross", VK_GAMEPAD_A}, {"PS Circle", VK_GAMEPAD_B},
+			{"PS Triangle", VK_GAMEPAD_X}, {"PS Square", VK_GAMEPAD_Y},
+			{"PS L1", VK_GAMEPAD_LEFT_SHOULDER}, {"PS R1", VK_GAMEPAD_RIGHT_SHOULDER},
+			{"PS L2", VK_GAMEPAD_LEFT_TRIGGER}, {"PS R2", VK_GAMEPAD_RIGHT_TRIGGER},
+			{"PS Share", VK_GAMEPAD_VIEW}, {"PS Options", VK_GAMEPAD_MENU},
+			{"PS L3", VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON}, {"PS R3", VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON}
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
@@ -954,9 +960,13 @@ namespace RadarKeys {
 			static bool lastGamepadConnected = false;
 			bool nowGamepadConnected = RawInput::IsAnyGamepadConnected();
 			if (nowGamepadConnected != lastGamepadConnected) {
-				LogActivity(nowGamepadConnected
-					? "Gamepad detected (XInput)"
-					: "Gamepad no longer detected (XInput)", true);
+			LogActivity(nowGamepadConnected
+				? (DirectInputHook::HasPlaystationDevice()
+					? "PlayStation gamepad detected (DirectInput)"
+					: (RawInput::HasXInputGamepad()
+						? "Gamepad detected (XInput)"
+						: "Gamepad detected (DirectInput)"))
+				: "Gamepad no longer detected", true);
 				lastGamepadConnected = nowGamepadConnected;
 			}
 
@@ -1669,9 +1679,14 @@ namespace RadarKeys {
 
 		std::vector<USHORT> ScanCurrentlyHeldKeys() {
 			std::vector<USHORT> held;
+			bool seen[RawInput::kMaxVKey] = {};
 			for (int i = 0; i < vkNameTableCount; i++) {
 				USHORT vk = vkNameTable[i].vKey;
-				if (RawInput::IsKeyHeldReal(vk)) held.push_back(vk);
+				if (vk >= RawInput::kMaxVKey || seen[vk]) continue;
+				if (RawInput::IsKeyHeldReal(vk)) {
+					seen[vk] = true;
+					held.push_back(vk);
+				}
 			}
 			return held;
 		}
@@ -2926,11 +2941,11 @@ namespace RadarKeys {
 							capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 							capturedHasFuncOff = !bindings[i].functionOff.empty();
 
-							CopyPrefillTruncWarn(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), bindings[i].scriptPathOn, "script path (on)"); // L8
-							CopyPrefillTruncWarn(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), bindings[i].scriptPathOff, "script path (off)"); // L8
-							CopyPrefillTruncWarn(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), bindings[i].functionOn, "function (on)"); // L8
-							CopyPrefillTruncWarn(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), bindings[i].functionOff, "function (off)"); // L8
-							CopyPrefillTruncWarn(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), bindings[i].functionTap, "function (tap)"); // L8
+							CopyPrefillTruncWarn(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), bindings[i].scriptPathOn, "script path (on)");
+							CopyPrefillTruncWarn(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), bindings[i].scriptPathOff, "script path (off)");
+							CopyPrefillTruncWarn(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), bindings[i].functionOn, "function (on)");
+							CopyPrefillTruncWarn(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), bindings[i].functionOff, "function (off)");
+							CopyPrefillTruncWarn(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), bindings[i].functionTap, "function (tap)");
 
 							if (bindings[i].isToggle) {
 								capturedToggleType = (bindings[i].scriptPathOn == bindings[i].scriptPathOff) ? 0 : 1;
@@ -2938,7 +2953,7 @@ namespace RadarKeys {
 								capturedToggleType = 0;
 							}
 
-							isAssigningMenuToggleKey = false; isAssigningModKey = false; showCapturePrompt = true; // M14: exactly one mode
+							isAssigningMenuToggleKey = false; isAssigningModKey = false; showCapturePrompt = true;
 							requestCaptureFocus = true;
 							LogActivity("Key Assignment Edit Prompt opened " + itemLabel);
 						}
