@@ -12,6 +12,8 @@ namespace RadarKeys {
 			HELD
 		};
 
+		constexpr USHORT kMaxVKey = 0x180;
+
 		bool IsKeyHeldReal(USHORT vKey);
 		bool ProcessMouseButtons(PRAWINPUT pRaw);
 		typedef std::function<void(BUTTONEVENT buttonEvent)> ButtonAction;
@@ -28,6 +30,7 @@ namespace RadarKeys {
 		void UnBlockKeyboard();
 		void PollGamepad();
 		bool IsAnyGamepadConnected();
+		bool HasXInputGamepad();
 		const std::vector<USHORT>& GamepadVKeys();
 		void SetGamepadBlockedToGame(bool blocked);
 		bool IsGamepadBlockedToGame();
