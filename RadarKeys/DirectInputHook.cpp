@@ -25,6 +25,7 @@ namespace RadarKeys {
 		typedef HRESULT(STDMETHODCALLTYPE* Acquire_t)(IDirectInputDevice8*);
 		typedef HRESULT(STDMETHODCALLTYPE* GetDeviceState_t)(IDirectInputDevice8*, DWORD, LPVOID);
 		typedef HRESULT(STDMETHODCALLTYPE* GetDeviceData_t)(IDirectInputDevice8*, DWORD, DIDEVICEOBJECTDATA*, LPDWORD, DWORD);
+		typedef HRESULT(STDMETHODCALLTYPE* GetDeviceInfo_t)(IDirectInputDevice8*, LPDI_DEVICEINFO);
 
 		static GetCapabilities_t g_origGetCapabilities = nullptr;
 		static GetProperty_t g_origGetProperty = nullptr;
@@ -45,6 +46,7 @@ namespace RadarKeys {
 		static constexpr size_t kSlotAcquire = 7;
 		static constexpr size_t kSlotGetDeviceState = 9;
 		static constexpr size_t kSlotGetDeviceData = 10;
+		static constexpr size_t kSlotGetDeviceInfo = 11;
 
 		enum class DeviceKind { Unknown, Keyboard, Mouse, Joystick };
 
@@ -59,6 +61,8 @@ namespace RadarKeys {
 			bool hasRealState = false;
 			bool rangeQueried = false;
 			AxisRange observed[32];
+			bool isPlaystation = false;
+			bool productQueried = false;
 		};
 
 		static std::mutex g_mutex;
@@ -79,15 +83,12 @@ namespace RadarKeys {
 		{ 0x6F1D2B82, 0xD5A0, 0x11CF, { 0xBF, 0xC7, 0x44, 0x45, 0x53, 0x54 } };
 		static const GUID kGuidSysKeyboardEm2 =
 		{ 0x6F1D2B83, 0xD5A0, 0x11CF, { 0xBF, 0xC7, 0x44, 0x45, 0x53, 0x54 } };
-		static bool IsDipropRangeGuid(REFGUID rguidProp) {
-			return reinterpret_cast<uintptr_t>(&rguidProp) == 4;
-		}
-		static const GUID* DipropRangeAsGuid() {
-			return reinterpret_cast<const GUID*>(4);
-		}
-
 		static bool SameGuid(REFGUID a, REFGUID b) {
 			return std::memcmp(&a, &b, sizeof(GUID)) == 0;
+		}
+
+		static bool IsDipropRangeGuid(REFGUID rguidProp) {
+			return SameGuid(rguidProp, DIPROP_RANGE);
 		}
 
 		static bool OverrideObjectVTable(void* object, size_t vtableSize,
@@ -158,10 +159,67 @@ namespace RadarKeys {
 			}
 		}
 
+		static void ClassifyPlaystation(IDirectInputDevice8* self) {
+			std::lock_guard<std::mutex> lock(g_mutex);
+			auto it = g_deviceInfo.find(self);
+			if (it == g_deviceInfo.end() || it->second.productQueried) {
+				return;
+			}
+
+			void** vtbl = *reinterpret_cast<void***>(self);
+			auto origGetDeviceInfo = reinterpret_cast<GetDeviceInfo_t>(vtbl[kSlotGetDeviceInfo]);
+			if (!origGetDeviceInfo) {
+				it->second.productQueried = true;
+				return;
+			}
+
+			DI_DEVICEINFO diInfo{};
+			diInfo.dwSize = sizeof(DI_DEVICEINFO);
+			if (FAILED(origGetDeviceInfo(self, &diInfo))) {
+				return;
+			}
+			it->second.productQueried = true;
+
+			auto toNarrow = [](const wchar_t* w) -> std::string {
+				std::string s;
+				while (*w) {
+					s.push_back(static_cast<char>(*w));
+					++w;
+				}
+				return s;
+			};
+
+			auto toUpperAscii = [](wchar_t c) -> wchar_t {
+				return (c >= L'a' && c <= L'z') ? static_cast<wchar_t>(c - (L'a' - L'A')) : c;
+			};
+			wchar_t upperProduct[MAX_PATH] = L"";
+			for (size_t i = 0; i < MAX_PATH - 1 && diInfo.szProductName[i] != L'\0'; ++i) {
+				upperProduct[i] = toUpperAscii(diInfo.szProductName[i]);
+			}
+			wchar_t upperInstance[MAX_PATH] = L"";
+			for (size_t i = 0; i < MAX_PATH - 1 && diInfo.szInstanceName[i] != L'\0'; ++i) {
+				upperInstance[i] = toUpperAscii(diInfo.szInstanceName[i]);
+			}
+
+			const bool nameMatch =
+				wcsstr(upperProduct, L"DUALSHOCK") != nullptr ||
+				wcsstr(upperProduct, L"DUALSENSE") != nullptr ||
+				wcsstr(upperProduct, L"PLAYSTATION") != nullptr;
+			const bool vidMatch =
+				wcsstr(upperInstance, L"VID_054C") != nullptr &&
+				wcsstr(upperProduct, L"CONTROLLER") != nullptr;
+
+			it->second.isPlaystation = nameMatch || vidMatch;
+			spdlog::info("DirectInputHook: device {:p} PlayStation button mapping {} (product:\"{}\", instance:\"{}\")",
+				static_cast<void*>(self), it->second.isPlaystation ? "ENABLED" : "disabled",
+				toNarrow(diInfo.szProductName), toNarrow(diInfo.szInstanceName));
+		}
+
 		static HRESULT STDMETHODCALLTYPE Hooked_Acquire(IDirectInputDevice8* self) {
 			HRESULT hr = g_origAcquire(self);
 			if (SUCCEEDED(hr)) {
 				ClassifyFromCapabilities(self);
+				ClassifyPlaystation(self);
 			}
 			return hr;
 		}
@@ -285,7 +343,7 @@ namespace RadarKeys {
 					queried.diph.dwHeaderSize = sizeof(DIPROPHEADER);
 					queried.diph.dwObj = 0;
 					queried.diph.dwHow = DIPH_DEVICE;
-					if (SUCCEEDED(g_origGetProperty(self, *DipropRangeAsGuid(), &queried.diph))) {
+					if (SUCCEEDED(g_origGetProperty(self, DIPROP_RANGE, &queried.diph))) {
 						std::lock_guard<std::mutex> lock(g_mutex);
 						auto it = g_deviceInfo.find(self);
 						if (it != g_deviceInfo.end()) {
@@ -531,6 +589,36 @@ namespace RadarKeys {
 			}
 			const DIJOYSTATE* js = reinterpret_cast<const DIJOYSTATE*>(info.realState);
 
+			if (info.isPlaystation) {
+				switch (vKey) {
+				case VK_GAMEPAD_A:                       return ButtonHeld(js, 0);
+				case VK_GAMEPAD_B:                       return ButtonHeld(js, 1);
+				case VK_GAMEPAD_X:                       return ButtonHeld(js, 2);
+				case VK_GAMEPAD_Y:                       return ButtonHeld(js, 3);
+				case VK_GAMEPAD_LEFT_SHOULDER:           return ButtonHeld(js, 4);
+				case VK_GAMEPAD_RIGHT_SHOULDER:          return ButtonHeld(js, 5);
+				case VK_GAMEPAD_LEFT_TRIGGER:            return ButtonHeld(js, 6);
+				case VK_GAMEPAD_RIGHT_TRIGGER:           return ButtonHeld(js, 7);
+				case VK_GAMEPAD_VIEW:                    return ButtonHeld(js, 8);
+				case VK_GAMEPAD_MENU:                    return ButtonHeld(js, 9);
+				case VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON:  return ButtonHeld(js, 10);
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON: return ButtonHeld(js, 11);
+				case VK_GAMEPAD_DPAD_UP:                 return ButtonHeld(js, 16);
+				case VK_GAMEPAD_DPAD_DOWN:               return ButtonHeld(js, 17);
+				case VK_GAMEPAD_DPAD_LEFT:               return ButtonHeld(js, 18);
+				case VK_GAMEPAD_DPAD_RIGHT:              return ButtonHeld(js, 19);
+				case VK_GAMEPAD_LEFT_THUMBSTICK_UP:      return AxisPast(info, js, 1, DIJOFS_Y, -1);
+				case VK_GAMEPAD_LEFT_THUMBSTICK_DOWN:    return AxisPast(info, js, 1, DIJOFS_Y, +1);
+				case VK_GAMEPAD_LEFT_THUMBSTICK_LEFT:    return AxisPast(info, js, 0, DIJOFS_X, -1);
+				case VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT:   return AxisPast(info, js, 0, DIJOFS_X, +1);
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_UP:     return AxisPast(info, js, 4, DIJOFS_RY, -1);
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN:   return AxisPast(info, js, 4, DIJOFS_RY, +1);
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT:   return AxisPast(info, js, 3, DIJOFS_RX, -1);
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT:  return AxisPast(info, js, 3, DIJOFS_RX, +1);
+				default: return false;
+				}
+			}
+
 			switch (vKey) {
 			case VK_GAMEPAD_A:                       return ButtonHeld(js, 0);
 			case VK_GAMEPAD_B:                       return ButtonHeld(js, 1);
@@ -574,6 +662,16 @@ namespace RadarKeys {
 			std::lock_guard<std::mutex> lock(g_mutex);
 			for (const auto& entry : g_deviceInfo) {
 				if (entry.second.kind == DeviceKind::Joystick) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		bool HasPlaystationDevice() {
+			std::lock_guard<std::mutex> lock(g_mutex);
+			for (const auto& entry : g_deviceInfo) {
+				if (entry.second.kind == DeviceKind::Joystick && entry.second.isPlaystation) {
 					return true;
 				}
 			}
