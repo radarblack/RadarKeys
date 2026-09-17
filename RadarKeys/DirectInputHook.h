@@ -6,5 +6,6 @@ namespace RadarKeys {
 		void Install();
 		bool IsGamepadButtonHeld(USHORT vKey);
 		bool HasJoystickDevice();
+		bool HasPlaystationDevice();
 	}
 }
