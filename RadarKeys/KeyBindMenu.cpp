@@ -391,9 +391,11 @@ namespace RadarKeys {
 			{"Mouse Wheel", VK_MBUTTON},
 			{"Mouse 4", VK_XBUTTON1},
 			{"Mouse 5", VK_XBUTTON2},
-			{"Right Click", VK_RBUTTON},
+			{"Right Click", VK_RBUTTON}
+		};
+		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
-			// XBox Controls
+		const VkNameEntry xboxVkNameTable[] = {
 			{"Gamepad A", VK_GAMEPAD_A}, {"Gamepad B", VK_GAMEPAD_B},
 			{"Gamepad X", VK_GAMEPAD_X}, {"Gamepad Y", VK_GAMEPAD_Y},
 			{"Gamepad LB", VK_GAMEPAD_LEFT_SHOULDER}, {"Gamepad RB", VK_GAMEPAD_RIGHT_SHOULDER},
@@ -405,41 +407,59 @@ namespace RadarKeys {
 			{"LS Down", VK_GAMEPAD_LEFT_THUMBSTICK_DOWN}, {"RS Down", VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN},
 			{"LS Left", VK_GAMEPAD_LEFT_THUMBSTICK_LEFT}, {"RS Left", VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT},
 			{"LS Right", VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT}, {"RS Right", VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT},
-			{"LS Click", VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON}, {"RS Click", VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON},
+			{"LS Click", VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON}, {"RS Click", VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON}
+		};
+		const int xboxVkNameTableCount = sizeof(xboxVkNameTable) / sizeof(xboxVkNameTable[0]);
+
+		const VkNameEntry psVkNameTable[] = {
 			{"PS Cross", VK_GAMEPAD_A}, {"PS Circle", VK_GAMEPAD_B},
-			{"PS Triangle", VK_GAMEPAD_Y}, {"PS Square", VK_GAMEPAD_X},
+			{"PS Square", VK_GAMEPAD_X}, {"PS Triangle", VK_GAMEPAD_Y},
 			{"PS L1", VK_GAMEPAD_LEFT_SHOULDER}, {"PS R1", VK_GAMEPAD_RIGHT_SHOULDER},
 			{"PS L2", VK_GAMEPAD_LEFT_TRIGGER}, {"PS R2", VK_GAMEPAD_RIGHT_TRIGGER},
 			{"PS Share", VK_GAMEPAD_VIEW}, {"PS Options", VK_GAMEPAD_MENU},
+			{"PS D-Pad Up", VK_GAMEPAD_DPAD_UP}, {"PS D-Pad Down", VK_GAMEPAD_DPAD_DOWN},
+			{"PS D-Pad Left", VK_GAMEPAD_DPAD_LEFT}, {"PS D-Pad Right", VK_GAMEPAD_DPAD_RIGHT},
+			{"PS LS Up", VK_GAMEPAD_LEFT_THUMBSTICK_UP}, {"PS RS Up", VK_GAMEPAD_RIGHT_THUMBSTICK_UP},
+			{"PS LS Down", VK_GAMEPAD_LEFT_THUMBSTICK_DOWN}, {"PS RS Down", VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN},
+			{"PS LS Left", VK_GAMEPAD_LEFT_THUMBSTICK_LEFT}, {"PS RS Left", VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT},
+			{"PS LS Right", VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT}, {"PS RS Right", VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT},
 			{"PS L3", VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON}, {"PS R3", VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON}
 		};
-		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
+		const int psVkNameTableCount = sizeof(psVkNameTable) / sizeof(psVkNameTable[0]);
 
 		static bool IsGamepadVKeyValue(USHORT vKey) {
 			return vKey >= VK_GAMEPAD_A && vKey <= VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT;
 		}
 
 		std::string NameForVKey(USHORT vKey) {
-			const bool isGamepad = IsGamepadVKeyValue(vKey);
-			const bool preferPlaystation = isGamepad && DirectInputHook::HasPlaystationDevice();
-			std::string fallback;
-			bool haveFallback = false;
-			for (const auto& entry : vkNameTable) {
-				if (entry.vKey != vKey) continue;
-				if (!isGamepad) return entry.name;
-				const bool isPlaystationName = std::strncmp(entry.name, "PS ", 3) == 0;
-				if (isPlaystationName == preferPlaystation) return entry.name;
-				if (!haveFallback) {
-					fallback = entry.name;
-					haveFallback = true;
+			if (IsGamepadVKeyValue(vKey)) {
+				const bool preferPlaystation = DirectInputHook::HasPlaystationDevice();
+				const VkNameEntry* firstTable = preferPlaystation ? psVkNameTable : xboxVkNameTable;
+				const int firstCount = preferPlaystation ? psVkNameTableCount : xboxVkNameTableCount;
+				const VkNameEntry* secondTable = preferPlaystation ? xboxVkNameTable : psVkNameTable;
+				const int secondCount = preferPlaystation ? xboxVkNameTableCount : psVkNameTableCount;
+				for (int i = 0; i < firstCount; i++) {
+					if (firstTable[i].vKey == vKey) return firstTable[i].name;
 				}
+				for (int i = 0; i < secondCount; i++) {
+					if (secondTable[i].vKey == vKey) return secondTable[i].name;
+				}
+				return "Unknown(" + std::to_string(vKey) + ")";
 			}
-			if (haveFallback) return fallback;
+			for (const auto& entry : vkNameTable) {
+				if (entry.vKey == vKey) return entry.name;
+			}
 			return "Unknown(" + std::to_string(vKey) + ")";
 		}
 
 		int VKeyForName(const std::string& name) {
 			for (const auto& entry : vkNameTable) {
+				if (name == entry.name) return entry.vKey;
+			}
+			for (const auto& entry : xboxVkNameTable) {
+				if (name == entry.name) return entry.vKey;
+			}
+			for (const auto& entry : psVkNameTable) {
 				if (name == entry.name) return entry.vKey;
 			}
 			return -1;
@@ -513,7 +533,14 @@ namespace RadarKeys {
 				}
 				return result;
 			}
-			std::string result = std::string(bind.needCtrl ? "Ctrl+" : "") + (bind.needShift ? "Shift+" : "") + (bind.needAlt ? "Alt+" : "") + bind.keyName;
+			std::string liveName = bind.keyName;
+			if (bind.vKey != 0) {
+				std::string resolved = NameForVKey(bind.vKey);
+				if (resolved.compare(0, 8, "Unknown(") != 0) {
+					liveName = resolved;
+				}
+			}
+			std::string result = std::string(bind.needCtrl ? "Ctrl+" : "") + (bind.needShift ? "Shift+" : "") + (bind.needAlt ? "Alt+" : "") + liveName;
 			if (bind.holdSeconds > 0.0f) {
 				char buf[32];
 				snprintf(buf, sizeof(buf), " (hold %.1fs)", bind.holdSeconds);
@@ -1711,6 +1738,23 @@ namespace RadarKeys {
 				if (RawInput::IsKeyHeldReal(vk)) {
 					seen[vk] = true;
 					held.push_back(vk);
+				}
+			}
+			const bool preferPlaystation = DirectInputHook::HasPlaystationDevice();
+			const VkNameEntry* firstTable = preferPlaystation ? psVkNameTable : xboxVkNameTable;
+			const int firstCount = preferPlaystation ? psVkNameTableCount : xboxVkNameTableCount;
+			const VkNameEntry* secondTable = preferPlaystation ? xboxVkNameTable : psVkNameTable;
+			const int secondCount = preferPlaystation ? xboxVkNameTableCount : psVkNameTableCount;
+			for (int pass = 0; pass < 2; pass++) {
+				const VkNameEntry* table = (pass == 0) ? firstTable : secondTable;
+				const int count = (pass == 0) ? firstCount : secondCount;
+				for (int i = 0; i < count; i++) {
+					USHORT vk = table[i].vKey;
+					if (vk >= RawInput::kMaxVKey || seen[vk]) continue;
+					if (RawInput::IsKeyHeldReal(vk)) {
+						seen[vk] = true;
+						held.push_back(vk);
+					}
 				}
 			}
 			return held;
