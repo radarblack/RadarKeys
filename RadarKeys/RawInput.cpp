@@ -183,6 +183,7 @@ namespace RadarKeys {
 
 		std::atomic<bool> g_anyGamepadConnected{ false };
 		std::atomic<bool> g_xinputGamepadConnected{ false };
+		std::atomic<bool> g_psBridgeActive{ false };
 		void PollGamepad() {
 			EnsureXInputHook();
 
@@ -192,7 +193,8 @@ namespace RadarKeys {
 			bool anyConnected = false;
 			bool xinputConnected = false;
 
-			for (int m = 0; m < g_xinputModuleCount; ++m) {
+			const bool bridgeActive = g_psBridgeActive.load(std::memory_order_relaxed);
+			for (int m = 0; !bridgeActive && m < g_xinputModuleCount; ++m) {
 				for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
 					XINPUT_STATE s{};
 					XInputGetStateFunc orig = g_origXInputGetState[m];
@@ -289,8 +291,85 @@ namespace RadarKeys {
 
 		void PollPlaystation() {
 			DirectInputHook::Poll(nullptr);
+
+			WORD buttons = 0;
+			BYTE leftTrigger = 0, rightTrigger = 0;
+			SHORT lx = 0, ly = 0, rx = 0, ry = 0;
+			int connectedSlots = 0;
+			bool slotSeen[XUSER_MAX_COUNT] = {};
+
+			EnsureXInputHook();
+			for (int m = 0; m < g_xinputModuleCount; ++m) {
+				for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
+					XINPUT_STATE s{};
+					XInputGetStateFunc orig = g_origXInputGetState[m];
+					if (!orig || orig(i, &s) != ERROR_SUCCESS) {
+						continue;
+					}
+					if (!slotSeen[i]) {
+						slotSeen[i] = true;
+						++connectedSlots;
+					}
+					buttons |= s.Gamepad.wButtons;
+					leftTrigger = (std::max)(leftTrigger, s.Gamepad.bLeftTrigger);
+					rightTrigger = (std::max)(rightTrigger, s.Gamepad.bRightTrigger);
+					if (abs((int)s.Gamepad.sThumbLX) > abs((int)lx)) lx = s.Gamepad.sThumbLX;
+					if (abs((int)s.Gamepad.sThumbLY) > abs((int)ly)) ly = s.Gamepad.sThumbLY;
+					if (abs((int)s.Gamepad.sThumbRX) > abs((int)rx)) rx = s.Gamepad.sThumbRX;
+					if (abs((int)s.Gamepad.sThumbRY) > abs((int)ry)) ry = s.Gamepad.sThumbRY;
+				}
+			}
+
+			static bool bridgeActive = false;
+			static ULONGLONG lastBridgeCheck = 0;
+			ULONGLONG bridgeNow = GetTickCount64();
+			if (bridgeNow - lastBridgeCheck >= 2000) {
+				lastBridgeCheck = bridgeNow;
+				bool wantBridge = connectedSlots == 1 &&
+					!DirectInputHook::HasPlaystationDevice() &&
+					DirectInputHook::IsSonyGamepadAttachedToSystem();
+				if (wantBridge != bridgeActive) {
+					bridgeActive = wantBridge;
+					g_psBridgeActive.store(bridgeActive, std::memory_order_relaxed);
+					spdlog::info("RawInput: PlayStation XInput bridge {} (xinputSlots={}, directInputPlaystationDevice={}, sonyGamepadInSystem={})",
+						bridgeActive ? "ENGAGED" : "released", connectedSlots,
+						DirectInputHook::HasPlaystationDevice(),
+						DirectInputHook::IsSonyGamepadAttachedToSystem());
+				}
+			}
+
+			auto bridgeHeld = [&](USHORT psKey) -> bool {
+				switch (psKey) {
+				case VK_PS_CROSS:      return (buttons & XINPUT_GAMEPAD_A) != 0;
+				case VK_PS_CIRCLE:     return (buttons & XINPUT_GAMEPAD_B) != 0;
+				case VK_PS_SQUARE:     return (buttons & XINPUT_GAMEPAD_X) != 0;
+				case VK_PS_TRIANGLE:   return (buttons & XINPUT_GAMEPAD_Y) != 0;
+				case VK_PS_L1:         return (buttons & XINPUT_GAMEPAD_LEFT_SHOULDER) != 0;
+				case VK_PS_R1:         return (buttons & XINPUT_GAMEPAD_RIGHT_SHOULDER) != 0;
+				case VK_PS_L2:         return leftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+				case VK_PS_R2:         return rightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+				case VK_PS_SHARE:      return (buttons & XINPUT_GAMEPAD_BACK) != 0;
+				case VK_PS_OPTIONS:    return (buttons & XINPUT_GAMEPAD_START) != 0;
+				case VK_PS_L3:         return (buttons & XINPUT_GAMEPAD_LEFT_THUMB) != 0;
+				case VK_PS_R3:         return (buttons & XINPUT_GAMEPAD_RIGHT_THUMB) != 0;
+				case VK_PS_DPAD_UP:    return (buttons & XINPUT_GAMEPAD_DPAD_UP) != 0;
+				case VK_PS_DPAD_DOWN:  return (buttons & XINPUT_GAMEPAD_DPAD_DOWN) != 0;
+				case VK_PS_DPAD_LEFT:  return (buttons & XINPUT_GAMEPAD_DPAD_LEFT) != 0;
+				case VK_PS_DPAD_RIGHT: return (buttons & XINPUT_GAMEPAD_DPAD_RIGHT) != 0;
+				case VK_PS_LS_UP:      return ly > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+				case VK_PS_LS_DOWN:    return ly < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+				case VK_PS_LS_LEFT:    return lx < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+				case VK_PS_LS_RIGHT:   return lx > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+				case VK_PS_RS_UP:      return ry > XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE;
+				case VK_PS_RS_DOWN:    return ry < -XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE;
+				case VK_PS_RS_LEFT:    return rx < -XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE;
+				case VK_PS_RS_RIGHT:   return rx > XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE;
+				default:               return false;
+				}
+			};
+
 			for (USHORT psKey : PlaystationVKeys()) {
-				bool isDown = DirectInputHook::IsPlaystationControlHeld(psKey);
+				bool isDown = bridgeActive ? bridgeHeld(psKey) : DirectInputHook::IsPlaystationControlHeld(psKey);
 				bool wasDown = realStateHeld[psKey];
 				if (isDown == wasDown) {
 					continue;
