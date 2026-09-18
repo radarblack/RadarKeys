@@ -4,6 +4,7 @@
 #include <MinHook.h>
 #include "spdlog/spdlog.h"
 
+#define DI8SDK
 #include <dinput.h>
 #include <cstring>
 #include <cstdint>
