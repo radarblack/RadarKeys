@@ -1,8 +1,10 @@
 #include "DirectInputHook.h"
 #include "windowsapi.h"
 #include "RawInput.h"
+#include "HookUtils.h"
 #include <MinHook.h>
 #include "spdlog/spdlog.h"
+#include <filesystem>
 
 #define DI8SDK
 #define INITGUID
@@ -40,7 +42,7 @@ namespace RadarKeys {
 		static GetDeviceState_t g_origGetDeviceState = nullptr;
 		static GetDeviceData_t g_origGetDeviceData = nullptr;
 
-		static constexpr size_t kDirectInput8VTableSize = 11;
+		static constexpr size_t kDirectInput8VTableSize = 9;
 		static constexpr size_t kDeviceVTableSize = 32;
 		static constexpr size_t kSlotGetCapabilities = 3;
 		static constexpr size_t kSlotRelease = 2;
@@ -179,10 +181,32 @@ namespace RadarKeys {
 
 			DIDEVICEINSTANCE diInfo{};
 			diInfo.dwSize = sizeof(DIDEVICEINSTANCE);
-			if (FAILED(origGetDeviceInfo(self, &diInfo))) {
-				return;
+			bool infoIsWide = SUCCEEDED(origGetDeviceInfo(self, &diInfo));
+			DIDEVICEINSTANCEA diInfoA{};
+			if (!infoIsWide) {
+				diInfoA.dwSize = sizeof(DIDEVICEINSTANCEA);
+				if (FAILED(origGetDeviceInfo(self, reinterpret_cast<LPDIDEVICEINSTANCE>(&diInfoA)))) {
+					return;
+				}
 			}
 			it->second.productQueried = true;
+
+			GUID productGuid{};
+			wchar_t productName[MAX_PATH] = L"";
+			wchar_t instanceName[MAX_PATH] = L"";
+			if (infoIsWide) {
+				productGuid = diInfo.guidProduct;
+				std::memcpy(productName, diInfo.tszProductName, sizeof(productName) - sizeof(wchar_t));
+				std::memcpy(instanceName, diInfo.tszInstanceName, sizeof(instanceName) - sizeof(wchar_t));
+			} else {
+				productGuid = diInfoA.guidProduct;
+				for (size_t i = 0; i < MAX_PATH - 1 && diInfoA.tszProductName[i] != '\0'; ++i) {
+					productName[i] = static_cast<wchar_t>(static_cast<unsigned char>(diInfoA.tszProductName[i]));
+				}
+				for (size_t i = 0; i < MAX_PATH - 1 && diInfoA.tszInstanceName[i] != '\0'; ++i) {
+					instanceName[i] = static_cast<wchar_t>(static_cast<unsigned char>(diInfoA.tszInstanceName[i]));
+				}
+			}
 
 			auto toNarrow = [](const wchar_t* w) -> std::string {
 				std::string s;
@@ -197,26 +221,26 @@ namespace RadarKeys {
 				return (c >= L'a' && c <= L'z') ? static_cast<wchar_t>(c - (L'a' - L'A')) : c;
 			};
 			wchar_t upperProduct[MAX_PATH] = L"";
-			for (size_t i = 0; i < MAX_PATH - 1 && diInfo.tszProductName[i] != L'\0'; ++i) {
-				upperProduct[i] = toUpperAscii(diInfo.tszProductName[i]);
+			for (size_t i = 0; i < MAX_PATH - 1 && productName[i] != L'\0'; ++i) {
+				upperProduct[i] = toUpperAscii(productName[i]);
 			}
 			wchar_t upperInstance[MAX_PATH] = L"";
-			for (size_t i = 0; i < MAX_PATH - 1 && diInfo.tszInstanceName[i] != L'\0'; ++i) {
-				upperInstance[i] = toUpperAscii(diInfo.tszInstanceName[i]);
+			for (size_t i = 0; i < MAX_PATH - 1 && instanceName[i] != L'\0'; ++i) {
+				upperInstance[i] = toUpperAscii(instanceName[i]);
 			}
 
 			const bool nameMatch =
 				wcsstr(upperProduct, L"DUALSHOCK") != nullptr ||
 				wcsstr(upperProduct, L"DUALSENSE") != nullptr ||
 				wcsstr(upperProduct, L"PLAYSTATION") != nullptr;
-			const WORD vendorId = static_cast<WORD>(diInfo.guidProduct.Data1 & 0xFFFF);
-			const WORD productId = static_cast<WORD>((diInfo.guidProduct.Data1 >> 16) & 0xFFFF);
+			const WORD vendorId = static_cast<WORD>(productGuid.Data1 & 0xFFFF);
+			const WORD productId = static_cast<WORD>((productGuid.Data1 >> 16) & 0xFFFF);
 			const bool vidMatch = (vendorId == 0x054C);
 
 			it->second.isPlaystation = nameMatch || vidMatch;
 			spdlog::info("DirectInputHook: device {:p} PlayStation button mapping {} (product:\"{}\", instance:\"{}\", vid:{:04X}, pid:{:04X})",
 				static_cast<void*>(self), it->second.isPlaystation ? "ENABLED" : "disabled",
-				toNarrow(diInfo.tszProductName), toNarrow(diInfo.tszInstanceName), vendorId, productId);
+				toNarrow(productName), toNarrow(instanceName), vendorId, productId);
 		}
 
 		static HRESULT STDMETHODCALLTYPE Hooked_Acquire(IDirectInputDevice8* self) {
@@ -224,6 +248,7 @@ namespace RadarKeys {
 			if (SUCCEEDED(hr)) {
 				ClassifyFromCapabilities(self);
 				ClassifyPlaystation(self);
+				spdlog::default_logger()->flush();
 			}
 			return hr;
 		}
@@ -275,19 +300,28 @@ namespace RadarKeys {
 			return 0;
 		}
 
+		static bool IsStickAxisOffset(DWORD offsetBytes, bool isPlaystation) {
+			if (offsetBytes == DIJOFS_X || offsetBytes == DIJOFS_Y) {
+				return true;
+			}
+			if (offsetBytes == DIJOFS_Z || offsetBytes == DIJOFS_RZ) {
+				return isPlaystation;
+			}
+			if (offsetBytes == DIJOFS_RX || offsetBytes == DIJOFS_RY) {
+				return !isPlaystation;
+			}
+			return false;
+		}
+
 		static void NeutralizeJoystick(LPVOID data, DWORD cbData, const DeviceInfo& info) {
 			std::memset(data, 0, cbData);
 
 			if (cbData >= offsetof(DIJOYSTATE, rgbButtons)) {
 				LONG* axes = static_cast<LONG*>(data);
-				axes[0] = AxisNeutral(info, DIJOFS_X, true);
-				axes[1] = AxisNeutral(info, DIJOFS_Y, true);
-				axes[2] = AxisNeutral(info, DIJOFS_Z, false);
-				axes[3] = AxisNeutral(info, DIJOFS_RX, true);
-				axes[4] = AxisNeutral(info, DIJOFS_RY, true);
-				axes[5] = AxisNeutral(info, DIJOFS_RZ, false);
-				axes[6] = AxisNeutral(info, DIJOFS_SLIDER(0), false);
-				axes[7] = AxisNeutral(info, DIJOFS_SLIDER(1), false);
+				for (size_t axisIndex = 0; axisIndex < 8; ++axisIndex) {
+					DWORD offsetBytes = static_cast<DWORD>(axisIndex * sizeof(LONG));
+					axes[axisIndex] = AxisNeutral(info, offsetBytes, IsStickAxisOffset(offsetBytes, info.isPlaystation));
+				}
 
 				DWORD* pov = reinterpret_cast<DWORD*>(static_cast<unsigned char*>(data) + 32);
 				for (int i = 0; i < 4; ++i) {
@@ -415,15 +449,32 @@ namespace RadarKeys {
 			}
 
 			const DWORD povOffsets[] = { DIJOFS_POV(0), DIJOFS_POV(1), DIJOFS_POV(2), DIJOFS_POV(3) };
+			DeviceInfo info;
+			if (kind == DeviceKind::Joystick) {
+				std::lock_guard<std::mutex> lock(g_mutex);
+				auto it = g_deviceInfo.find(self);
+				if (it != g_deviceInfo.end()) {
+					info = it->second;
+				}
+			}
 			for (DWORD i = 0; i < *pdwInOut; ++i) {
 			    bool isPov = false;
 			    for (DWORD pov : povOffsets) {
 			        if (rgdod[i].dwOfs == pov) { isPov = true; break; }
 			    }
-			    if (!isPov && rgdod[i].dwData == 0) {
+			    if (isPov) {
+			        rgdod[i].dwData = 0xFFFFFFFFu;
 			        continue;
 			    }
-			    rgdod[i].dwData = isPov ? 0xFFFFFFFFu : 0;
+			    if (kind == DeviceKind::Joystick && rgdod[i].dwOfs < 32 && (rgdod[i].dwOfs % 4) == 0) {
+			        LONG neutral = AxisNeutral(info, rgdod[i].dwOfs, IsStickAxisOffset(rgdod[i].dwOfs, info.isPlaystation));
+			        rgdod[i].dwData = static_cast<DWORD>(neutral);
+			        continue;
+			    }
+			    if (rgdod[i].dwData == 0) {
+			        continue;
+			    }
+			    rgdod[i].dwData = 0;
 			}								
 			return hr;
 		}
@@ -496,13 +547,31 @@ namespace RadarKeys {
 
 			spdlog::debug("DirectInputHook: wrapped device {:p} initial kind:{} ({})",
 				static_cast<void*>(device), static_cast<int>(kind), installed ? "vtable wrapped" : "already wrapped");
+			spdlog::default_logger()->flush();
 			return hr;
+		}
+
+		static bool PassiveWrapEnabled() {
+			static const bool enabled = [] {
+				std::error_code ec;
+				bool found = std::filesystem::exists(
+					std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "di_vtable_wrap.txt", ec);
+				return found && !ec;
+			}();
+			return enabled;
 		}
 
 		static HRESULT WINAPI Hooked_DirectInput8Create(HINSTANCE hinst, DWORD dwVersion,
 			REFGUID riidltf, LPVOID* ppvOut, LPUNKNOWN punkOuter) {
 			HRESULT hr = g_origDirectInput8Create(hinst, dwVersion, riidltf, ppvOut, punkOuter);
+			spdlog::info("DirectInputHook: DirectInput8Create called (dwVersion={:08X}, riid={:08X}, hr={:08X}, wrapping={})",
+				dwVersion, riidltf.Data1, static_cast<unsigned>(hr),
+				(SUCCEEDED(hr) && PassiveWrapEnabled()) ? "on" : "off");
+			spdlog::default_logger()->flush();
 			if (FAILED(hr) || !ppvOut || !*ppvOut) {
+				return hr;
+			}
+			if (!PassiveWrapEnabled()) {
 				return hr;
 			}
 
@@ -522,6 +591,7 @@ namespace RadarKeys {
 				kDirectInputOverrides, sizeof(kDirectInputOverrides) / sizeof(kDirectInputOverrides[0]));
 
 			spdlog::debug("DirectInputHook: wrapped IDirectInput8 instance {:p}", static_cast<void*>(directInput));
+			spdlog::default_logger()->flush();
 			return hr;
 		}
 
@@ -595,9 +665,9 @@ namespace RadarKeys {
 
 			if (info.isPlaystation) {
 				switch (vKey) {
-				case VK_GAMEPAD_A:                       return ButtonHeld(js, 0);
-				case VK_GAMEPAD_B:                       return ButtonHeld(js, 1);
-				case VK_GAMEPAD_X:                       return ButtonHeld(js, 2);
+				case VK_GAMEPAD_X:                       return ButtonHeld(js, 0);
+				case VK_GAMEPAD_A:                       return ButtonHeld(js, 1);
+				case VK_GAMEPAD_B:                       return ButtonHeld(js, 2);
 				case VK_GAMEPAD_Y:                       return ButtonHeld(js, 3);
 				case VK_GAMEPAD_LEFT_SHOULDER:           return ButtonHeld(js, 4);
 				case VK_GAMEPAD_RIGHT_SHOULDER:          return ButtonHeld(js, 5);
@@ -607,18 +677,18 @@ namespace RadarKeys {
 				case VK_GAMEPAD_MENU:                    return ButtonHeld(js, 9);
 				case VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON:  return ButtonHeld(js, 10);
 				case VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON: return ButtonHeld(js, 11);
-				case VK_GAMEPAD_DPAD_UP:                 return ButtonHeld(js, 16);
-				case VK_GAMEPAD_DPAD_DOWN:               return ButtonHeld(js, 17);
-				case VK_GAMEPAD_DPAD_LEFT:               return ButtonHeld(js, 18);
-				case VK_GAMEPAD_DPAD_RIGHT:              return ButtonHeld(js, 19);
+				case VK_GAMEPAD_DPAD_UP:                 return PovHeld(js, 0, 0);
+				case VK_GAMEPAD_DPAD_DOWN:               return PovHeld(js, 0, 1);
+				case VK_GAMEPAD_DPAD_LEFT:               return PovHeld(js, 0, 2);
+				case VK_GAMEPAD_DPAD_RIGHT:              return PovHeld(js, 0, 3);
 				case VK_GAMEPAD_LEFT_THUMBSTICK_UP:      return AxisPast(info, js, 1, DIJOFS_Y, -1);
 				case VK_GAMEPAD_LEFT_THUMBSTICK_DOWN:    return AxisPast(info, js, 1, DIJOFS_Y, +1);
 				case VK_GAMEPAD_LEFT_THUMBSTICK_LEFT:    return AxisPast(info, js, 0, DIJOFS_X, -1);
 				case VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT:   return AxisPast(info, js, 0, DIJOFS_X, +1);
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_UP:     return AxisPast(info, js, 4, DIJOFS_RY, -1);
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN:   return AxisPast(info, js, 4, DIJOFS_RY, +1);
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT:   return AxisPast(info, js, 3, DIJOFS_RX, -1);
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT:  return AxisPast(info, js, 3, DIJOFS_RX, +1);
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_UP:     return AxisPast(info, js, 5, DIJOFS_RZ, -1);
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN:   return AxisPast(info, js, 5, DIJOFS_RZ, +1);
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT:   return AxisPast(info, js, 2, DIJOFS_Z, -1);
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT:  return AxisPast(info, js, 2, DIJOFS_Z, +1);
 				default: return false;
 				}
 			}
@@ -711,6 +781,9 @@ namespace RadarKeys {
 			}
 
 			spdlog::info("DirectInputHook: hooked DirectInput8Create in the loaded dinput8.dll (chains through any proxy such as IHHook's)");
+			spdlog::info("DirectInputHook: passive vtable wrapping {} (toggle file: mod/radarKeys/di_vtable_wrap.txt)",
+				PassiveWrapEnabled() ? "ENABLED" : "DISABLED");
+			spdlog::default_logger()->flush();
 		}
 
 		static IDirectInput8* g_ownDI8 = nullptr;
@@ -718,18 +791,18 @@ namespace RadarKeys {
 		static ULONGLONG g_lastEnumTick = 0;
 
 		static const DIOBJECTDATAFORMAT kJoystickObjectFormat[] = {
-			{ nullptr, offsetof(DIJOYSTATE, lX),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, lY),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, lZ),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, lRx), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, lRy), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, lRz), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rglSlider[0]), DIDFT_AXIS | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rglSlider[1]), DIDFT_AXIS | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgdwPOV[0]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgdwPOV[1]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgdwPOV[2]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgdwPOV[3]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_XAxis),  offsetof(DIJOYSTATE, lX),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_YAxis),  offsetof(DIJOYSTATE, lY),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_ZAxis),  offsetof(DIJOYSTATE, lZ),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_RxAxis), offsetof(DIJOYSTATE, lRx), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_RyAxis), offsetof(DIJOYSTATE, lRy), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_RzAxis), offsetof(DIJOYSTATE, lRz), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_Slider), offsetof(DIJOYSTATE, rglSlider[0]), DIDFT_AXIS | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_Slider), offsetof(DIJOYSTATE, rglSlider[1]), DIDFT_AXIS | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[0]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[1]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[2]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[3]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
 			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[0]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
 			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[1]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
 			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[2]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
