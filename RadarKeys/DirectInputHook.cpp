@@ -26,7 +26,7 @@ namespace RadarKeys {
 		typedef HRESULT(STDMETHODCALLTYPE* Acquire_t)(IDirectInputDevice8*);
 		typedef HRESULT(STDMETHODCALLTYPE* GetDeviceState_t)(IDirectInputDevice8*, DWORD, LPVOID);
 		typedef HRESULT(STDMETHODCALLTYPE* GetDeviceData_t)(IDirectInputDevice8*, DWORD, DIDEVICEOBJECTDATA*, LPDWORD, DWORD);
-		typedef HRESULT(STDMETHODCALLTYPE* GetDeviceInfo_t)(IDirectInputDevice8*, LPDI_DEVICEINFO);
+		typedef HRESULT(STDMETHODCALLTYPE* GetDeviceInfo_t)(IDirectInputDevice8*, LPDIDEVICEINSTANCE);
 
 		static GetCapabilities_t g_origGetCapabilities = nullptr;
 		static GetProperty_t g_origGetProperty = nullptr;
@@ -38,7 +38,7 @@ namespace RadarKeys {
 		static GetDeviceData_t g_origGetDeviceData = nullptr;
 
 		static constexpr size_t kDirectInput8VTableSize = 11;
-		static constexpr size_t kDeviceVTableSize = 29;
+		static constexpr size_t kDeviceVTableSize = 32;
 		static constexpr size_t kSlotGetCapabilities = 3;
 		static constexpr size_t kSlotRelease = 2;
 		static constexpr size_t kSlotGetProperty = 5;
@@ -47,7 +47,7 @@ namespace RadarKeys {
 		static constexpr size_t kSlotAcquire = 7;
 		static constexpr size_t kSlotGetDeviceState = 9;
 		static constexpr size_t kSlotGetDeviceData = 10;
-		static constexpr size_t kSlotGetDeviceInfo = 11;
+		static constexpr size_t kSlotGetDeviceInfo = 15;
 
 		enum class DeviceKind { Unknown, Keyboard, Mouse, Joystick };
 
@@ -174,8 +174,8 @@ namespace RadarKeys {
 				return;
 			}
 
-			DI_DEVICEINFO diInfo{};
-			diInfo.dwSize = sizeof(DI_DEVICEINFO);
+			DIDEVICEINSTANCE diInfo{};
+			diInfo.dwSize = sizeof(DIDEVICEINSTANCE);
 			if (FAILED(origGetDeviceInfo(self, &diInfo))) {
 				return;
 			}
@@ -194,26 +194,26 @@ namespace RadarKeys {
 				return (c >= L'a' && c <= L'z') ? static_cast<wchar_t>(c - (L'a' - L'A')) : c;
 			};
 			wchar_t upperProduct[MAX_PATH] = L"";
-			for (size_t i = 0; i < MAX_PATH - 1 && diInfo.szProductName[i] != L'\0'; ++i) {
-				upperProduct[i] = toUpperAscii(diInfo.szProductName[i]);
+			for (size_t i = 0; i < MAX_PATH - 1 && diInfo.tszProductName[i] != L'\0'; ++i) {
+				upperProduct[i] = toUpperAscii(diInfo.tszProductName[i]);
 			}
 			wchar_t upperInstance[MAX_PATH] = L"";
-			for (size_t i = 0; i < MAX_PATH - 1 && diInfo.szInstanceName[i] != L'\0'; ++i) {
-				upperInstance[i] = toUpperAscii(diInfo.szInstanceName[i]);
+			for (size_t i = 0; i < MAX_PATH - 1 && diInfo.tszInstanceName[i] != L'\0'; ++i) {
+				upperInstance[i] = toUpperAscii(diInfo.tszInstanceName[i]);
 			}
 
 			const bool nameMatch =
 				wcsstr(upperProduct, L"DUALSHOCK") != nullptr ||
 				wcsstr(upperProduct, L"DUALSENSE") != nullptr ||
 				wcsstr(upperProduct, L"PLAYSTATION") != nullptr;
-			const bool vidMatch =
-				wcsstr(upperInstance, L"VID_054C") != nullptr &&
-				wcsstr(upperProduct, L"CONTROLLER") != nullptr;
+			const WORD vendorId = static_cast<WORD>(diInfo.guidProduct.Data1 & 0xFFFF);
+			const WORD productId = static_cast<WORD>((diInfo.guidProduct.Data1 >> 16) & 0xFFFF);
+			const bool vidMatch = (vendorId == 0x054C);
 
 			it->second.isPlaystation = nameMatch || vidMatch;
-			spdlog::info("DirectInputHook: device {:p} PlayStation button mapping {} (product:\"{}\", instance:\"{}\")",
+			spdlog::info("DirectInputHook: device {:p} PlayStation button mapping {} (product:\"{}\", instance:\"{}\", vid:{:04X}, pid:{:04X})",
 				static_cast<void*>(self), it->second.isPlaystation ? "ENABLED" : "disabled",
-				toNarrow(diInfo.szProductName), toNarrow(diInfo.szInstanceName));
+				toNarrow(diInfo.tszProductName), toNarrow(diInfo.tszInstanceName), vendorId, productId);
 		}
 
 		static HRESULT STDMETHODCALLTYPE Hooked_Acquire(IDirectInputDevice8* self) {
