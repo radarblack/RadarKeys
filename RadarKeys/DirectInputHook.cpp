@@ -70,6 +70,7 @@ namespace RadarKeys {
 			bool isPlaystation = false;
 			bool productQueried = false;
 			bool selfOpened = false;
+			bool steamVirtual360 = false;
 		};
 
 		static std::mutex g_mutex;
@@ -734,6 +735,36 @@ namespace RadarKeys {
 			}
 			const DIJOYSTATE* js = reinterpret_cast<const DIJOYSTATE*>(info.realState);
 
+			if (info.steamVirtual360) {
+				switch (vKey) {
+				case RawInput::VK_PS_CROSS:                  return ButtonHeld(js, 0);
+				case RawInput::VK_PS_CIRCLE:                 return ButtonHeld(js, 1);
+				case RawInput::VK_PS_SQUARE:                 return ButtonHeld(js, 2);
+				case RawInput::VK_PS_TRIANGLE:               return ButtonHeld(js, 3);
+				case RawInput::VK_PS_L1:                     return ButtonHeld(js, 4);
+				case RawInput::VK_PS_R1:                     return ButtonHeld(js, 5);
+				case RawInput::VK_PS_SHARE:                  return ButtonHeld(js, 6);
+				case RawInput::VK_PS_OPTIONS:                return ButtonHeld(js, 7);
+				case RawInput::VK_PS_L3:                     return ButtonHeld(js, 8);
+				case RawInput::VK_PS_R3:                     return ButtonHeld(js, 9);
+				case RawInput::VK_PS_L2:                     return TriggerHeld(info, js, 0);
+				case RawInput::VK_PS_R2:                     return TriggerHeld(info, js, 1);
+				case RawInput::VK_PS_DPAD_UP:                return PovHeld(js, 0, 0);
+				case RawInput::VK_PS_DPAD_DOWN:              return PovHeld(js, 0, 1);
+				case RawInput::VK_PS_DPAD_LEFT:              return PovHeld(js, 0, 2);
+				case RawInput::VK_PS_DPAD_RIGHT:             return PovHeld(js, 0, 3);
+				case RawInput::VK_PS_LS_UP:                  return AxisPast(info, js, 1, DIJOFS_Y, -1);
+				case RawInput::VK_PS_LS_DOWN:                return AxisPast(info, js, 1, DIJOFS_Y, +1);
+				case RawInput::VK_PS_LS_LEFT:                return AxisPast(info, js, 0, DIJOFS_X, -1);
+				case RawInput::VK_PS_LS_RIGHT:               return AxisPast(info, js, 0, DIJOFS_X, +1);
+				case RawInput::VK_PS_RS_UP:                  return AxisPast(info, js, 4, DIJOFS_RY, -1);
+				case RawInput::VK_PS_RS_DOWN:                return AxisPast(info, js, 4, DIJOFS_RY, +1);
+				case RawInput::VK_PS_RS_LEFT:                return AxisPast(info, js, 3, DIJOFS_RX, -1);
+				case RawInput::VK_PS_RS_RIGHT:               return AxisPast(info, js, 3, DIJOFS_RX, +1);
+				default: return false;
+				}
+			}
+
 			switch (vKey) {
 			case RawInput::VK_PS_SQUARE:                 return ButtonHeld(js, 0);
 			case RawInput::VK_PS_CROSS:                  return ButtonHeld(js, 1);
@@ -891,6 +922,37 @@ namespace RadarKeys {
 			const_cast<DIOBJECTDATAFORMAT*>(kJoystickObjectFormat)
 		};
 
+		static bool SonyGamepadPresentInSystem() {
+			UINT count = 0;
+			if (GetRawInputDeviceList(nullptr, &count, sizeof(RAWINPUTDEVICELIST)) != 0 || count == 0 || count > 512) {
+				return false;
+			}
+			RAWINPUTDEVICELIST list[512];
+			UINT got = GetRawInputDeviceList(list, &count, sizeof(RAWINPUTDEVICELIST));
+			if (got == static_cast<UINT>(-1) || got == 0) {
+				return false;
+			}
+			for (UINT i = 0; i < got; ++i) {
+				if (list[i].dwType != RIM_TYPEHID) {
+					continue;
+				}
+				wchar_t name[256] = L"";
+				UINT size = static_cast<UINT>(sizeof(name));
+				if (GetRawInputDeviceInfoW(list[i].hDevice, RIDI_DEVICENAME, name, &size) == static_cast<UINT>(-1)) {
+					continue;
+				}
+				for (wchar_t* p = name; *p; ++p) {
+					if (*p >= L'a' && *p <= L'z') {
+						*p = static_cast<wchar_t>(*p - (L'a' - L'A'));
+					}
+				}
+				if (wcsstr(name, L"VID_054C") != nullptr) {
+					return true;
+				}
+			}
+			return false;
+		}
+
 		static void ClassifyOwnedDevice(IDirectInputDevice8* device, DeviceInfo& info) {
 			DIDEVCAPS caps{};
 			caps.dwSize = sizeof(DIDEVCAPS);
@@ -929,12 +991,15 @@ namespace RadarKeys {
 			const bool nameMatch =
 				wcsstr(upperProduct, L"DUALSHOCK") != nullptr ||
 				wcsstr(upperProduct, L"DUALSENSE") != nullptr ||
-				wcsstr(upperProduct, L"PLAYSTATION") != nullptr;
+				wcsstr(upperProduct, L"PLAYSTATION") != nullptr ||
+				wcsstr(upperProduct, L"WIRELESS CONTROLLER") != nullptr;
 			const WORD vendorId = static_cast<WORD>(diInfo.guidProduct.Data1 & 0xFFFF);
 			const WORD productId = static_cast<WORD>((diInfo.guidProduct.Data1 >> 16) & 0xFFFF);
 			const bool vidMatch = (vendorId == 0x054C);
+			info.steamVirtual360 = (vendorId == 0x28DE && productId == 0x11FF);
 
-			info.isPlaystation = nameMatch || vidMatch;
+			info.isPlaystation = nameMatch || vidMatch ||
+				(info.steamVirtual360 && SonyGamepadPresentInSystem());
 
 			DIPROPRANGE deviceQuery{};
 			deviceQuery.diph.dwSize = sizeof(DIPROPRANGE);
@@ -998,14 +1063,30 @@ namespace RadarKeys {
 				module = LoadLibraryW(L"dinput8.dll");
 			}
 			if (!module) {
+				static bool warnedModule = false;
+				if (!warnedModule) {
+					warnedModule = true;
+					spdlog::warn("DirectInputHook: self-polling unavailable - dinput8.dll could not be loaded");
+				}
 				return;
 			}
 			auto create = reinterpret_cast<DirectInput8Create_t>(GetProcAddress(module, "DirectInput8Create"));
 			if (!create) {
+				static bool warnedExport = false;
+				if (!warnedExport) {
+					warnedExport = true;
+					spdlog::warn("DirectInputHook: self-polling unavailable - DirectInput8Create export not found");
+				}
 				return;
 			}
 			void* out = nullptr;
-			if (FAILED(create(GetModuleHandleW(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8W, &out, nullptr)) || !out) {
+			HRESULT hr = create(GetModuleHandleW(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8W, &out, nullptr);
+			if (FAILED(hr) || !out) {
+				static bool warnedCreate = false;
+				if (!warnedCreate) {
+					warnedCreate = true;
+					spdlog::warn("DirectInputHook: self-polling unavailable - IDirectInput8 creation failed (hr={:08X})", static_cast<unsigned>(hr));
+				}
 				return;
 			}
 			g_ownDI8 = static_cast<IDirectInput8*>(out);
@@ -1017,12 +1098,41 @@ namespace RadarKeys {
 			if (!g_ownDI8) {
 				return;
 			}
+			if (!hwnd) {
+				hwnd = GetActiveWindow();
+			}
+
+			static bool loggedPollStart = false;
+			if (!loggedPollStart) {
+				loggedPollStart = true;
+				spdlog::info("DirectInputHook: self-polling active (hwnd={:p})", static_cast<void*>(hwnd));
+			}
 
 			ULONGLONG now = GetTickCount64();
 			if (now - g_lastEnumTick >= 2000) {
 				g_lastEnumTick = now;
 				HWND ctxHwnd = hwnd;
 				g_ownDI8->EnumDevices(DI8DEVCLASS_GAMECTRL, &EnumJoysticksCallback, &ctxHwnd, DIEDFL_ATTACHEDONLY);
+
+				std::lock_guard<std::mutex> lock(g_mutex);
+				bool sonyChecked = false;
+				bool sonyPresent = false;
+				for (auto& entry : g_deviceInfo) {
+					DeviceInfo& info = entry.second;
+					if (!info.selfOpened || !info.steamVirtual360) {
+						continue;
+					}
+					if (!sonyChecked) {
+						sonyPresent = SonyGamepadPresentInSystem();
+						sonyChecked = true;
+					}
+					if (info.isPlaystation != sonyPresent) {
+						info.isPlaystation = sonyPresent;
+						spdlog::info("DirectInputHook: Steam virtual 360 device {:p} PlayStation identity {} (Sony pad {})",
+							static_cast<void*>(entry.first), sonyPresent ? "ENABLED" : "disabled",
+							sonyPresent ? "present" : "not present");
+					}
+				}
 			}
 
 			for (auto& owned : g_ownedDevices) {
