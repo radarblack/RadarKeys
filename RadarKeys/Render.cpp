@@ -1,361 +1,319 @@
+#include "windowsapi.h"
 #include "Render.h"
-#include "D3D11Hook.hpp"
-#include "WindowsMessageHook.hpp"
-#include "RawInput.h"
-#include "DirectInputHook.h"
-#include "LuaKeyState.h"
 #include "LuaBridge.h"
+#include "LuaApi.h"
+#include "HookUtils.h"
 #include "KeyBindMenu.h"
 #include "DebuggerMenu.h"
+#include "LuaKeyState.h"
+#include "ModKeyBindings.h"
+#include "ModInfoRegistry.h"
+#include "DirectInputHook.h"
+#include <MinHook.h>
+
 #include "spdlog/spdlog.h"
 
-#include <imgui/imgui.h>
-#include "imguiimpl/imgui_impl_win32.h"
-#include "imguiimpl/imgui_impl_dx11.h"
-
-#include <memory>
-#include <filesystem>
+#include <thread>
+#include <optional>
 #include <string>
-#include <vector>
-#include <dxgi1_4.h>
+#include <cassert>
+#include <cstdlib>
+#include <cctype>
+#include <cmath>
+#include <sstream>
 
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 namespace RadarKeys {
-	namespace Render {
+	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
+	SetCursorPosFunc SetCursorPos_Orig = NULL;
 
-		std::unique_ptr<D3D11Hook> d3d11Hook;
-		std::unique_ptr<WindowsMessageHook> windowsMessageHook;
-		bool d3dHooked = false;
-
-		HWND hwnd = nullptr;
-		std::vector<ID3D11RenderTargetView*> backBufferRTVs;
-		IDXGISwapChain* rtvSwapChain = nullptr;
-		bool ImGuiInitialized = false;
-		bool frameInitialized = false;
-		bool firstFrame = true;
-
-		bool IsUnlockCursor() {
-			return KeyBindMenu::menuOpen || DebuggerMenu::menuOpen;
+	BOOL WINAPI SetCursorPos_Hook(int X, int Y) {
+		if (Render::IsUnlockCursor()) {
+			return FALSE;
 		}
+		return SetCursorPos_Orig(X, Y);
+	}
 
-		void CleanupRenderTarget() {
-			spdlog::trace("CleanupRenderTarget");
-
-			for (ID3D11RenderTargetView* rtv : backBufferRTVs) {
-				if (rtv != nullptr) {
-					rtv->Release();
-				}
-			}
-			backBufferRTVs.clear();
-			rtvSwapChain = nullptr;
+	void InitCursorHook() {
+		if (MH_CreateHook(&SetCursorPos, &SetCursorPos_Hook, reinterpret_cast<LPVOID*>(&SetCursorPos_Orig)) != MH_OK) {
+			spdlog::error("InitCursorHook: MH_CreateHook failed for SetCursorPos");
+			return;
 		}
-
-		ID3D11RenderTargetView* EnsureRenderTarget() {
-			if (!d3d11Hook || !d3d11Hook->get_swap_chain() || !d3d11Hook->get_device()) {
-				return nullptr;
-			}
-
-			IDXGISwapChain* swapChain = d3d11Hook->get_swap_chain();
-			if (swapChain != rtvSwapChain) {
-				CleanupRenderTarget();
-				rtvSwapChain = swapChain;
-			}
-
-			UINT bufferCount = 1;
-			DXGI_SWAP_CHAIN_DESC swapDesc{};
-			if (SUCCEEDED(swapChain->GetDesc(&swapDesc)) && swapDesc.BufferCount > 0) {
-				bufferCount = swapDesc.BufferCount;
-				if (bufferCount > D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT) {
-					bufferCount = D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;
-				}
-			}
-
-			UINT bufferIndex = 0;
-			IDXGISwapChain3* swapChain3 = nullptr;
-			if (SUCCEEDED(swapChain->QueryInterface(__uuidof(IDXGISwapChain3), reinterpret_cast<void**>(&swapChain3))) && swapChain3 != nullptr) {
-				bufferIndex = swapChain3->GetCurrentBackBufferIndex();
-				swapChain3->Release();
-				if (bufferIndex >= bufferCount) {
-					bufferIndex = 0;
-				}
-			}
-
-			if (backBufferRTVs.size() != bufferCount) {
-				CleanupRenderTarget();
-				rtvSwapChain = swapChain;
-				backBufferRTVs.assign(bufferCount, nullptr);
-			}
-
-			if (backBufferRTVs[bufferIndex] == nullptr) {
-				ID3D11Texture2D* backBuffer{ nullptr };
-				HRESULT hr = swapChain->GetBuffer(bufferIndex, __uuidof(ID3D11Texture2D), reinterpret_cast<LPVOID*>(&backBuffer));
-				if (FAILED(hr) || backBuffer == nullptr) {
-					spdlog::warn("EnsureRenderTarget: GetBuffer({}) failed: 0x{:08X}", bufferIndex, static_cast<unsigned>(hr));
-					return nullptr;
-				}
-
-				hr = d3d11Hook->get_device()->CreateRenderTargetView(backBuffer, nullptr, &backBufferRTVs[bufferIndex]);
-				backBuffer->Release();
-				if (FAILED(hr)) {
-					backBufferRTVs[bufferIndex] = nullptr;
-					spdlog::warn("EnsureRenderTarget: CreateRenderTargetView failed: 0x{:08X}", static_cast<unsigned>(hr));
-					return nullptr;
-				}
-			}
-
-			return backBufferRTVs[bufferIndex];
-		}
-
-		bool OnMessage(HWND wnd, UINT message, WPARAM w_param, LPARAM l_param) {
-			if (message == WM_KILLFOCUS ||
-				(message == WM_ACTIVATE && LOWORD(w_param) == WA_INACTIVE) ||
-				(message == WM_ACTIVATEAPP && w_param == 0)) {
-				RawInput::OnFocusLost();
-				LuaKeyState::OnFocusLost();
-				return true;
-			}
-
-			if (!frameInitialized) {
-				return true;
-			}
-
-			bool mouseRawProcessedHere = false;
-			if (message == WM_INPUT) {
-				RAWINPUT raw{};
-				UINT size = sizeof(RAWINPUT);
-
-				// Windows Input API...
-				if (GetRawInputData((HRAWINPUT)l_param, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER)) != (UINT)-1) {
-					if (raw.header.dwType == RIM_TYPEMOUSE) {
-						RawInput::ProcessMouseButtons(&raw);
-						mouseRawProcessedHere = true;
-						if (RawInput::IsMouseBlockedToGame()) {
-							return false;
-						}
-					}
-				}
-			}
-
-			bool handledMessage = false;
-			if (!mouseRawProcessedHere) {
-				handledMessage = !RawInput::OnMessage(wnd, message, w_param, l_param);
-			}
-
-			if (IsUnlockCursor() && ImGui_ImplWin32_WndProcHandler(wnd, message, w_param, l_param) != 0) {
-				auto& io = ImGui::GetIO();
-				if (io.WantCaptureMouse || io.WantCaptureKeyboard || io.WantTextInput) {
-					handledMessage = true;
-				}
-			}
-
-			if (RawInput::IsKeyboardBlockedToGame() &&
-				message >= WM_KEYFIRST && message <= WM_KEYLAST &&
-				w_param != VK_ESCAPE) {
-				handledMessage = true;
-			}
-			if (RawInput::IsMouseBlockedToGame() &&
-				message >= WM_MOUSEFIRST && message <= WM_MOUSELAST) {
-				handledMessage = true;
-			}
-
-			if (handledMessage) {
-				if (message == WM_KEYUP || message == WM_SYSKEYUP ||
-					message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
-					message == WM_MBUTTONUP || message == WM_XBUTTONUP) {
-					return true;
-				}
-				return false;
-			}
-			return true;
-		}
-
-		bool FrameInitialize() {
-			if (frameInitialized) {
-				return true;
-			}
-
-			spdlog::info("Attempting to frame initialize");
-
-			auto device = d3d11Hook->get_device();
-			auto swapChain = d3d11Hook->get_swap_chain();
-
-			if (device == nullptr || swapChain == nullptr) {
-				spdlog::info("Device or SwapChain null. DirectX 12 may be in use. A crash may occur.");
-				return false;
-			}
-
-			ID3D11DeviceContext* context = nullptr;
-			device->GetImmediateContext(&context);
-
-			DXGI_SWAP_CHAIN_DESC swapDesc{};
-			swapChain->GetDesc(&swapDesc);
-			hwnd = swapDesc.OutputWindow;
-			if (hwnd == nullptr) {
-				spdlog::warn("FrameInitialize: swap chain has no output window - input hook skipped");
-			}
-			windowsMessageHook.reset();
-			windowsMessageHook = std::make_unique<WindowsMessageHook>(hwnd);
-			windowsMessageHook->on_message = [](auto wnd, auto msg, auto wParam, auto lParam) {
-				return OnMessage(wnd, msg, wParam, lParam);
-			};
-
-			spdlog::info("Creating render target");
-			EnsureRenderTarget();
-
-			spdlog::info("Window Handle: {0:x}", (uintptr_t)hwnd);
-
-			if (!ImGuiInitialized) {
-				spdlog::info("Initializing ImGui");
-				IMGUI_CHECKVERSION();
-				ImGui::CreateContext();
-				ImGuiIO& io = ImGui::GetIO(); (void)io;
-
-				spdlog::info("Initializing ImGui Win32");
-				if (!ImGui_ImplWin32_Init(hwnd)) {
-					spdlog::error("Failed to initialize ImGui.");
-					return false;
-				}
-
-				spdlog::info("Initializing ImGui D3D11");
-				if (!ImGui_ImplDX11_Init(device, context)) {
-					spdlog::error("Failed to initialize ImGui.");
-					return false;
-				}
-				ImGuiInitialized = true;
-			}
-
-			ImGui::StyleColorsDark();
-
-			if (firstFrame) {
-				firstFrame = false;
-
-				RawInput::InitializeInput();
-
-				DebuggerMenu::Init();
-				KeyBindMenu::Init("F7");
-			}
-
-			return true;
-		}
-
-		void DrawUI() {
-			LuaBridge::ProcessMessages();
-
-			auto& io = ImGui::GetIO();
-			bool unlock = IsUnlockCursor();
-			const bool blockMouse = unlock && KeyBindMenu::captureSuppressMouse;
-			const bool blockKeyboard = unlock && KeyBindMenu::captureSuppressKeyboard;
-			const bool blockGamepad = unlock && KeyBindMenu::captureSuppressGamepad;
-
-			if (blockMouse) {
-				RawInput::BlockMouseClick();
-			}
-			else {
-				RawInput::UnBlockMouseClick();
-			}
-
-			if (blockKeyboard) {
-				RawInput::BlockKeyboard();
-			}
-			else {
-				RawInput::UnBlockKeyboard();
-			}
-
-			RawInput::SetGamepadBlockedToGame(blockGamepad);
-
-			static bool lastBlockGamepad = false;
-			if (blockGamepad != lastBlockGamepad) {
-				spdlog::info("Gamepad block-to-game: {} (unlock={}, captureSuppressGamepad={})",
-					blockGamepad ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressGamepad);
-				lastBlockGamepad = blockGamepad;
-			}
-
-			io.MouseDrawCursor = unlock;
-
-			if (KeyBindMenu::menuOpen) {
-				KeyBindMenu::Draw(&KeyBindMenu::menuOpen);
-			}
-
-			if (DebuggerMenu::menuOpen) {
-				DebuggerMenu::Draw(&DebuggerMenu::menuOpen);
-			}
-		}
-
-		void OnFrame() {
-			if (!frameInitialized) {
-				if (!FrameInitialize()) {
-					spdlog::error("Failed to frame initialize RadarKeys");
-					return;
-				}
-				spdlog::info("RadarKeys frame initialized");
-				frameInitialized = true;
-				return;
-			}
-
-			DirectInputHook::Poll(hwnd);
-			RawInput::PollGamepad();
-			KeyBindMenu::Update();
-
-			ImGui_ImplDX11_NewFrame();
-			ImGui_ImplWin32_NewFrame();
-			ImGui::NewFrame();
-
-			DrawUI();
-
-			ImGui::EndFrame();
-			ImGui::Render();
-
-			ID3D11RenderTargetView* frameRTV = EnsureRenderTarget();
-			if (frameRTV == nullptr) {
-				return;
-			}
-
-			ID3D11DeviceContext* context = nullptr;
-			d3d11Hook->get_device()->GetImmediateContext(&context);
-			ID3D11RenderTargetView* savedRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
-			ID3D11DepthStencilView* savedDSV = nullptr;
-			context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, &savedDSV);
-
-			context->OMSetRenderTargets(1, &frameRTV, nullptr);
-			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-
-			context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, savedDSV);
-			for (UINT i = 0; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) {
-				if (savedRTVs[i] != nullptr) {
-					savedRTVs[i]->Release();
-				}
-			}
-			if (savedDSV != nullptr) {
-				savedDSV->Release();
-			}
-			context->Release();
-		}
-
-		void OnReset() {
-			spdlog::info("OnReset");
-
-			CleanupRenderTarget();
-			frameInitialized = false;
-
-			spdlog::info("OnReset done");
-		}
-
-		void CreateD3DHook() {
-			d3d11Hook = std::make_unique<D3D11Hook>();
-			d3d11Hook->on_present([](D3D11Hook& hook) { OnFrame(); });
-			d3d11Hook->on_resize_buffers([](D3D11Hook& hook) { OnReset(); });
-
-			d3dHooked = d3d11Hook->hook();
-			if (d3dHooked) {
-				spdlog::info("Hooked D3D11");
-			}
-			else {
-				std::wstring title = L"MGSTPP - RadarKeys";
-				std::wstring message =
-					L"ERROR: Could not hook D3D11\n"
-					L"See radarkeys_log.txt in MGS_TPP folder for details.\n";
-				MessageBox(NULL, message.c_str(), title.c_str(), NULL);
-			}
+		if (MH_EnableHook(&SetCursorPos) != MH_OK) {
+			spdlog::error("InitCursorHook: MH_EnableHook failed for SetCursorPos");
 		}
 	}
+
+	// DLL_PROCESS_ATTACH runs under the loader lock - heavy initialization
+	void InitThread() {
+		KeyBindMenu::InitDiagnostics();
+		spdlog::info("RadarKeys InitThread starting");
+
+		if (MH_Initialize() != MH_OK) {
+			spdlog::error("RadarKeys InitThread: MH_Initialize failed");
+			return;
+		}
+
+		if (!ResolveLuaApi()) {
+			spdlog::error("RadarKeys InitThread: ResolveLuaApi failed - Lua bindings will not work");
+		}
+
+		Render::CreateD3DHook();
+		InitCursorHook();
+		DirectInputHook::Install();
+
+		spdlog::info("RadarKeys frame initialized");
+	}
+
+	//--- Lua bindings ---
+	static int l_MenuMessage(lua_State* L) {
+		const char* cmd = LuaToString(L, 1);
+		const char* message = LuaToString(L, 2);
+		spdlog::trace("l_MenuMessage cmd:{},<> message:{}", cmd ? cmd : "", message ? message : "");
+		LuaBridge::QueueMessageOut(message ? message : "");
+		return 0;
+	}
+
+	static int l_GetMenuMessages(lua_State* L) {
+		std::optional<std::string> messageOpt = LuaBridge::messagesIn.pop();
+		if (!messageOpt) {
+			LuaPushNil(L);
+			return 1;
+		}
+		LuaCreateTable(L, 0, 0);
+		int tableAbsIdx = LuaGetTop(L);
+
+		int index = 0;
+		while (messageOpt) {
+			std::string message = *messageOpt;
+			index++;
+			LuaRawSetIndexed(L, tableAbsIdx, index, message.c_str());
+			messageOpt = LuaBridge::messagesIn.pop();
+		}
+		assert(LuaGetTop(L) == 1);
+		return 1;
+	}
+
+	static int ResolveKeyNameArg(lua_State* L) {
+		const char* name = LuaToString(L, 1);
+		if (!name) return -1;
+		int vKey = KeyBindMenu::VKeyForName(name);
+		if (vKey < 0) spdlog::warn("RadarKeys key query: unrecognized key name '{}'", name);
+		return vKey;
+	}
+
+	static std::vector<USHORT> ResolveKeyListArg(lua_State* L) {
+		const char* raw = LuaToString(L, 1);
+		if (!raw) return {};
+		std::vector<USHORT> result = KeyBindMenu::ParseComboKeyNames(raw);
+		if (result.empty()) {
+			spdlog::warn("RadarKeys combo query: unrecognized or malformed combo string '{}'", raw);
+		}
+		return result;
+	}
+
+	static bool ArgIsCombo(lua_State* L) {
+		const char* raw = LuaToString(L, 1);
+		if (!raw) return false;
+		if (KeyBindMenu::VKeyForName(raw) >= 0) return false;
+		return std::strchr(raw, '+') != nullptr;
+	}
+
+	static double ResolveHoldSecondsArg(lua_State* L) {
+		const char* raw = LuaToString(L, 2);
+		if (!raw || !*raw) {
+			return -1.0;
+		}
+		char* end = nullptr;
+		double value = std::strtod(raw, &end);
+		if (end == raw || *end != '\0' || !std::isfinite(value) || value < 0.0) {
+			spdlog::warn("RadarKeys key query: invalid hold-seconds arg '{}'", raw);
+			return -1.0;
+		}
+		return value;
+	}
+
+	static int l_ButtonDown(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::ComboButtonDown(ResolveKeyListArg(L))); return 1; }
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::ButtonDown((USHORT)vKey));
+		return 1;
+	}
+	static int l_OnButtonDown(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonDown(ResolveKeyListArg(L))); return 1; }
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonDown((USHORT)vKey));
+		return 1;
+	}
+	static int l_OnButtonUp(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonUp(ResolveKeyListArg(L))); return 1; }
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonUp((USHORT)vKey));
+		return 1;
+	}
+	static int l_ButtonHeld(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::ComboButtonHeld(ResolveKeyListArg(L), ResolveHoldSecondsArg(L))); return 1; }
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		double holdOverride = RadarKeys::ResolveHoldSecondsArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::ButtonHeld((USHORT)vKey, holdOverride));
+		return 1;
+	}
+	static int l_OnButtonHoldTime(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonHoldTime(ResolveKeyListArg(L), ResolveHoldSecondsArg(L))); return 1; }
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		double holdOverride = RadarKeys::ResolveHoldSecondsArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonHoldTime((USHORT)vKey, holdOverride));
+		return 1;
+	}
+	static int l_OnButtonRepeat(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonRepeat(ResolveKeyListArg(L))); return 1; }
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonRepeat((USHORT)vKey));
+		return 1;
+	}
+	static int l_GetRepeatMult(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaPushNumber(L, LuaKeyState::GetComboRepeatMult(ResolveKeyListArg(L))); return 1; }
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		LuaPushNumber(L, vKey >= 0 ? LuaKeyState::GetRepeatMult((USHORT)vKey) : 1.0);
+		return 1;
+	}
+	static int l_ResetRepeat(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaKeyState::ResetComboRepeat(ResolveKeyListArg(L)); return 0; }
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		if (vKey >= 0) LuaKeyState::ResetRepeat((USHORT)vKey);
+		return 0;
+	}
+
+	static int l_DebugLog(lua_State* L) {
+		const char* message = LuaToString(L, 1);
+		if (message) {
+			DebuggerMenu::LogLuaDebug(message);
+		}
+		return 0;
+	}
+
+	static int l_DescribeKey(lua_State* L) {
+		const char* scriptName = LuaToString(L, 2);
+		const char* functionName = LuaToString(L, 3);
+		const char* toggleState = LuaToString(L, 4);
+
+		if (ArgIsCombo(L)) {
+			std::vector<USHORT> vKeys = ResolveKeyListArg(L);
+			if (vKeys.empty()) {
+				return 0;
+			}
+			LuaKeyState::DescribeComboKey(
+				vKeys,
+				scriptName ? scriptName : "",
+				functionName ? functionName : "",
+				toggleState ? toggleState : ""
+			);
+			return 0;
+		}
+
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		if (vKey < 0) {
+			return 0;
+		}
+		LuaKeyState::DescribeKey(
+			(USHORT)vKey,
+			scriptName ? scriptName : "",
+			functionName ? functionName : "",
+			toggleState ? toggleState : ""
+		);
+		return 0;
+	}
+
+	static int l_DescribeMod(lua_State* L) {
+		const char* scriptName = LuaToString(L, 1);
+		const char* modName = LuaToString(L, 2);
+		const char* modDescription = LuaToString(L, 3);
+		const char* modCreator = LuaToString(L, 4);
+		const char* modVersion = LuaToString(L, 5);
+		const char* modLink = LuaToString(L, 6);
+
+		if (!scriptName || scriptName[0] == '\0') {
+			return 0;
+		}
+
+		ModInfoRegistry::DescribeMod(
+			scriptName,
+			modName ? modName : "",
+			modDescription ? modDescription : "",
+			modCreator ? modCreator : "",
+			modVersion ? modVersion : "",
+			modLink ? modLink : ""
+		);
+		return 0;
+	}
+
+	static int l_GetModKeyBinding(lua_State* L) {
+		const char* scriptName = LuaToString(L, 1);
+		const char* functionName = LuaToString(L, 2);
+		if (!scriptName || !functionName) {
+			LuaPushNil(L);
+			return 1;
+		}
+		std::string override = ModKeyBindings::GetOverride(scriptName, functionName);
+		if (override.empty()) {
+			LuaPushNil(L);
+		}
+		else {
+			LuaPushString(L, override.c_str());
+		}
+		return 1;
+	}
+}
+
+extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
+	spdlog::debug("luaopen_RadarKeys");
+
+	luaL_Reg radarkeys_funcs[] = {
+		{ "MenuMessage", RadarKeys::l_MenuMessage },
+		{ "GetMenuMessages", RadarKeys::l_GetMenuMessages },
+		{ "IsButtonDown", RadarKeys::l_ButtonDown },
+		{ "OnButtonDown", RadarKeys::l_OnButtonDown },
+		{ "OnButtonUp", RadarKeys::l_OnButtonUp },
+		{ "IsButtonHeld", RadarKeys::l_ButtonHeld },
+		{ "ButtonDown", RadarKeys::l_ButtonDown },
+		{ "ButtonHeld", RadarKeys::l_ButtonHeld },
+		{ "OnButtonHoldTime", RadarKeys::l_OnButtonHoldTime },
+		{ "OnButtonRepeat", RadarKeys::l_OnButtonRepeat },
+		{ "GetRepeatMult", RadarKeys::l_GetRepeatMult },
+		{ "ResetRepeat", RadarKeys::l_ResetRepeat },
+		{ "IsComboButtonDown", RadarKeys::l_ButtonDown },
+		{ "OnComboButtonDown", RadarKeys::l_OnButtonDown },
+		{ "OnComboButtonUp", RadarKeys::l_OnButtonUp },
+		{ "IsComboButtonHeld", RadarKeys::l_ButtonHeld },
+		{ "OnComboButtonHoldTime", RadarKeys::l_OnButtonHoldTime },
+		{ "OnComboButtonRepeat", RadarKeys::l_OnButtonRepeat },
+		{ "GetComboRepeatMult", RadarKeys::l_GetRepeatMult },
+		{ "ResetComboRepeat", RadarKeys::l_ResetRepeat },
+		{ "DebugLog", RadarKeys::l_DebugLog },
+		{ "DescribeKey", RadarKeys::l_DescribeKey },
+		{ "DescribeMod", RadarKeys::l_DescribeMod },
+		{ "GetModKeyBinding", RadarKeys::l_GetModKeyBinding },
+		{ NULL, NULL }
+	};
+
+	if (!RadarKeys::RegisterLuaLibrary(L, "RadarKeys", radarkeys_funcs)) {
+		spdlog::error("luaopen_RadarKeys: RegisterLuaLibrary failed - Lua API addresses may not have resolved yet");
+		return 0;
+	}
+	RadarKeys::LuaApiCaptureState(L);
+	return 1;
+}
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+	switch (ul_reason_for_call) {
+	case DLL_PROCESS_ATTACH:
+		DisableThreadLibraryCalls(hModule);
+		std::thread(RadarKeys::InitThread).detach();
+		break;
+	case DLL_PROCESS_DETACH:
+		RadarKeys::DirectInputHook::Shutdown();
+		RadarKeys::KeyBindMenu::LogCleanShutdown();
+		spdlog::shutdown();
+		break;
+	}
+	return TRUE;
 }
