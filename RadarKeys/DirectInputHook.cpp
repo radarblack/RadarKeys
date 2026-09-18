@@ -280,14 +280,25 @@ namespace RadarKeys {
 			return hr;
 		}
 
+		static const AxisRange* ResolveAxisRange(const DeviceInfo& info, size_t idx) {
+			if (idx < 32 && info.perOffset[idx].known &&
+				info.perOffset[idx].maxV > info.perOffset[idx].minV) {
+				return &info.perOffset[idx];
+			}
+			if (info.deviceRange.known && info.deviceRange.maxV > info.deviceRange.minV) {
+				return &info.deviceRange;
+			}
+			if (idx < 32 && info.observed[idx].known &&
+				info.observed[idx].maxV > info.observed[idx].minV) {
+				return &info.observed[idx];
+			}
+			return nullptr;
+		}
+
 		static LONG AxisNeutral(const DeviceInfo& info, size_t offsetBytes, bool stickAxis) {
 			size_t idx = offsetBytes / 4;
-			const AxisRange* r = (idx < 32 && info.perOffset[idx].known)
-				? &info.perOffset[idx] : nullptr;
-			if (!r && info.deviceRange.known) {
-				r = &info.deviceRange;
-			}
-			if (r && r->known) {
+			const AxisRange* r = ResolveAxisRange(info, idx);
+			if (r) {
 				if (stickAxis) {
 					return r->minV + (r->maxV - r->minV) / 2;
 				}
@@ -626,34 +637,43 @@ namespace RadarKeys {
 			LONG value = axes[axisIndex];
 
 			size_t idx = offsetBytes / 4;
-			LONG low = 0, high = 0;
-			const AxisRange* r = (idx < 32 && info.perOffset[idx].known)
-				? &info.perOffset[idx] : (info.deviceRange.known ? &info.deviceRange :
-					(idx < 32 && info.observed[idx].known ? &info.observed[idx] : nullptr));
-			if (r && r->known) {
-				low = r->minV;
-				high = r->maxV;
+			const AxisRange* r = ResolveAxisRange(info, idx);
+			if (r) {
+				LONG low = r->minV;
+				LONG high = r->maxV;
 				LONG threshold = (high - low) / 2;
 				if (direction < 0) return value <= low + threshold / 2;
 				return value >= low + threshold + (high - low) / 4;
 			}
+			LONG center = 0;
+			if (idx < 32 && info.observed[idx].known) {
+				center = (info.observed[idx].minV + info.observed[idx].maxV) / 2;
+			}
 			const LONG kStickThreshold = 8000;
-			return direction < 0 ? value <= -kStickThreshold : value >= kStickThreshold;
+			return direction < 0 ? value <= center - kStickThreshold : value >= center + kStickThreshold;
 		}
 
 		static bool TriggerHeld(const DeviceInfo& info, const DIJOYSTATE* js, int which) {
 			LONG value = (which == 0) ? js->rglSlider[0] : js->rglSlider[1];
 			size_t offsetBytes = DIJOFS_SLIDER(which);
 			size_t idx = offsetBytes / 4;
-			const AxisRange* r = (idx < 32 && info.perOffset[idx].known)
-				? &info.perOffset[idx] : (info.deviceRange.known ? &info.deviceRange :
-					(idx < 32 && info.observed[idx].known ? &info.observed[idx] : nullptr));
-			if (r && r->known) {
+			const AxisRange* r = ResolveAxisRange(info, idx);
+			if (r) {
 				return value >= r->minV + (r->maxV - r->minV) * 4 / 5;
 			}
 			if (which == 0 && js->lZ > 20000)  return true;
 			if (which == 1 && js->lRz > 20000) return true;
 			return false;
+		}
+
+		static bool PsTriggerHeld(const DeviceInfo& info, const DIJOYSTATE* js, int axisIndex) {
+			const LONG* axes = reinterpret_cast<const LONG*>(js);
+			LONG value = axes[axisIndex];
+			const AxisRange* r = ResolveAxisRange(info, static_cast<size_t>(axisIndex));
+			if (r) {
+				return value >= r->minV + (r->maxV - r->minV) * 4 / 5;
+			}
+			return value >= 20000;
 		}
 
 		static bool IsGamepadButtonHeldLocked(USHORT vKey, const DeviceInfo& info) {
@@ -671,8 +691,8 @@ namespace RadarKeys {
 				case VK_GAMEPAD_Y:                       return ButtonHeld(js, 3);
 				case VK_GAMEPAD_LEFT_SHOULDER:           return ButtonHeld(js, 4);
 				case VK_GAMEPAD_RIGHT_SHOULDER:          return ButtonHeld(js, 5);
-				case VK_GAMEPAD_LEFT_TRIGGER:            return ButtonHeld(js, 6);
-				case VK_GAMEPAD_RIGHT_TRIGGER:           return ButtonHeld(js, 7);
+				case VK_GAMEPAD_LEFT_TRIGGER:            return ButtonHeld(js, 6) || PsTriggerHeld(info, js, 3);
+				case VK_GAMEPAD_RIGHT_TRIGGER:           return ButtonHeld(js, 7) || PsTriggerHeld(info, js, 4);
 				case VK_GAMEPAD_VIEW:                    return ButtonHeld(js, 8);
 				case VK_GAMEPAD_MENU:                    return ButtonHeld(js, 9);
 				case VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON:  return ButtonHeld(js, 10);
@@ -890,6 +910,19 @@ namespace RadarKeys {
 			const bool vidMatch = (vendorId == 0x054C);
 
 			info.isPlaystation = nameMatch || vidMatch;
+
+			DIPROPRANGE deviceQuery{};
+			deviceQuery.diph.dwSize = sizeof(DIPROPRANGE);
+			deviceQuery.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+			deviceQuery.diph.dwObj = 0;
+			deviceQuery.diph.dwHow = DIPH_DEVICE;
+			if (SUCCEEDED(device->GetProperty(DIPROP_RANGE, &deviceQuery.diph))) {
+				info.deviceRange.known = true;
+				info.deviceRange.minV = deviceQuery.lMin;
+				info.deviceRange.maxV = deviceQuery.lMax;
+			}
+			info.rangeQueried = true;
+
 			spdlog::info("DirectInputHook: self-opened device {:p} PlayStation button mapping {} (product:\"{}\", vid:{:04X}, pid:{:04X})",
 				static_cast<void*>(device), info.isPlaystation ? "ENABLED" : "disabled",
 				toNarrow(diInfo.tszProductName), vendorId, productId);
@@ -993,6 +1026,20 @@ namespace RadarKeys {
 				std::memcpy(it->second.realState, &state, copyBytes);
 				it->second.realStateSize = copyBytes;
 				it->second.hasRealState = true;
+				if (copyBytes >= 8 * sizeof(LONG)) {
+					const LONG* axes = reinterpret_cast<const LONG*>(it->second.realState);
+					for (size_t a = 0; a < 8; ++a) {
+						AxisRange& obs = it->second.observed[a];
+						if (!obs.known) {
+							obs.known = true;
+							obs.minV = axes[a];
+							obs.maxV = axes[a];
+						} else {
+							if (axes[a] < obs.minV) obs.minV = axes[a];
+							if (axes[a] > obs.maxV) obs.maxV = axes[a];
+						}
+					}
+				}
 			}
 		}
 
