@@ -29,7 +29,7 @@ namespace RadarKeys {
 		typedef HRESULT(STDMETHODCALLTYPE* GetCapabilities_t)(IDirectInputDevice8*, LPDIDEVCAPS);
 		typedef HRESULT(STDMETHODCALLTYPE* GetProperty_t)(IDirectInputDevice8*, REFGUID, LPDIPROPHEADER);
 		typedef ULONG(STDMETHODCALLTYPE* Release_t)(IDirectInputDevice8*);
-		typedef HRESULT(STDMETHODCALLTYPE* CreateDevice_t)(IDirectInputDevice8*, REFGUID, LPDIRECTINPUTDEVICE8*, LPUNKNOWN);
+		typedef HRESULT(STDMETHODCALLTYPE* CreateDevice_t)(IDirectInput8*, REFGUID, LPDIRECTINPUTDEVICE8*, LPUNKNOWN);
 		typedef HRESULT(STDMETHODCALLTYPE* SetProperty_t)(IDirectInputDevice8*, REFGUID, LPCDIPROPHEADER);
 		typedef HRESULT(STDMETHODCALLTYPE* Acquire_t)(IDirectInputDevice8*);
 		typedef HRESULT(STDMETHODCALLTYPE* GetDeviceState_t)(IDirectInputDevice8*, DWORD, LPVOID);
@@ -45,8 +45,10 @@ namespace RadarKeys {
 		static GetDeviceState_t g_origGetDeviceState = nullptr;
 		static GetDeviceData_t g_origGetDeviceData = nullptr;
 
+		static IDirectInput8* g_ownDI8 = nullptr;
+
 		static constexpr size_t kDirectInput8VTableSize = 9;
-		static constexpr size_t kDeviceVTableSize = 32;
+		static constexpr size_t kDeviceVTableSize = 24;
 		static constexpr size_t kSlotGetCapabilities = 3;
 		static constexpr size_t kSlotRelease = 2;
 		static constexpr size_t kSlotGetProperty = 5;
@@ -74,11 +76,13 @@ namespace RadarKeys {
 			bool productQueried = false;
 			bool selfOpened = false;
 			bool steamVirtual360 = false;
+			void** origVTable = nullptr;
 		};
 
 		static std::mutex g_mutex;
 		static std::unordered_set<void*> g_wrappedObjects;
 		static std::unordered_set<void*> g_vtableCopies;
+		static std::unordered_map<void*, void**> g_di8OrigVTables;
 		static std::unordered_map<IDirectInputDevice8*, DeviceInfo> g_deviceInfo;
 
 		// GUIDs
@@ -103,7 +107,8 @@ namespace RadarKeys {
 		}
 
 		static bool OverrideObjectVTable(void* object, size_t vtableSize,
-			const std::pair<size_t, void*> overrides[], size_t overrideCount) {
+			const std::pair<size_t, void*> overrides[], size_t overrideCount,
+			void*** outOriginalVTable) {
 			if (!object) {
 				return false;
 			}
@@ -112,6 +117,9 @@ namespace RadarKeys {
 				return false;
 			}
 			void** originalVTable = *reinterpret_cast<void***>(object);
+			if (outOriginalVTable) {
+				*outOriginalVTable = originalVTable;
+			}
 
 			void** copy = new void*[vtableSize];
 			std::memcpy(copy, originalVTable, vtableSize * sizeof(void*));
@@ -133,15 +141,73 @@ namespace RadarKeys {
 			}
 		}
 
+		static bool SonyGamepadPresentInSystem();
+
+		static void** OriginalVTableForDevice(IDirectInputDevice8* self) {
+			std::lock_guard<std::mutex> lock(g_mutex);
+			auto it = g_deviceInfo.find(self);
+			if (it != g_deviceInfo.end() && it->second.origVTable) {
+				return it->second.origVTable;
+			}
+			return nullptr;
+		}
+
+		static Acquire_t OrigAcquire(IDirectInputDevice8* self) {
+			void** vtbl = OriginalVTableForDevice(self);
+			return vtbl ? reinterpret_cast<Acquire_t>(vtbl[kSlotAcquire]) : g_origAcquire;
+		}
+
+		static SetProperty_t OrigSetProperty(IDirectInputDevice8* self) {
+			void** vtbl = OriginalVTableForDevice(self);
+			return vtbl ? reinterpret_cast<SetProperty_t>(vtbl[kSlotSetProperty]) : g_origSetProperty;
+		}
+
+		static GetProperty_t OrigGetProperty(IDirectInputDevice8* self) {
+			void** vtbl = OriginalVTableForDevice(self);
+			return vtbl ? reinterpret_cast<GetProperty_t>(vtbl[kSlotGetProperty]) : g_origGetProperty;
+		}
+
+		static GetCapabilities_t OrigGetCapabilities(IDirectInputDevice8* self) {
+			void** vtbl = OriginalVTableForDevice(self);
+			return vtbl ? reinterpret_cast<GetCapabilities_t>(vtbl[kSlotGetCapabilities]) : g_origGetCapabilities;
+		}
+
+		static GetDeviceState_t OrigGetDeviceState(IDirectInputDevice8* self) {
+			void** vtbl = OriginalVTableForDevice(self);
+			return vtbl ? reinterpret_cast<GetDeviceState_t>(vtbl[kSlotGetDeviceState]) : g_origGetDeviceState;
+		}
+
+		static GetDeviceData_t OrigGetDeviceData(IDirectInputDevice8* self) {
+			void** vtbl = OriginalVTableForDevice(self);
+			return vtbl ? reinterpret_cast<GetDeviceData_t>(vtbl[kSlotGetDeviceData]) : g_origGetDeviceData;
+		}
+
+		static Release_t OrigRelease(IDirectInputDevice8* self) {
+			void** vtbl = OriginalVTableForDevice(self);
+			return vtbl ? reinterpret_cast<Release_t>(vtbl[kSlotRelease]) : g_origRelease;
+		}
+
+		static CreateDevice_t OrigCreateDevice(IDirectInput8* self) {
+			{
+				std::lock_guard<std::mutex> lock(g_mutex);
+				auto it = g_di8OrigVTables.find(self);
+				if (it != g_di8OrigVTables.end() && it->second) {
+					return reinterpret_cast<CreateDevice_t>(it->second[kSlotCreateDevice]);
+				}
+			}
+			return g_origCreateDevice;
+		}
+
 		// detour
 
 		static void ClassifyFromCapabilities(IDirectInputDevice8* self) {
-			if (!g_origGetCapabilities) {
+			GetCapabilities_t origGetCapabilities = OrigGetCapabilities(self);
+			if (!origGetCapabilities) {
 				return;
 			}
 			DIDEVCAPS caps{};
 			caps.dwSize = sizeof(DIDEVCAPS);
-			HRESULT hr = g_origGetCapabilities(self, &caps);
+			HRESULT hr = origGetCapabilities(self, &caps);
 			if (FAILED(hr)) {
 				return;
 			}
@@ -237,19 +303,23 @@ namespace RadarKeys {
 			const bool nameMatch =
 				wcsstr(upperProduct, L"DUALSHOCK") != nullptr ||
 				wcsstr(upperProduct, L"DUALSENSE") != nullptr ||
-				wcsstr(upperProduct, L"PLAYSTATION") != nullptr;
+				wcsstr(upperProduct, L"PLAYSTATION") != nullptr ||
+				wcsstr(upperProduct, L"WIRELESS CONTROLLER") != nullptr;
 			const WORD vendorId = static_cast<WORD>(productGuid.Data1 & 0xFFFF);
 			const WORD productId = static_cast<WORD>((productGuid.Data1 >> 16) & 0xFFFF);
 			const bool vidMatch = (vendorId == 0x054C);
+			it->second.steamVirtual360 = (vendorId == 0x28DE && productId == 0x11FF);
 
-			it->second.isPlaystation = nameMatch || vidMatch;
+			it->second.isPlaystation = nameMatch || vidMatch ||
+				(it->second.steamVirtual360 && SonyGamepadPresentInSystem());
 			spdlog::info("DirectInputHook: device {:p} PlayStation button mapping {} (product:\"{}\", instance:\"{}\", vid:{:04X}, pid:{:04X})",
 				static_cast<void*>(self), it->second.isPlaystation ? "ENABLED" : "disabled",
 				toNarrow(productName), toNarrow(instanceName), vendorId, productId);
 		}
 
 		static HRESULT STDMETHODCALLTYPE Hooked_Acquire(IDirectInputDevice8* self) {
-			HRESULT hr = g_origAcquire(self);
+			Acquire_t origAcquire = OrigAcquire(self);
+			HRESULT hr = origAcquire ? origAcquire(self) : E_FAIL;
 			if (SUCCEEDED(hr)) {
 				ClassifyFromCapabilities(self);
 				ClassifyPlaystation(self);
@@ -260,7 +330,8 @@ namespace RadarKeys {
 
 		static HRESULT STDMETHODCALLTYPE Hooked_SetProperty(IDirectInputDevice8* self,
 			REFGUID rguidProp, LPCDIPROPHEADER pdiph) {
-			HRESULT hr = g_origSetProperty(self, rguidProp, pdiph);
+			SetProperty_t origSetProperty = OrigSetProperty(self);
+			HRESULT hr = origSetProperty ? origSetProperty(self, rguidProp, pdiph) : E_FAIL;
 
 			if (SUCCEEDED(hr) && pdiph && IsDipropRangeGuid(rguidProp) &&
 				pdiph->dwSize >= sizeof(DIPROPRANGE)) {
@@ -348,17 +419,21 @@ namespace RadarKeys {
 
 		static HRESULT STDMETHODCALLTYPE Hooked_GetDeviceState(IDirectInputDevice8* self,
 			DWORD cbData, LPVOID lpvData) {
-			HRESULT hr = g_origGetDeviceState(self, cbData, lpvData);
+			GetDeviceState_t origGetDeviceState = OrigGetDeviceState(self);
+			HRESULT hr = origGetDeviceState ? origGetDeviceState(self, cbData, lpvData) : E_FAIL;
 			if (FAILED(hr) || !lpvData || cbData == 0) {
 				return hr;
 			}
+			GetProperty_t origGetProperty = OrigGetProperty(self);
 
 			DeviceKind kind = DeviceKind::Unknown;
+			bool selfOpened = false;
 			{
 				std::lock_guard<std::mutex> lock(g_mutex);
 				auto it = g_deviceInfo.find(self);
 				if (it != g_deviceInfo.end()) {
 					kind = it->second.kind;
+					selfOpened = it->second.selfOpened;
 				}
 			}
 
@@ -387,7 +462,7 @@ namespace RadarKeys {
 								}
 							}
 						}
-						needRangeQuery = g_origGetProperty && !it->second.deviceRange.known &&
+						needRangeQuery = origGetProperty && !it->second.deviceRange.known &&
 							!it->second.rangeQueried;
 					}
 				}
@@ -397,7 +472,7 @@ namespace RadarKeys {
 					queried.diph.dwHeaderSize = sizeof(DIPROPHEADER);
 					queried.diph.dwObj = 0;
 					queried.diph.dwHow = DIPH_DEVICE;
-					if (SUCCEEDED(g_origGetProperty(self, DIPROP_RANGE, &queried.diph))) {
+					if (SUCCEEDED(origGetProperty(self, DIPROP_RANGE, &queried.diph))) {
 						std::lock_guard<std::mutex> lock(g_mutex);
 						auto it = g_deviceInfo.find(self);
 						if (it != g_deviceInfo.end()) {
@@ -416,7 +491,7 @@ namespace RadarKeys {
 				}
 			}
 
-			if (!ShouldBlock(kind)) {
+			if (selfOpened || !ShouldBlock(kind)) {
 				return hr;
 			}
 
@@ -447,20 +522,23 @@ namespace RadarKeys {
 
 		static HRESULT STDMETHODCALLTYPE Hooked_GetDeviceData(IDirectInputDevice8* self,
 			DWORD cbObjectData, DIDEVICEOBJECTDATA* rgdod, LPDWORD pdwInOut, DWORD dwFlags) {
-			HRESULT hr = g_origGetDeviceData(self, cbObjectData, rgdod, pdwInOut, dwFlags);
+			GetDeviceData_t origGetDeviceData = OrigGetDeviceData(self);
+			HRESULT hr = origGetDeviceData ? origGetDeviceData(self, cbObjectData, rgdod, pdwInOut, dwFlags) : E_FAIL;
 			if (FAILED(hr) || !pdwInOut || !rgdod || *pdwInOut == 0) {
 				return hr;
 			}
 
 			DeviceKind kind = DeviceKind::Unknown;
+			bool selfOpened = false;
 			{
 				std::lock_guard<std::mutex> lock(g_mutex);
 				auto it = g_deviceInfo.find(self);
 				if (it != g_deviceInfo.end()) {
 					kind = it->second.kind;
+					selfOpened = it->second.selfOpened;
 				}
 			}
-			if (!ShouldBlock(kind)) {
+			if (selfOpened || !ShouldBlock(kind)) {
 				return hr;
 			}
 
@@ -505,7 +583,8 @@ namespace RadarKeys {
 					vtableCopy = *reinterpret_cast<void***>(self);
 				}
 			}
-			ULONG refs = g_origRelease(self);
+			Release_t origRelease = OrigRelease(self);
+			ULONG refs = origRelease ? origRelease(self) : 0;
 			if (refs == 0) {
 				std::lock_guard<std::mutex> lock(g_mutex);
 				g_deviceInfo.erase(self);
@@ -517,14 +596,18 @@ namespace RadarKeys {
 			return refs;
 		}
 
-		static HRESULT STDMETHODCALLTYPE Hooked_CreateDevice(IDirectInputDevice8* self,
+		static HRESULT STDMETHODCALLTYPE Hooked_CreateDevice(IDirectInput8* self,
 			REFGUID rguid, LPDIRECTINPUTDEVICE8* lplpDevice, LPUNKNOWN pUnkOuter) {
-			HRESULT hr = g_origCreateDevice(self, rguid, lplpDevice, pUnkOuter);
+			CreateDevice_t origCreateDevice = OrigCreateDevice(self);
+			HRESULT hr = origCreateDevice ? origCreateDevice(self, rguid, lplpDevice, pUnkOuter) : E_FAIL;
 			if (FAILED(hr) || !lplpDevice || !*lplpDevice) {
 				return hr;
 			}
 
 			IDirectInputDevice8* device = *lplpDevice;
+			if (self == g_ownDI8) {
+				return hr;
+			}
 			DeviceKind kind;
 			if (SameGuid(rguid, kGuidSysKeyboard) || SameGuid(rguid, kGuidSysKeyboardEm) ||
 				SameGuid(rguid, kGuidSysKeyboardEm2)) {
@@ -558,8 +641,13 @@ namespace RadarKeys {
 				{ kSlotGetDeviceData,    reinterpret_cast<void*>(&Hooked_GetDeviceData) },
 				{ kSlotRelease,          reinterpret_cast<void*>(&Hooked_Release) },
 			};
+			void** origVtbl = nullptr;
 			bool installed = OverrideObjectVTable(device, kDeviceVTableSize,
-				kDeviceOverrides, sizeof(kDeviceOverrides) / sizeof(kDeviceOverrides[0]));
+				kDeviceOverrides, sizeof(kDeviceOverrides) / sizeof(kDeviceOverrides[0]), &origVtbl);
+			if (installed && origVtbl) {
+				std::lock_guard<std::mutex> lock(g_mutex);
+				g_deviceInfo[device].origVTable = origVtbl;
+			}
 
 			spdlog::debug("DirectInputHook: wrapped device {:p} initial kind:{} ({})",
 				static_cast<void*>(device), static_cast<int>(kind), installed ? "vtable wrapped" : "already wrapped");
@@ -570,9 +658,9 @@ namespace RadarKeys {
 		static bool PassiveWrapEnabled() {
 			static const bool enabled = [] {
 				std::error_code ec;
-				bool found = std::filesystem::exists(
-					std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "di_vtable_wrap.txt", ec);
-				return found && !ec;
+				bool offFile = std::filesystem::exists(
+					std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "di_vtable_wrap_off.txt", ec);
+				return !(offFile && !ec);
 			}();
 			return enabled;
 		}
@@ -603,8 +691,13 @@ namespace RadarKeys {
 			static const std::pair<size_t, void*> kDirectInputOverrides[] = {
 				{ kSlotCreateDevice, reinterpret_cast<void*>(&Hooked_CreateDevice) },
 			};
-			OverrideObjectVTable(directInput, kDirectInput8VTableSize,
-				kDirectInputOverrides, sizeof(kDirectInputOverrides) / sizeof(kDirectInputOverrides[0]));
+			void** origVtbl = nullptr;
+			if (OverrideObjectVTable(directInput, kDirectInput8VTableSize,
+				kDirectInputOverrides, sizeof(kDirectInputOverrides) / sizeof(kDirectInputOverrides[0]),
+				&origVtbl) && origVtbl) {
+				std::lock_guard<std::mutex> lock(g_mutex);
+				g_di8OrigVTables[directInput] = origVtbl;
+			}
 
 			spdlog::debug("DirectInputHook: wrapped IDirectInput8 instance {:p}", static_cast<void*>(directInput));
 			spdlog::default_logger()->flush();
@@ -860,12 +953,11 @@ namespace RadarKeys {
 			}
 
 			spdlog::info("DirectInputHook: hooked DirectInput8Create in the loaded dinput8.dll (chains through any proxy such as IHHook's)");
-			spdlog::info("DirectInputHook: passive vtable wrapping {} (toggle file: mod/radarKeys/di_vtable_wrap.txt)",
+			spdlog::info("DirectInputHook: passive vtable wrapping {} (kill switch: mod/radarKeys/di_vtable_wrap_off.txt)",
 				PassiveWrapEnabled() ? "ENABLED" : "DISABLED");
 			spdlog::default_logger()->flush();
 		}
 
-		static IDirectInput8* g_ownDI8 = nullptr;
 		static std::vector<std::pair<GUID, IDirectInputDevice8*>> g_ownedDevices;
 		static ULONGLONG g_lastEnumTick = 0;
 		static int g_enumCallbackSeen = 0;
@@ -1124,6 +1216,10 @@ namespace RadarKeys {
 			ClassifyOwnedDevice(device, info);
 			{
 				std::lock_guard<std::mutex> lock(g_mutex);
+				auto existing = g_deviceInfo.find(device);
+				if (existing != g_deviceInfo.end()) {
+					info.origVTable = existing->second.origVTable;
+				}
 				g_deviceInfo[device] = info;
 			}
 			g_ownedDevices.emplace_back(pdidInstance->guidInstance, device);
