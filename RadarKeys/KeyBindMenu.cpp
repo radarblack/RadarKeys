@@ -431,6 +431,13 @@ namespace RadarKeys {
 			return vKey >= VK_GAMEPAD_A && vKey <= VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT;
 		}
 
+		bool IsCaptureKeyHeld(USHORT vKey) {
+			if (RawInput::IsKeyHeldReal(vKey)) {
+				return true;
+			}
+			return IsGamepadVKeyValue(vKey) && DirectInputHook::IsPlaystationKeyHeld(vKey);
+		}
+
 		std::string NameForVKey(USHORT vKey) {
 			if (IsGamepadVKeyValue(vKey)) {
 				const bool preferPlaystation = DirectInputHook::HasPlaystationDevice();
@@ -1735,7 +1742,7 @@ namespace RadarKeys {
 			for (int i = 0; i < vkNameTableCount; i++) {
 				USHORT vk = vkNameTable[i].vKey;
 				if (vk >= RawInput::kMaxVKey || seen[vk]) continue;
-				if (RawInput::IsKeyHeldReal(vk)) {
+				if (IsCaptureKeyHeld(vk)) {
 					seen[vk] = true;
 					held.push_back(vk);
 				}
@@ -1751,7 +1758,7 @@ namespace RadarKeys {
 				for (int i = 0; i < count; i++) {
 					USHORT vk = table[i].vKey;
 					if (vk >= RawInput::kMaxVKey || seen[vk]) continue;
-					if (RawInput::IsKeyHeldReal(vk)) {
+					if (IsCaptureKeyHeld(vk)) {
 						seen[vk] = true;
 						held.push_back(vk);
 					}
@@ -1775,7 +1782,7 @@ namespace RadarKeys {
 			}
 
 			for (USHORT k : comboHoldKeys) {
-				if (!RawInput::IsKeyHeldReal(k)) {
+				if (!IsCaptureKeyHeld(k)) {
 					if (currentlyHeld.size() >= 2 && currentlyHeld.size() <= 3) {
 						comboHoldKeys = currentlyHeld;
 						comboHoldStartTime = std::chrono::steady_clock::now();
@@ -2007,7 +2014,7 @@ namespace RadarKeys {
 							if (!padCaptureEdgePrimed) {
 								prevHeldPadKeysCapture.clear();
 								for (USHORT gpKey : RawInput::GamepadVKeys()) {
-									if (RawInput::IsKeyHeldReal(gpKey)) {
+									if (IsCaptureKeyHeld(gpKey)) {
 										prevHeldPadKeysCapture.insert(gpKey);
 									}
 								}
@@ -2015,7 +2022,7 @@ namespace RadarKeys {
 							}
 							std::unordered_set<USHORT> nowHeldPadKeys;
 							for (USHORT gpKey : RawInput::GamepadVKeys()) {
-								if (RawInput::IsKeyHeldReal(gpKey)) {
+								if (IsCaptureKeyHeld(gpKey)) {
 									nowHeldPadKeys.insert(gpKey);
 									if (prevHeldPadKeysCapture.count(gpKey) == 0) { pressedKey = gpKey; break; }
 								}
@@ -2034,7 +2041,7 @@ namespace RadarKeys {
 				}
 
 				if (singleHoldActive) {
-					if (!RawInput::IsKeyHeldReal(singleHoldKey)) {
+					if (!IsCaptureKeyHeld(singleHoldKey)) {
 						singleHoldActive = false;
 						singleHoldKey = 0;
 						LogActivity("Single-key capture cancelled - key was released before the hold completed");
