@@ -294,6 +294,7 @@ namespace RadarKeys {
 
 			DirectInputHook::Poll(hwnd);
 			RawInput::PollGamepad();
+			RawInput::PollPlaystation();
 			KeyBindMenu::Update();
 
 			ImGui_ImplDX11_NewFrame();
