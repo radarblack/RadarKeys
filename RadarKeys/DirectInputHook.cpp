@@ -865,6 +865,39 @@ namespace RadarKeys {
 		static IDirectInput8* g_ownDI8 = nullptr;
 		static std::vector<std::pair<GUID, IDirectInputDevice8*>> g_ownedDevices;
 		static ULONGLONG g_lastEnumTick = 0;
+		static int g_enumCallbackSeen = 0;
+
+		static bool EnumWarnOnceForGuid(int category, REFGUID guid) {
+			static std::vector<GUID> warnedCreate;
+			static std::vector<GUID> warnedFormat;
+			static std::vector<GUID> warnedCoop;
+			static std::vector<GUID> warnedAcquire;
+			std::vector<GUID>* warned = &warnedCreate;
+			if (category == 1) warned = &warnedFormat;
+			else if (category == 2) warned = &warnedCoop;
+			else if (category == 3) warned = &warnedAcquire;
+			for (const auto& entry : *warned) {
+				if (SameGuid(entry, guid)) {
+					return false;
+				}
+			}
+			warned->push_back(guid);
+			return true;
+		}
+
+		static LPCDIDATAFORMAT DefaultJoystickFormat() {
+			static LPCDIDATAFORMAT cached = []() -> LPCDIDATAFORMAT {
+				HMODULE module = GetModuleHandleW(L"dinput8.dll");
+				if (!module) {
+					module = LoadLibraryW(L"dinput8.dll");
+				}
+				if (!module) {
+					return nullptr;
+				}
+				return reinterpret_cast<LPCDIDATAFORMAT>(GetProcAddress(module, "c_dfDIJoystick"));
+			}();
+			return cached;
+		}
 
 		static const DIOBJECTDATAFORMAT kJoystickObjectFormat[] = {
 			{ const_cast<LPGUID>(&GUID_XAxis),  offsetof(DIJOYSTATE, lX),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
@@ -953,6 +986,10 @@ namespace RadarKeys {
 			return false;
 		}
 
+		bool IsSonyGamepadAttachedToSystem() {
+			return SonyGamepadPresentInSystem();
+		}
+
 		static void ClassifyOwnedDevice(IDirectInputDevice8* device, DeviceInfo& info) {
 			DIDEVCAPS caps{};
 			caps.dwSize = sizeof(DIDEVCAPS);
@@ -1020,6 +1057,7 @@ namespace RadarKeys {
 
 		static BOOL CALLBACK EnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance, VOID* pContext) {
 			HWND hwnd = *reinterpret_cast<HWND*>(pContext);
+			++g_enumCallbackSeen;
 
 			for (const auto& owned : g_ownedDevices) {
 				if (SameGuid(owned.first, pdidInstance->guidInstance)) {
@@ -1027,18 +1065,51 @@ namespace RadarKeys {
 				}
 			}
 
+			auto toNarrow = [](const wchar_t* w) -> std::string {
+				std::string s;
+				while (*w) { s.push_back(static_cast<char>(*w)); ++w; }
+				return s;
+			};
+
 			IDirectInputDevice8* device = nullptr;
-			if (FAILED(g_ownDI8->CreateDevice(pdidInstance->guidInstance, &device, nullptr)) || !device) {
+			HRESULT hrCreate = g_ownDI8->CreateDevice(pdidInstance->guidInstance, &device, nullptr);
+			if (FAILED(hrCreate) || !device) {
+				if (device) {
+					device->Release();
+				}
+				if (EnumWarnOnceForGuid(0, pdidInstance->guidInstance)) {
+					spdlog::warn("DirectInputHook: CreateDevice failed for \"{}\" (hr={:08X})",
+						toNarrow(pdidInstance->tszProductName), static_cast<unsigned>(hrCreate));
+				}
 				return DIENUM_CONTINUE;
 			}
-			if (FAILED(device->SetDataFormat(&kJoystickFormat))) {
-				device->Release();
-				return DIENUM_CONTINUE;
+			HRESULT hrFormat = device->SetDataFormat(&kJoystickFormat);
+			if (FAILED(hrFormat)) {
+				LPCDIDATAFORMAT fallbackFormat = DefaultJoystickFormat();
+				HRESULT hrFallback = fallbackFormat ? device->SetDataFormat(fallbackFormat) : E_POINTER;
+				if (FAILED(hrFallback)) {
+					device->Release();
+					if (EnumWarnOnceForGuid(1, pdidInstance->guidInstance)) {
+						spdlog::warn("DirectInputHook: SetDataFormat failed for \"{}\" (custom hr={:08X}, default hr={:08X})",
+							toNarrow(pdidInstance->tszProductName), static_cast<unsigned>(hrFormat), static_cast<unsigned>(hrFallback));
+					}
+					return DIENUM_CONTINUE;
+				}
+				spdlog::info("DirectInputHook: \"{}\" accepted only the default joystick data format (custom hr={:08X})",
+					toNarrow(pdidInstance->tszProductName), static_cast<unsigned>(hrFormat));
 			}
 			if (hwnd) {
-				device->SetCooperativeLevel(hwnd, DISCL_BACKGROUND | DISCL_NONEXCLUSIVE);
+				HRESULT hrCoop = device->SetCooperativeLevel(hwnd, DISCL_BACKGROUND | DISCL_NONEXCLUSIVE);
+				if (FAILED(hrCoop) && EnumWarnOnceForGuid(2, pdidInstance->guidInstance)) {
+					spdlog::warn("DirectInputHook: SetCooperativeLevel failed for \"{}\" (hr={:08X})",
+						toNarrow(pdidInstance->tszProductName), static_cast<unsigned>(hrCoop));
+				}
 			}
-			device->Acquire();
+			HRESULT hrAcquire = device->Acquire();
+			if (FAILED(hrAcquire) && hrAcquire != S_FALSE && EnumWarnOnceForGuid(3, pdidInstance->guidInstance)) {
+				spdlog::warn("DirectInputHook: Acquire failed for \"{}\" (hr={:08X})",
+					toNarrow(pdidInstance->tszProductName), static_cast<unsigned>(hrAcquire));
+			}
 
 			DeviceInfo info;
 			info.selfOpened = true;
@@ -1112,7 +1183,21 @@ namespace RadarKeys {
 			if (now - g_lastEnumTick >= 2000) {
 				g_lastEnumTick = now;
 				HWND ctxHwnd = hwnd;
-				g_ownDI8->EnumDevices(DI8DEVCLASS_GAMECTRL, &EnumJoysticksCallback, &ctxHwnd, DIEDFL_ATTACHEDONLY);
+				g_enumCallbackSeen = 0;
+				HRESULT hrEnum = g_ownDI8->EnumDevices(DI8DEVCLASS_GAMECTRL, &EnumJoysticksCallback, &ctxHwnd, DIEDFL_ATTACHEDONLY);
+				if (FAILED(hrEnum)) {
+					static bool warnedEnum = false;
+					if (!warnedEnum) {
+						warnedEnum = true;
+						spdlog::warn("DirectInputHook: EnumDevices failed (hr={:08X})", static_cast<unsigned>(hrEnum));
+					}
+				} else if (g_enumCallbackSeen == 0 && g_ownedDevices.empty()) {
+					static bool warnedNoDevices = false;
+					if (!warnedNoDevices) {
+						warnedNoDevices = true;
+						spdlog::warn("DirectInputHook: Windows reports zero DirectInput game controllers - connected pads are XInput-only or hidden by another driver");
+					}
+				}
 
 				std::lock_guard<std::mutex> lock(g_mutex);
 				bool sonyChecked = false;
