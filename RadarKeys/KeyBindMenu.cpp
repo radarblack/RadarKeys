@@ -588,6 +588,7 @@ namespace RadarKeys {
 
 			menuOpen = !menuOpen;
 			LogActivity(menuOpen ? "Menu opened" : "Menu closed");
+			spdlog::info("KeyBindMenu: main menu {} (F7)", menuOpen ? "OPENED" : "CLOSED");
 		}
 
 		void RegisterMenuToggleKey(USHORT vKey) {
@@ -2678,6 +2679,7 @@ namespace RadarKeys {
 			if (ImGui::Button(UI_BTN_DEBUGGER)) {
 				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 				LogActivity(DebuggerMenu::menuOpen ? UI_LOG_DEBUGGER_OPENED : UI_LOG_DEBUGGER_CLOSED);
+				spdlog::info("KeyBindMenu: Debugger overlay {}", DebuggerMenu::menuOpen ? "OPENED" : "CLOSED");
 			}
 			ImGui::SameLine();
 			
