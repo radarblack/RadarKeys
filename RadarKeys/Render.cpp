@@ -2,6 +2,7 @@
 #include "D3D11Hook.hpp"
 #include "WindowsMessageHook.hpp"
 #include "RawInput.h"
+#include "DirectInputHook.h"
 #include "LuaKeyState.h"
 #include "LuaBridge.h"
 #include "KeyBindMenu.h"
@@ -291,6 +292,7 @@ namespace RadarKeys {
 				return;
 			}
 
+			DirectInputHook::Poll(hwnd);
 			RawInput::PollGamepad();
 			KeyBindMenu::Update();
 
