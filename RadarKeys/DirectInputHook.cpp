@@ -69,6 +69,7 @@ namespace RadarKeys {
 			AxisRange observed[32];
 			bool isPlaystation = false;
 			bool productQueried = false;
+			bool selfOpened = false;
 		};
 
 		static std::mutex g_mutex;
@@ -683,36 +684,6 @@ namespace RadarKeys {
 			}
 			const DIJOYSTATE* js = reinterpret_cast<const DIJOYSTATE*>(info.realState);
 
-			if (info.isPlaystation) {
-				switch (vKey) {
-				case VK_GAMEPAD_X:                       return ButtonHeld(js, 0);
-				case VK_GAMEPAD_A:                       return ButtonHeld(js, 1);
-				case VK_GAMEPAD_B:                       return ButtonHeld(js, 2);
-				case VK_GAMEPAD_Y:                       return ButtonHeld(js, 3);
-				case VK_GAMEPAD_LEFT_SHOULDER:           return ButtonHeld(js, 4);
-				case VK_GAMEPAD_RIGHT_SHOULDER:          return ButtonHeld(js, 5);
-				case VK_GAMEPAD_LEFT_TRIGGER:            return ButtonHeld(js, 6) || PsTriggerHeld(info, js, 3);
-				case VK_GAMEPAD_RIGHT_TRIGGER:           return ButtonHeld(js, 7) || PsTriggerHeld(info, js, 4);
-				case VK_GAMEPAD_VIEW:                    return ButtonHeld(js, 8);
-				case VK_GAMEPAD_MENU:                    return ButtonHeld(js, 9);
-				case VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON:  return ButtonHeld(js, 10);
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON: return ButtonHeld(js, 11);
-				case VK_GAMEPAD_DPAD_UP:                 return PovHeld(js, 0, 0);
-				case VK_GAMEPAD_DPAD_DOWN:               return PovHeld(js, 0, 1);
-				case VK_GAMEPAD_DPAD_LEFT:               return PovHeld(js, 0, 2);
-				case VK_GAMEPAD_DPAD_RIGHT:              return PovHeld(js, 0, 3);
-				case VK_GAMEPAD_LEFT_THUMBSTICK_UP:      return AxisPast(info, js, 1, DIJOFS_Y, -1);
-				case VK_GAMEPAD_LEFT_THUMBSTICK_DOWN:    return AxisPast(info, js, 1, DIJOFS_Y, +1);
-				case VK_GAMEPAD_LEFT_THUMBSTICK_LEFT:    return AxisPast(info, js, 0, DIJOFS_X, -1);
-				case VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT:   return AxisPast(info, js, 0, DIJOFS_X, +1);
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_UP:     return AxisPast(info, js, 5, DIJOFS_RZ, -1);
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN:   return AxisPast(info, js, 5, DIJOFS_RZ, +1);
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT:   return AxisPast(info, js, 2, DIJOFS_Z, -1);
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT:  return AxisPast(info, js, 2, DIJOFS_Z, +1);
-				default: return false;
-				}
-			}
-
 			switch (vKey) {
 			case VK_GAMEPAD_A:                       return ButtonHeld(js, 0);
 			case VK_GAMEPAD_B:                       return ButtonHeld(js, 1);
@@ -745,21 +716,61 @@ namespace RadarKeys {
 		bool IsGamepadButtonHeld(USHORT vKey) {
 			std::lock_guard<std::mutex> lock(g_mutex);
 			for (const auto& entry : g_deviceInfo) {
-				if (IsGamepadButtonHeldLocked(vKey, entry.second)) {
+				const DeviceInfo& info = entry.second;
+				if (info.selfOpened || info.isPlaystation) {
+					continue;
+				}
+				if (IsGamepadButtonHeldLocked(vKey, info)) {
 					return true;
 				}
 			}
 			return false;
 		}
 
-		bool IsPlaystationKeyHeld(USHORT vKey) {
+		static bool IsPlaystationControlHeldLocked(USHORT vKey, const DeviceInfo& info) {
+			if (!info.hasRealState || info.realStateSize < sizeof(DIJOYSTATE) ||
+				info.kind != DeviceKind::Joystick) {
+				return false;
+			}
+			const DIJOYSTATE* js = reinterpret_cast<const DIJOYSTATE*>(info.realState);
+
+			switch (vKey) {
+			case RawInput::VK_PS_SQUARE:                 return ButtonHeld(js, 0);
+			case RawInput::VK_PS_CROSS:                  return ButtonHeld(js, 1);
+			case RawInput::VK_PS_CIRCLE:                 return ButtonHeld(js, 2);
+			case RawInput::VK_PS_TRIANGLE:               return ButtonHeld(js, 3);
+			case RawInput::VK_PS_L1:                     return ButtonHeld(js, 4);
+			case RawInput::VK_PS_R1:                     return ButtonHeld(js, 5);
+			case RawInput::VK_PS_L2:                     return ButtonHeld(js, 6) || PsTriggerHeld(info, js, 3);
+			case RawInput::VK_PS_R2:                     return ButtonHeld(js, 7) || PsTriggerHeld(info, js, 4);
+			case RawInput::VK_PS_SHARE:                  return ButtonHeld(js, 8);
+			case RawInput::VK_PS_OPTIONS:                return ButtonHeld(js, 9);
+			case RawInput::VK_PS_L3:                     return ButtonHeld(js, 10);
+			case RawInput::VK_PS_R3:                     return ButtonHeld(js, 11);
+			case RawInput::VK_PS_DPAD_UP:                return PovHeld(js, 0, 0);
+			case RawInput::VK_PS_DPAD_DOWN:              return PovHeld(js, 0, 1);
+			case RawInput::VK_PS_DPAD_LEFT:              return PovHeld(js, 0, 2);
+			case RawInput::VK_PS_DPAD_RIGHT:             return PovHeld(js, 0, 3);
+			case RawInput::VK_PS_LS_UP:                  return AxisPast(info, js, 1, DIJOFS_Y, -1);
+			case RawInput::VK_PS_LS_DOWN:                return AxisPast(info, js, 1, DIJOFS_Y, +1);
+			case RawInput::VK_PS_LS_LEFT:                return AxisPast(info, js, 0, DIJOFS_X, -1);
+			case RawInput::VK_PS_LS_RIGHT:               return AxisPast(info, js, 0, DIJOFS_X, +1);
+			case RawInput::VK_PS_RS_UP:                  return AxisPast(info, js, 5, DIJOFS_RZ, -1);
+			case RawInput::VK_PS_RS_DOWN:                return AxisPast(info, js, 5, DIJOFS_RZ, +1);
+			case RawInput::VK_PS_RS_LEFT:                return AxisPast(info, js, 2, DIJOFS_Z, -1);
+			case RawInput::VK_PS_RS_RIGHT:               return AxisPast(info, js, 2, DIJOFS_Z, +1);
+			default: return false;
+			}
+		}
+
+		bool IsPlaystationControlHeld(USHORT vKey) {
 			std::lock_guard<std::mutex> lock(g_mutex);
 			for (const auto& entry : g_deviceInfo) {
 				const DeviceInfo& info = entry.second;
 				if (info.kind != DeviceKind::Joystick || !info.isPlaystation) {
 					continue;
 				}
-				if (IsGamepadButtonHeldLocked(vKey, info)) {
+				if (IsPlaystationControlHeldLocked(vKey, info)) {
 					return true;
 				}
 			}
@@ -965,6 +976,7 @@ namespace RadarKeys {
 			device->Acquire();
 
 			DeviceInfo info;
+			info.selfOpened = true;
 			ClassifyOwnedDevice(device, info);
 			{
 				std::lock_guard<std::mutex> lock(g_mutex);
