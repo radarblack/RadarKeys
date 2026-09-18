@@ -894,56 +894,61 @@ namespace RadarKeys {
 				if (!module) {
 					return nullptr;
 				}
+				typedef const DIDATAFORMAT* (WINAPI* GetJoystickFormatFunc)();
+				auto getter = reinterpret_cast<GetJoystickFormatFunc>(GetProcAddress(module, "GetdfDIJoystick"));
+				if (getter) {
+					return getter();
+				}
 				return reinterpret_cast<LPCDIDATAFORMAT>(GetProcAddress(module, "c_dfDIJoystick"));
 			}();
 			return cached;
 		}
 
 		static const DIOBJECTDATAFORMAT kJoystickObjectFormat[] = {
-			{ const_cast<LPGUID>(&GUID_XAxis),  offsetof(DIJOYSTATE, lX),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_YAxis),  offsetof(DIJOYSTATE, lY),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_ZAxis),  offsetof(DIJOYSTATE, lZ),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_RxAxis), offsetof(DIJOYSTATE, lRx), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_RyAxis), offsetof(DIJOYSTATE, lRy), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_RzAxis), offsetof(DIJOYSTATE, lRz), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_Slider), offsetof(DIJOYSTATE, rglSlider[0]), DIDFT_AXIS | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_Slider), offsetof(DIJOYSTATE, rglSlider[1]), DIDFT_AXIS | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[0]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[1]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[2]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
-			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[3]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[0]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[1]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[2]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[3]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[4]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[5]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[6]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[7]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[8]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[9]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[10]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[11]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[12]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[13]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[14]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[15]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[16]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[17]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[18]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[19]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[20]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[21]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[22]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[23]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[24]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[25]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[26]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[27]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[28]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[29]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[30]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
-			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[31]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_XAxis),  offsetof(DIJOYSTATE, lX),  DIDFT_OPTIONAL | DIDFT_AXIS   | DIDFT_ANYINSTANCE, DIDOI_ASPECTPOSITION },
+			{ const_cast<LPGUID>(&GUID_YAxis),  offsetof(DIJOYSTATE, lY),  DIDFT_OPTIONAL | DIDFT_AXIS   | DIDFT_ANYINSTANCE, DIDOI_ASPECTPOSITION },
+			{ const_cast<LPGUID>(&GUID_ZAxis),  offsetof(DIJOYSTATE, lZ),  DIDFT_OPTIONAL | DIDFT_AXIS   | DIDFT_ANYINSTANCE, DIDOI_ASPECTPOSITION },
+			{ const_cast<LPGUID>(&GUID_RxAxis), offsetof(DIJOYSTATE, lRx), DIDFT_OPTIONAL | DIDFT_AXIS   | DIDFT_ANYINSTANCE, DIDOI_ASPECTPOSITION },
+			{ const_cast<LPGUID>(&GUID_RyAxis), offsetof(DIJOYSTATE, lRy), DIDFT_OPTIONAL | DIDFT_AXIS   | DIDFT_ANYINSTANCE, DIDOI_ASPECTPOSITION },
+			{ const_cast<LPGUID>(&GUID_RzAxis), offsetof(DIJOYSTATE, lRz), DIDFT_OPTIONAL | DIDFT_AXIS   | DIDFT_ANYINSTANCE, DIDOI_ASPECTPOSITION },
+			{ const_cast<LPGUID>(&GUID_Slider), offsetof(DIJOYSTATE, rglSlider[0]), DIDFT_OPTIONAL | DIDFT_AXIS | DIDFT_ANYINSTANCE, DIDOI_ASPECTPOSITION },
+			{ const_cast<LPGUID>(&GUID_Slider), offsetof(DIJOYSTATE, rglSlider[1]), DIDFT_OPTIONAL | DIDFT_AXIS | DIDFT_ANYINSTANCE, DIDOI_ASPECTPOSITION },
+			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[0]), DIDFT_OPTIONAL | DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[1]), DIDFT_OPTIONAL | DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[2]), DIDFT_OPTIONAL | DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ const_cast<LPGUID>(&GUID_POV), offsetof(DIJOYSTATE, rgdwPOV[3]), DIDFT_OPTIONAL | DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[0]),  DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[1]),  DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[2]),  DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[3]),  DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[4]),  DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[5]),  DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[6]),  DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[7]),  DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[8]),  DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[9]),  DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[10]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[11]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[12]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[13]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[14]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[15]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[16]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[17]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[18]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[19]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[20]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[21]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[22]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[23]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[24]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[25]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[26]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[27]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[28]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[29]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[30]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[31]), DIDFT_OPTIONAL | DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
 		};
 
 		static const DIDATAFORMAT kJoystickFormat = {
@@ -979,7 +984,7 @@ namespace RadarKeys {
 						*p = static_cast<wchar_t>(*p - (L'a' - L'A'));
 					}
 				}
-				if (wcsstr(name, L"VID_054C") != nullptr) {
+				if (wcsstr(name, L"VID_054C") != nullptr || wcsstr(name, L"VID&0002054C") != nullptr) {
 					return true;
 				}
 			}
