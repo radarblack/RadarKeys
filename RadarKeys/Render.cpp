@@ -263,10 +263,31 @@ namespace RadarKeys {
 
 			RawInput::SetGamepadBlockedToGame(blockGamepad);
 
+			static bool lastBlockKeyboard = false;
+			static bool lastBlockMouse = false;
 			static bool lastBlockGamepad = false;
+			static bool lastUnlock = false;
+			if (unlock != lastUnlock) {
+				spdlog::info("Input unlock: {} (mainMenu={}, debugger={})",
+					unlock ? "ON" : "OFF", KeyBindMenu::menuOpen, DebuggerMenu::menuOpen);
+				lastUnlock = unlock;
+			}
+			if (blockKeyboard != lastBlockKeyboard) {
+				spdlog::info("Keyboard block-to-game: {} (unlock={}, captureSuppressKeyboard={}, mainMenu={}, debugger={})",
+					blockKeyboard ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressKeyboard,
+					KeyBindMenu::menuOpen, DebuggerMenu::menuOpen);
+				lastBlockKeyboard = blockKeyboard;
+			}
+			if (blockMouse != lastBlockMouse) {
+				spdlog::info("Mouse block-to-game: {} (unlock={}, captureSuppressMouse={}, mainMenu={}, debugger={})",
+					blockMouse ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressMouse,
+					KeyBindMenu::menuOpen, DebuggerMenu::menuOpen);
+				lastBlockMouse = blockMouse;
+			}
 			if (blockGamepad != lastBlockGamepad) {
-				spdlog::info("Gamepad block-to-game: {} (unlock={}, captureSuppressGamepad={})",
-					blockGamepad ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressGamepad);
+				spdlog::info("Gamepad block-to-game: {} (unlock={}, captureSuppressGamepad={}, mainMenu={}, debugger={})",
+					blockGamepad ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressGamepad,
+					KeyBindMenu::menuOpen, DebuggerMenu::menuOpen);
 				lastBlockGamepad = blockGamepad;
 			}
 
