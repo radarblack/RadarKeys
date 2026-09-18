@@ -14,6 +14,7 @@ namespace RadarKeys {
 
 		constexpr USHORT kMaxVKey = 0x180;
 
+		// binding the PS keys the way it VKs are recognized by the RawInput. please work. LMAO
 		constexpr USHORT VK_PS_CROSS      = 0x0100;
 		constexpr USHORT VK_PS_CIRCLE     = 0x0101;
 		constexpr USHORT VK_PS_SQUARE     = 0x0102;
