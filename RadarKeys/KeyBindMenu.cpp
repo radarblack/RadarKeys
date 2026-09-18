@@ -185,6 +185,12 @@ namespace RadarKeys {
 			initialized = true;
 			try {
 				EnsureBindsDirectory();
+				std::error_code removeEc;
+				for (int rolledIndex = 1; rolledIndex <= 3; ++rolledIndex) {
+					std::filesystem::remove(
+						std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" /
+						("radarkeys_debug." + std::to_string(rolledIndex) + ".txt"), removeEc);
+				}
 				auto sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
 					GetDebugLogFileName(), 1024 * 1024, 3, true);
 				auto logger = std::make_shared<spdlog::logger>("radarkeys", sink);
