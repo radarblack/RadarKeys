@@ -369,8 +369,8 @@ namespace RadarKeys {
 			{"Numpad 0", VK_NUMPAD0}, {"Numpad 1", VK_NUMPAD1}, {"Numpad 2", VK_NUMPAD2},
 			{"Numpad 3", VK_NUMPAD3}, {"Numpad 4", VK_NUMPAD4}, {"Numpad 5", VK_NUMPAD5},
 			{"Numpad 6", VK_NUMPAD6}, {"Numpad 7", VK_NUMPAD7}, {"Numpad 8", VK_NUMPAD8},
-			{"Numpad 9", VK_NUMPAD9}, {"Numpad *", VK_MULTIPLY}, {"Numpad +", VK_ADD}, 
-			{"Numpad -", VK_SUBTRACT}, {"Numpad .", VK_DECIMAL}, {"Numpad /", VK_DIVIDE},
+			{"Numpad 9", VK_NUMPAD9}, {"Numpad Asterisk", VK_MULTIPLY}, {"Numpad Plus", VK_ADD}, 
+			{"Numpad Minus", VK_SUBTRACT}, {"Numpad Period", VK_DECIMAL}, {"Numpad Slash", VK_DIVIDE},
 
 			// Typo-Graphics and Punctuation Symbols
 			{",", VK_OEM_COMMA}, {".", VK_OEM_PERIOD},
