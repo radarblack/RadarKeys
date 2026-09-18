@@ -89,6 +89,18 @@ namespace RadarKeys {
 			return keys;
 		}
 
+		const std::vector<USHORT>& PlaystationVKeys() {
+			static const std::vector<USHORT> keys = {
+				VK_PS_CROSS, VK_PS_CIRCLE, VK_PS_SQUARE, VK_PS_TRIANGLE,
+				VK_PS_L1, VK_PS_R1, VK_PS_L2, VK_PS_R2,
+				VK_PS_SHARE, VK_PS_OPTIONS, VK_PS_L3, VK_PS_R3,
+				VK_PS_DPAD_UP, VK_PS_DPAD_DOWN, VK_PS_DPAD_LEFT, VK_PS_DPAD_RIGHT,
+				VK_PS_LS_UP, VK_PS_LS_DOWN, VK_PS_LS_LEFT, VK_PS_LS_RIGHT,
+				VK_PS_RS_UP, VK_PS_RS_DOWN, VK_PS_RS_LEFT, VK_PS_RS_RIGHT,
+			};
+			return keys;
+		}
+
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
 
 		typedef DWORD(WINAPI* XInputGetStateFunc)(DWORD, XINPUT_STATE*);
@@ -273,6 +285,19 @@ namespace RadarKeys {
 
 			g_anyGamepadConnected = anyConnected;
 			g_xinputGamepadConnected = xinputConnected;
+		}
+
+		void PollPlaystation() {
+			for (USHORT psKey : PlaystationVKeys()) {
+				bool isDown = DirectInputHook::IsPlaystationControlHeld(psKey);
+				bool wasDown = realStateHeld[psKey];
+				if (isDown == wasDown) {
+					continue;
+				}
+				realStateHeld[psKey] = isDown;
+				currFlags[psKey] = isDown ? RI_KEY_MAKE : RI_KEY_BREAK;
+				DoActions(psKey, isDown ? BUTTONEVENT::ONDOWN : BUTTONEVENT::ONUP);
+			}
 		}
 
 		bool IsAnyGamepadConnected() {
