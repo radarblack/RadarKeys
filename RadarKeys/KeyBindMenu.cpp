@@ -38,6 +38,8 @@ namespace RadarKeys {
 		bool ManualComboOverlapsSingle(const std::vector<USHORT>& comboKeys, unsigned comboMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = "");
 
 		static float capturedHoldSeconds = 0.0f;
+		static std::unordered_set<USHORT> prevHeldPadKeysCapture;
+		static bool padCaptureEdgePrimed = false;
 		static bool capturedInstantMode = false;
 		static int capturedInstantTriggerType = 0;
 		static bool isAssigningMenuToggleKey = false; 
@@ -327,7 +329,7 @@ namespace RadarKeys {
 		}
 
 		void LogCleanShutdown() {
-			std::lock_guard<std::recursive_mutex> lock(activityLogMutex); // H4
+			std::lock_guard<std::recursive_mutex> lock(activityLogMutex);
 			EnsureActivityLogReady();
 			AppendActivityLogLine("[STATE] CLEAN_EXIT\n");
 			FlushActivityLog();
@@ -405,7 +407,7 @@ namespace RadarKeys {
 			{"LS Right", VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT}, {"RS Right", VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT},
 			{"LS Click", VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON}, {"RS Click", VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON},
 			{"PS Cross", VK_GAMEPAD_A}, {"PS Circle", VK_GAMEPAD_B},
-			{"PS Triangle", VK_GAMEPAD_X}, {"PS Square", VK_GAMEPAD_Y},
+			{"PS Triangle", VK_GAMEPAD_Y}, {"PS Square", VK_GAMEPAD_X},
 			{"PS L1", VK_GAMEPAD_LEFT_SHOULDER}, {"PS R1", VK_GAMEPAD_RIGHT_SHOULDER},
 			{"PS L2", VK_GAMEPAD_LEFT_TRIGGER}, {"PS R2", VK_GAMEPAD_RIGHT_TRIGGER},
 			{"PS Share", VK_GAMEPAD_VIEW}, {"PS Options", VK_GAMEPAD_MENU},
@@ -413,10 +415,26 @@ namespace RadarKeys {
 		};
 		const int vkNameTableCount = sizeof(vkNameTable) / sizeof(vkNameTable[0]);
 
+		static bool IsGamepadVKeyValue(USHORT vKey) {
+			return vKey >= VK_GAMEPAD_A && vKey <= VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT;
+		}
+
 		std::string NameForVKey(USHORT vKey) {
+			const bool isGamepad = IsGamepadVKeyValue(vKey);
+			const bool preferPlaystation = isGamepad && DirectInputHook::HasPlaystationDevice();
+			std::string fallback;
+			bool haveFallback = false;
 			for (const auto& entry : vkNameTable) {
-				if (entry.vKey == vKey) return entry.name;
+				if (entry.vKey != vKey) continue;
+				if (!isGamepad) return entry.name;
+				const bool isPlaystationName = std::strncmp(entry.name, "PS ", 3) == 0;
+				if (isPlaystationName == preferPlaystation) return entry.name;
+				if (!haveFallback) {
+					fallback = entry.name;
+					haveFallback = true;
+				}
 			}
+			if (haveFallback) return fallback;
 			return "Unknown(" + std::to_string(vKey) + ")";
 		}
 
@@ -443,7 +461,7 @@ namespace RadarKeys {
 			while (std::getline(ss, part, '+')) {
 				while (!part.empty() && std::isspace((unsigned char)part.front())) part.erase(part.begin());
 				while (!part.empty() && std::isspace((unsigned char)part.back())) part.pop_back();
-				if (part.size() == 1 && part[0] == kNumpadPlusGuard) part = "Numpad +"; // M1: restore
+				if (part.size() == 1 && part[0] == kNumpadPlusGuard) part = "Numpad +";
 				int vKey = VKeyForName(part);
 				if (vKey < 0) {
 					result.clear();
@@ -957,6 +975,13 @@ namespace RadarKeys {
 		}
 
 		void Update() {
+			static bool capturePromptWasActive = false;
+			if (capturePromptWasActive && !showCapturePrompt) {
+				padCaptureEdgePrimed = false;
+				prevHeldPadKeysCapture.clear();
+			}
+			capturePromptWasActive = showCapturePrompt;
+
 			static bool lastGamepadConnected = false;
 			bool nowGamepadConnected = RawInput::IsAnyGamepadConnected();
 			if (nowGamepadConnected != lastGamepadConnected) {
@@ -1934,17 +1959,25 @@ namespace RadarKeys {
 							if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
 							if (ImGui::IsKeyPressed((ImGuiKey)i)) { pressedKey = (USHORT)i; break; }
 						} 
-							if (pressedKey == 0) {
-								static std::unordered_set<USHORT> prevHeldPadKeys;
-								std::unordered_set<USHORT> nowHeldPadKeys;
+						if (pressedKey == 0) {
+							if (!padCaptureEdgePrimed) {
+								prevHeldPadKeysCapture.clear();
 								for (USHORT gpKey : RawInput::GamepadVKeys()) {
 									if (RawInput::IsKeyHeldReal(gpKey)) {
-										nowHeldPadKeys.insert(gpKey);
-										if (prevHeldPadKeys.count(gpKey) == 0) { pressedKey = gpKey; break; }
+										prevHeldPadKeysCapture.insert(gpKey);
 									}
 								}
-								prevHeldPadKeys = nowHeldPadKeys;
+								padCaptureEdgePrimed = true;
 							}
+							std::unordered_set<USHORT> nowHeldPadKeys;
+							for (USHORT gpKey : RawInput::GamepadVKeys()) {
+								if (RawInput::IsKeyHeldReal(gpKey)) {
+									nowHeldPadKeys.insert(gpKey);
+									if (prevHeldPadKeysCapture.count(gpKey) == 0) { pressedKey = gpKey; break; }
+								}
+							}
+							prevHeldPadKeysCapture = nowHeldPadKeys;
+						}
 					}
 					if (pressedKey != 0) {
 						singleHoldKey = pressedKey;
@@ -2537,7 +2570,7 @@ namespace RadarKeys {
 		}
 
 		// draws the ui
-		void CopyPrefillTruncWarn(char* dst, size_t dstSize, const std::string& src, const char* what) { // L8
+		void CopyPrefillTruncWarn(char* dst, size_t dstSize, const std::string& src, const char* what) {
 			if (src.size() >= dstSize) LogActivity(std::string("Edit prefill truncated: ") + what + " exceeds its buffer", false);
 			snprintf(dst, dstSize, "%s", src.c_str());
 		}
@@ -2941,11 +2974,11 @@ namespace RadarKeys {
 							capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 							capturedHasFuncOff = !bindings[i].functionOff.empty();
 
-							CopyPrefillTruncWarn(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), bindings[i].scriptPathOn, "script path (on)"); // L8
-							CopyPrefillTruncWarn(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), bindings[i].scriptPathOff, "script path (off)"); // L8
-							CopyPrefillTruncWarn(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), bindings[i].functionOn, "function (on)"); // L8
-							CopyPrefillTruncWarn(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), bindings[i].functionOff, "function (off)"); // L8
-							CopyPrefillTruncWarn(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), bindings[i].functionTap, "function (tap)"); // L8
+							CopyPrefillTruncWarn(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), bindings[i].scriptPathOn, "script path (on)");
+							CopyPrefillTruncWarn(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), bindings[i].scriptPathOff, "script path (off)");
+							CopyPrefillTruncWarn(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), bindings[i].functionOn, "function (on)");
+							CopyPrefillTruncWarn(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), bindings[i].functionOff, "function (off)");
+							CopyPrefillTruncWarn(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), bindings[i].functionTap, "function (tap)");
 
 							if (bindings[i].isToggle) {
 								capturedToggleType = (bindings[i].scriptPathOn == bindings[i].scriptPathOff) ? 0 : 1;
@@ -2953,7 +2986,7 @@ namespace RadarKeys {
 								capturedToggleType = 0;
 							}
 
-							isAssigningMenuToggleKey = false; isAssigningModKey = false; showCapturePrompt = true; // M14: exactly one mode
+							isAssigningMenuToggleKey = false; isAssigningModKey = false; showCapturePrompt = true;
 							requestCaptureFocus = true;
 							LogActivity("Key Assignment Edit Prompt opened " + itemLabel);
 						}
