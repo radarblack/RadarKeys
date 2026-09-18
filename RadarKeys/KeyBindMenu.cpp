@@ -186,7 +186,7 @@ namespace RadarKeys {
 			try {
 				EnsureBindsDirectory();
 				auto sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-					GetDebugLogFileName(), 1024 * 1024, 3);
+					GetDebugLogFileName(), 1024 * 1024, 3, true);
 				auto logger = std::make_shared<spdlog::logger>("radarkeys", sink);
 				logger->set_level(spdlog::level::debug);
 				logger->flush_on(spdlog::level::warn);
@@ -1006,6 +1006,8 @@ namespace RadarKeys {
 		}
 
 		void Update() {
+			RawInput::PollPlaystation();
+
 			static bool capturePromptWasActive = false;
 			if (capturePromptWasActive && !showCapturePrompt) {
 				padCaptureEdgePrimed = false;
