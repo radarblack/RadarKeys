@@ -10,6 +10,9 @@
 #define INITGUID
 #include <initguid.h>
 #include <dinput.h>
+#ifndef DIDFT_OPTIONAL
+#define DIDFT_OPTIONAL 0x80000000
+#endif
 #include <cstddef>
 #include <cstring>
 #include <cstdint>
