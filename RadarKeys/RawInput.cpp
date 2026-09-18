@@ -288,6 +288,7 @@ namespace RadarKeys {
 		}
 
 		void PollPlaystation() {
+			DirectInputHook::Poll(nullptr);
 			for (USHORT psKey : PlaystationVKeys()) {
 				bool isDown = DirectInputHook::IsPlaystationControlHeld(psKey);
 				bool wasDown = realStateHeld[psKey];
