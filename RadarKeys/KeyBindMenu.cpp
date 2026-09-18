@@ -40,6 +40,8 @@ namespace RadarKeys {
 		static float capturedHoldSeconds = 0.0f;
 		static std::unordered_set<USHORT> prevHeldPadKeysCapture;
 		static bool padCaptureEdgePrimed = false;
+		static std::unordered_set<USHORT> prevHeldPsKeysCapture;
+		static bool psCaptureEdgePrimed = false;
 		static bool capturedInstantMode = false;
 		static int capturedInstantTriggerType = 0;
 		static bool isAssigningMenuToggleKey = false; 
@@ -412,18 +414,18 @@ namespace RadarKeys {
 		const int xboxVkNameTableCount = sizeof(xboxVkNameTable) / sizeof(xboxVkNameTable[0]);
 
 		const VkNameEntry psVkNameTable[] = {
-			{"PS Cross", VK_GAMEPAD_A}, {"PS Circle", VK_GAMEPAD_B},
-			{"PS Square", VK_GAMEPAD_X}, {"PS Triangle", VK_GAMEPAD_Y},
-			{"PS L1", VK_GAMEPAD_LEFT_SHOULDER}, {"PS R1", VK_GAMEPAD_RIGHT_SHOULDER},
-			{"PS L2", VK_GAMEPAD_LEFT_TRIGGER}, {"PS R2", VK_GAMEPAD_RIGHT_TRIGGER},
-			{"PS Share", VK_GAMEPAD_VIEW}, {"PS Options", VK_GAMEPAD_MENU},
-			{"PS D-Pad Up", VK_GAMEPAD_DPAD_UP}, {"PS D-Pad Down", VK_GAMEPAD_DPAD_DOWN},
-			{"PS D-Pad Left", VK_GAMEPAD_DPAD_LEFT}, {"PS D-Pad Right", VK_GAMEPAD_DPAD_RIGHT},
-			{"PS LS Up", VK_GAMEPAD_LEFT_THUMBSTICK_UP}, {"PS RS Up", VK_GAMEPAD_RIGHT_THUMBSTICK_UP},
-			{"PS LS Down", VK_GAMEPAD_LEFT_THUMBSTICK_DOWN}, {"PS RS Down", VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN},
-			{"PS LS Left", VK_GAMEPAD_LEFT_THUMBSTICK_LEFT}, {"PS RS Left", VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT},
-			{"PS LS Right", VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT}, {"PS RS Right", VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT},
-			{"PS L3", VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON}, {"PS R3", VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON}
+			{"PS Cross", RawInput::VK_PS_CROSS}, {"PS Circle", RawInput::VK_PS_CIRCLE},
+			{"PS Square", RawInput::VK_PS_SQUARE}, {"PS Triangle", RawInput::VK_PS_TRIANGLE},
+			{"PS L1", RawInput::VK_PS_L1}, {"PS R1", RawInput::VK_PS_R1},
+			{"PS L2", RawInput::VK_PS_L2}, {"PS R2", RawInput::VK_PS_R2},
+			{"PS Share", RawInput::VK_PS_SHARE}, {"PS Options", RawInput::VK_PS_OPTIONS},
+			{"PS D-Pad Up", RawInput::VK_PS_DPAD_UP}, {"PS D-Pad Down", RawInput::VK_PS_DPAD_DOWN},
+			{"PS D-Pad Left", RawInput::VK_PS_DPAD_LEFT}, {"PS D-Pad Right", RawInput::VK_PS_DPAD_RIGHT},
+			{"PS LS Up", RawInput::VK_PS_LS_UP}, {"PS RS Up", RawInput::VK_PS_RS_UP},
+			{"PS LS Down", RawInput::VK_PS_LS_DOWN}, {"PS RS Down", RawInput::VK_PS_RS_DOWN},
+			{"PS LS Left", RawInput::VK_PS_LS_LEFT}, {"PS RS Left", RawInput::VK_PS_RS_LEFT},
+			{"PS LS Right", RawInput::VK_PS_LS_RIGHT}, {"PS RS Right", RawInput::VK_PS_RS_RIGHT},
+			{"PS L3", RawInput::VK_PS_L3}, {"PS R3", RawInput::VK_PS_R3}
 		};
 		const int psVkNameTableCount = sizeof(psVkNameTable) / sizeof(psVkNameTable[0]);
 
@@ -431,25 +433,20 @@ namespace RadarKeys {
 			return vKey >= VK_GAMEPAD_A && vKey <= VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT;
 		}
 
-		bool IsCaptureKeyHeld(USHORT vKey) {
-			if (RawInput::IsKeyHeldReal(vKey)) {
-				return true;
-			}
-			return IsGamepadVKeyValue(vKey) && DirectInputHook::IsPlaystationKeyHeld(vKey);
+		static bool IsPlaystationVKeyValue(USHORT vKey) {
+			return vKey >= RawInput::VK_PS_CROSS && vKey <= RawInput::VK_PS_RS_RIGHT;
 		}
 
 		std::string NameForVKey(USHORT vKey) {
 			if (IsGamepadVKeyValue(vKey)) {
-				const bool preferPlaystation = DirectInputHook::HasPlaystationDevice();
-				const VkNameEntry* firstTable = preferPlaystation ? psVkNameTable : xboxVkNameTable;
-				const int firstCount = preferPlaystation ? psVkNameTableCount : xboxVkNameTableCount;
-				const VkNameEntry* secondTable = preferPlaystation ? xboxVkNameTable : psVkNameTable;
-				const int secondCount = preferPlaystation ? xboxVkNameTableCount : psVkNameTableCount;
-				for (int i = 0; i < firstCount; i++) {
-					if (firstTable[i].vKey == vKey) return firstTable[i].name;
+				for (const auto& entry : xboxVkNameTable) {
+					if (entry.vKey == vKey) return entry.name;
 				}
-				for (int i = 0; i < secondCount; i++) {
-					if (secondTable[i].vKey == vKey) return secondTable[i].name;
+				return "Unknown(" + std::to_string(vKey) + ")";
+			}
+			if (IsPlaystationVKeyValue(vKey)) {
+				for (const auto& entry : psVkNameTable) {
+					if (entry.vKey == vKey) return entry.name;
 				}
 				return "Unknown(" + std::to_string(vKey) + ")";
 			}
@@ -1013,6 +1010,8 @@ namespace RadarKeys {
 			if (capturePromptWasActive && !showCapturePrompt) {
 				padCaptureEdgePrimed = false;
 				prevHeldPadKeysCapture.clear();
+				psCaptureEdgePrimed = false;
+				prevHeldPsKeysCapture.clear();
 			}
 			capturePromptWasActive = showCapturePrompt;
 
@@ -1742,26 +1741,25 @@ namespace RadarKeys {
 			for (int i = 0; i < vkNameTableCount; i++) {
 				USHORT vk = vkNameTable[i].vKey;
 				if (vk >= RawInput::kMaxVKey || seen[vk]) continue;
-				if (IsCaptureKeyHeld(vk)) {
+				if (RawInput::IsKeyHeldReal(vk)) {
 					seen[vk] = true;
 					held.push_back(vk);
 				}
 			}
-			const bool preferPlaystation = DirectInputHook::HasPlaystationDevice();
-			const VkNameEntry* firstTable = preferPlaystation ? psVkNameTable : xboxVkNameTable;
-			const int firstCount = preferPlaystation ? psVkNameTableCount : xboxVkNameTableCount;
-			const VkNameEntry* secondTable = preferPlaystation ? xboxVkNameTable : psVkNameTable;
-			const int secondCount = preferPlaystation ? xboxVkNameTableCount : psVkNameTableCount;
-			for (int pass = 0; pass < 2; pass++) {
-				const VkNameEntry* table = (pass == 0) ? firstTable : secondTable;
-				const int count = (pass == 0) ? firstCount : secondCount;
-				for (int i = 0; i < count; i++) {
-					USHORT vk = table[i].vKey;
-					if (vk >= RawInput::kMaxVKey || seen[vk]) continue;
-					if (IsCaptureKeyHeld(vk)) {
-						seen[vk] = true;
-						held.push_back(vk);
-					}
+			for (int i = 0; i < xboxVkNameTableCount; i++) {
+				USHORT vk = xboxVkNameTable[i].vKey;
+				if (vk >= RawInput::kMaxVKey || seen[vk]) continue;
+				if (RawInput::IsKeyHeldReal(vk)) {
+					seen[vk] = true;
+					held.push_back(vk);
+				}
+			}
+			for (int i = 0; i < psVkNameTableCount; i++) {
+				USHORT vk = psVkNameTable[i].vKey;
+				if (vk >= RawInput::kMaxVKey || seen[vk]) continue;
+				if (RawInput::IsKeyHeldReal(vk)) {
+					seen[vk] = true;
+					held.push_back(vk);
 				}
 			}
 			return held;
@@ -1782,7 +1780,7 @@ namespace RadarKeys {
 			}
 
 			for (USHORT k : comboHoldKeys) {
-				if (!IsCaptureKeyHeld(k)) {
+				if (!RawInput::IsKeyHeldReal(k)) {
 					if (currentlyHeld.size() >= 2 && currentlyHeld.size() <= 3) {
 						comboHoldKeys = currentlyHeld;
 						comboHoldStartTime = std::chrono::steady_clock::now();
@@ -2011,10 +2009,29 @@ namespace RadarKeys {
 							if (ImGui::IsKeyPressed((ImGuiKey)i)) { pressedKey = (USHORT)i; break; }
 						} 
 						if (pressedKey == 0) {
+							if (!psCaptureEdgePrimed) {
+								prevHeldPsKeysCapture.clear();
+								for (USHORT psKey : RawInput::PlaystationVKeys()) {
+									if (RawInput::IsKeyHeldReal(psKey)) {
+										prevHeldPsKeysCapture.insert(psKey);
+									}
+								}
+								psCaptureEdgePrimed = true;
+							}
+							std::unordered_set<USHORT> nowHeldPsKeys;
+							for (USHORT psKey : RawInput::PlaystationVKeys()) {
+								if (RawInput::IsKeyHeldReal(psKey)) {
+									nowHeldPsKeys.insert(psKey);
+									if (prevHeldPsKeysCapture.count(psKey) == 0) { pressedKey = psKey; break; }
+								}
+							}
+							prevHeldPsKeysCapture = nowHeldPsKeys;
+						}
+						if (pressedKey == 0) {
 							if (!padCaptureEdgePrimed) {
 								prevHeldPadKeysCapture.clear();
 								for (USHORT gpKey : RawInput::GamepadVKeys()) {
-									if (IsCaptureKeyHeld(gpKey)) {
+									if (RawInput::IsKeyHeldReal(gpKey)) {
 										prevHeldPadKeysCapture.insert(gpKey);
 									}
 								}
@@ -2022,7 +2039,7 @@ namespace RadarKeys {
 							}
 							std::unordered_set<USHORT> nowHeldPadKeys;
 							for (USHORT gpKey : RawInput::GamepadVKeys()) {
-								if (IsCaptureKeyHeld(gpKey)) {
+								if (RawInput::IsKeyHeldReal(gpKey)) {
 									nowHeldPadKeys.insert(gpKey);
 									if (prevHeldPadKeysCapture.count(gpKey) == 0) { pressedKey = gpKey; break; }
 								}
@@ -2041,7 +2058,7 @@ namespace RadarKeys {
 				}
 
 				if (singleHoldActive) {
-					if (!IsCaptureKeyHeld(singleHoldKey)) {
+					if (!RawInput::IsKeyHeldReal(singleHoldKey)) {
 						singleHoldActive = false;
 						singleHoldKey = 0;
 						LogActivity("Single-key capture cancelled - key was released before the hold completed");
