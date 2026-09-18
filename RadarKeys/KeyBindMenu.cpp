@@ -442,15 +442,18 @@ namespace RadarKeys {
 				for (const auto& entry : xboxVkNameTable) {
 					if (entry.vKey == vKey) return entry.name;
 				}
-				return "Unknown(" + std::to_string(vKey) + ")";
-			}
-			if (IsPlaystationVKeyValue(vKey)) {
+			} else if (IsPlaystationVKeyValue(vKey)) {
 				for (const auto& entry : psVkNameTable) {
 					if (entry.vKey == vKey) return entry.name;
 				}
-				return "Unknown(" + std::to_string(vKey) + ")";
 			}
 			for (const auto& entry : vkNameTable) {
+				if (entry.vKey == vKey) return entry.name;
+			}
+			for (const auto& entry : xboxVkNameTable) {
+				if (entry.vKey == vKey) return entry.name;
+			}
+			for (const auto& entry : psVkNameTable) {
 				if (entry.vKey == vKey) return entry.name;
 			}
 			return "Unknown(" + std::to_string(vKey) + ")";
@@ -2075,6 +2078,8 @@ namespace RadarKeys {
 								capturedInstantTriggerType = 0;
 							}
 							LogActivity("Single key captured: " + NameForVKey(capturedVKey));
+							spdlog::info("KeyBindMenu: captured single key vKey={} name=\"{}\" ctrl={} shift={} alt={}",
+								capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt);
 						}
 					}
 				}
