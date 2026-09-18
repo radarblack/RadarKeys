@@ -327,7 +327,7 @@ namespace RadarKeys {
 		}
 
 		void LogCleanShutdown() {
-			std::lock_guard<std::recursive_mutex> lock(activityLogMutex);
+			std::lock_guard<std::recursive_mutex> lock(activityLogMutex); // H4
 			EnsureActivityLogReady();
 			AppendActivityLogLine("[STATE] CLEAN_EXIT\n");
 			FlushActivityLog();
@@ -2941,11 +2941,11 @@ namespace RadarKeys {
 							capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 							capturedHasFuncOff = !bindings[i].functionOff.empty();
 
-							CopyPrefillTruncWarn(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), bindings[i].scriptPathOn, "script path (on)");
-							CopyPrefillTruncWarn(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), bindings[i].scriptPathOff, "script path (off)");
-							CopyPrefillTruncWarn(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), bindings[i].functionOn, "function (on)");
-							CopyPrefillTruncWarn(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), bindings[i].functionOff, "function (off)");
-							CopyPrefillTruncWarn(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), bindings[i].functionTap, "function (tap)");
+							CopyPrefillTruncWarn(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), bindings[i].scriptPathOn, "script path (on)"); // L8
+							CopyPrefillTruncWarn(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), bindings[i].scriptPathOff, "script path (off)"); // L8
+							CopyPrefillTruncWarn(capturedFuncOnBuffer, sizeof(capturedFuncOnBuffer), bindings[i].functionOn, "function (on)"); // L8
+							CopyPrefillTruncWarn(capturedFuncOffBuffer, sizeof(capturedFuncOffBuffer), bindings[i].functionOff, "function (off)"); // L8
+							CopyPrefillTruncWarn(capturedFuncTapBuffer, sizeof(capturedFuncTapBuffer), bindings[i].functionTap, "function (tap)"); // L8
 
 							if (bindings[i].isToggle) {
 								capturedToggleType = (bindings[i].scriptPathOn == bindings[i].scriptPathOff) ? 0 : 1;
@@ -2953,7 +2953,7 @@ namespace RadarKeys {
 								capturedToggleType = 0;
 							}
 
-							isAssigningMenuToggleKey = false; isAssigningModKey = false; showCapturePrompt = true;
+							isAssigningMenuToggleKey = false; isAssigningModKey = false; showCapturePrompt = true; // M14: exactly one mode
 							requestCaptureFocus = true;
 							LogActivity("Key Assignment Edit Prompt opened " + itemLabel);
 						}
