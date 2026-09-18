@@ -58,6 +58,7 @@ namespace RadarKeys {
 			clock::time_point repeatStart{};
 			std::vector<KeyDescription> descriptions;
 			RawInput::ActionHandle actionHandle = 0;
+			clock::time_point lastTrackedUse{};
 		};
 
 		KeyPollState states[RawInput::kMaxVKey];
@@ -180,6 +181,7 @@ namespace RadarKeys {
 				return;
 			}
 			KeyPollState& s = states[vKey];
+			s.lastTrackedUse = clock::now();
 			if (s.registered) {
 				return;
 			}
@@ -209,6 +211,9 @@ namespace RadarKeys {
 			}
 			if (s.isPressed || s.downEdgePending > 0 || s.upEdgePending > 0 ||
 				s.physicalDownEdgePending > 0 || s.physicalUpEdgePending > 0) {
+				return;
+			}
+			if (std::chrono::duration<double>(clock::now() - s.lastTrackedUse).count() < kDescriptionStaleSeconds) {
 				return;
 			}
 			RawInput::UnRegisterAction(vKey, s.actionHandle);
