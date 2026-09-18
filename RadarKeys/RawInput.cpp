@@ -423,6 +423,9 @@ namespace RadarKeys {
 		}
 
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
+			if (vKey >= vKeyMax) {
+				return;
+			}
 			std::vector<ButtonAction> snapshot;
 			{
 				std::lock_guard<std::recursive_mutex> lock(g_actionMutex);
