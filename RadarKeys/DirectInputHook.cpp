@@ -5,7 +5,10 @@
 #include "spdlog/spdlog.h"
 
 #define DI8SDK
+#define INITGUID
+#include <initguid.h>
 #include <dinput.h>
+#include <cstddef>
 #include <cstring>
 #include <cstdint>
 #include <mutex>
@@ -708,6 +711,228 @@ namespace RadarKeys {
 			}
 
 			spdlog::info("DirectInputHook: hooked DirectInput8Create in the loaded dinput8.dll (chains through any proxy such as IHHook's)");
+		}
+
+		static IDirectInput8* g_ownDI8 = nullptr;
+		static std::vector<std::pair<GUID, IDirectInputDevice8*>> g_ownedDevices;
+		static ULONGLONG g_lastEnumTick = 0;
+
+		static const DIOBJECTDATAFORMAT kJoystickObjectFormat[] = {
+			{ nullptr, offsetof(DIJOYSTATE, lX),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, lY),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, lZ),  DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, lRx), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, lRy), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, lRz), DIDFT_AXIS   | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rglSlider[0]), DIDFT_AXIS | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rglSlider[1]), DIDFT_AXIS | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgdwPOV[0]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgdwPOV[1]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgdwPOV[2]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgdwPOV[3]), DIDFT_POV | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[0]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[1]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[2]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[3]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[4]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[5]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[6]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[7]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[8]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[9]),  DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[10]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[11]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[12]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[13]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[14]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[15]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[16]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[17]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[18]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[19]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[20]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[21]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[22]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[23]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[24]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[25]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[26]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[27]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[28]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[29]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[30]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+			{ nullptr, offsetof(DIJOYSTATE, rgbButtons[31]), DIDFT_BUTTON | DIDFT_ANYINSTANCE, 0 },
+		};
+
+		static const DIDATAFORMAT kJoystickFormat = {
+			sizeof(DIDATAFORMAT),
+			sizeof(DIOBJECTDATAFORMAT),
+			DIDF_ABSAXIS,
+			sizeof(DIJOYSTATE),
+			sizeof(kJoystickObjectFormat) / sizeof(kJoystickObjectFormat[0]),
+			const_cast<DIOBJECTDATAFORMAT*>(kJoystickObjectFormat)
+		};
+
+		static void ClassifyOwnedDevice(IDirectInputDevice8* device, DeviceInfo& info) {
+			DIDEVCAPS caps{};
+			caps.dwSize = sizeof(DIDEVCAPS);
+			if (SUCCEEDED(device->GetCapabilities(&caps))) {
+				switch (caps.dwDevType & 0xFF) {
+				case DI8DEVTYPE_KEYBOARD: info.kind = DeviceKind::Keyboard; break;
+				case DI8DEVTYPE_MOUSE:    info.kind = DeviceKind::Mouse; break;
+				default:                  info.kind = DeviceKind::Joystick; break;
+				}
+				info.kindFromCapabilities = true;
+			} else {
+				info.kind = DeviceKind::Joystick;
+			}
+
+			DIDEVICEINSTANCE diInfo{};
+			diInfo.dwSize = sizeof(DIDEVICEINSTANCE);
+			if (FAILED(device->GetDeviceInfo(&diInfo))) {
+				info.productQueried = true;
+				return;
+			}
+			info.productQueried = true;
+
+			auto toNarrow = [](const wchar_t* w) -> std::string {
+				std::string s;
+				while (*w) { s.push_back(static_cast<char>(*w)); ++w; }
+				return s;
+			};
+			auto toUpperAscii = [](wchar_t c) -> wchar_t {
+				return (c >= L'a' && c <= L'z') ? static_cast<wchar_t>(c - (L'a' - L'A')) : c;
+			};
+			wchar_t upperProduct[MAX_PATH] = L"";
+			for (size_t i = 0; i < MAX_PATH - 1 && diInfo.tszProductName[i] != L'\0'; ++i) {
+				upperProduct[i] = toUpperAscii(diInfo.tszProductName[i]);
+			}
+
+			const bool nameMatch =
+				wcsstr(upperProduct, L"DUALSHOCK") != nullptr ||
+				wcsstr(upperProduct, L"DUALSENSE") != nullptr ||
+				wcsstr(upperProduct, L"PLAYSTATION") != nullptr;
+			const WORD vendorId = static_cast<WORD>(diInfo.guidProduct.Data1 & 0xFFFF);
+			const WORD productId = static_cast<WORD>((diInfo.guidProduct.Data1 >> 16) & 0xFFFF);
+			const bool vidMatch = (vendorId == 0x054C);
+
+			info.isPlaystation = nameMatch || vidMatch;
+			spdlog::info("DirectInputHook: self-opened device {:p} PlayStation button mapping {} (product:\"{}\", vid:{:04X}, pid:{:04X})",
+				static_cast<void*>(device), info.isPlaystation ? "ENABLED" : "disabled",
+				toNarrow(diInfo.tszProductName), vendorId, productId);
+		}
+
+		static BOOL CALLBACK EnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance, VOID* pContext) {
+			HWND hwnd = *reinterpret_cast<HWND*>(pContext);
+
+			for (const auto& owned : g_ownedDevices) {
+				if (SameGuid(owned.first, pdidInstance->guidInstance)) {
+					return DIENUM_CONTINUE;
+				}
+			}
+
+			IDirectInputDevice8* device = nullptr;
+			if (FAILED(g_ownDI8->CreateDevice(pdidInstance->guidInstance, &device, nullptr)) || !device) {
+				return DIENUM_CONTINUE;
+			}
+			if (FAILED(device->SetDataFormat(&kJoystickFormat))) {
+				device->Release();
+				return DIENUM_CONTINUE;
+			}
+			if (hwnd) {
+				device->SetCooperativeLevel(hwnd, DISCL_BACKGROUND | DISCL_NONEXCLUSIVE);
+			}
+			device->Acquire();
+
+			DeviceInfo info;
+			ClassifyOwnedDevice(device, info);
+			{
+				std::lock_guard<std::mutex> lock(g_mutex);
+				g_deviceInfo[device] = info;
+			}
+			g_ownedDevices.emplace_back(pdidInstance->guidInstance, device);
+			spdlog::info("DirectInputHook: self-opened joystick device {:p} ({})",
+				static_cast<void*>(device), info.isPlaystation ? "PlayStation" : "generic");
+
+			return DIENUM_CONTINUE;
+		}
+
+		static void EnsureOwnDirectInput() {
+			if (g_ownDI8) {
+				return;
+			}
+			HMODULE module = GetModuleHandleW(L"dinput8.dll");
+			if (!module) {
+				module = LoadLibraryW(L"dinput8.dll");
+			}
+			if (!module) {
+				return;
+			}
+			auto create = reinterpret_cast<DirectInput8Create_t>(GetProcAddress(module, "DirectInput8Create"));
+			if (!create) {
+				return;
+			}
+			void* out = nullptr;
+			if (FAILED(create(GetModuleHandleW(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8W, &out, nullptr)) || !out) {
+				return;
+			}
+			g_ownDI8 = static_cast<IDirectInput8*>(out);
+			spdlog::info("DirectInputHook: opened an independent IDirectInput8 instance for self-driven controller polling");
+		}
+
+		void Poll(HWND hwnd) {
+			EnsureOwnDirectInput();
+			if (!g_ownDI8) {
+				return;
+			}
+
+			ULONGLONG now = GetTickCount64();
+			if (now - g_lastEnumTick >= 2000) {
+				g_lastEnumTick = now;
+				HWND ctxHwnd = hwnd;
+				g_ownDI8->EnumDevices(DI8DEVCLASS_GAMECTRL, &EnumJoysticksCallback, &ctxHwnd, DIEDFL_ATTACHEDONLY);
+			}
+
+			for (auto& owned : g_ownedDevices) {
+				IDirectInputDevice8* device = owned.second;
+				device->Poll();
+
+				DIJOYSTATE state{};
+				HRESULT hr = device->GetDeviceState(sizeof(DIJOYSTATE), &state);
+				if (hr == DIERR_INPUTLOST || hr == DIERR_NOTACQUIRED) {
+					if (hwnd) {
+						device->SetCooperativeLevel(hwnd, DISCL_BACKGROUND | DISCL_NONEXCLUSIVE);
+					}
+					device->Acquire();
+					continue;
+				}
+				if (FAILED(hr)) {
+					continue;
+				}
+
+				std::lock_guard<std::mutex> lock(g_mutex);
+				auto it = g_deviceInfo.find(device);
+				if (it == g_deviceInfo.end()) {
+					continue;
+				}
+				DWORD copyBytes = sizeof(state) < sizeof(it->second.realState)
+					? sizeof(state) : (DWORD)sizeof(it->second.realState);
+				std::memcpy(it->second.realState, &state, copyBytes);
+				it->second.realStateSize = copyBytes;
+				it->second.hasRealState = true;
+			}
+		}
+
+		void Shutdown() {
+			for (auto& owned : g_ownedDevices) {
+				owned.second->Unacquire();
+				owned.second->Release();
+			}
+			g_ownedDevices.clear();
+			if (g_ownDI8) {
+				g_ownDI8->Release();
+				g_ownDI8 = nullptr;
+			}
 		}
 	}
 }
