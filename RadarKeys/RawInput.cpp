@@ -8,6 +8,7 @@
 #include <Xinput.h>
 #include <tlhelp32.h>
 #include <cstdlib>
+#include <cstring>
 #include <algorithm>
 #include <utility>
 #include <mutex>
@@ -119,6 +120,159 @@ namespace RadarKeys {
 		static std::unordered_map<void*, ULONGLONG> g_xinputExFailedTargets;
 		static constexpr ULONGLONG kXInputRetryDelayMs = 2000;
 
+		static XInputGetStateFunc g_iatOrigGetState = nullptr;
+		static XInputGetStateFunc g_iatOrigGetStateEx = nullptr;
+		static bool g_iatPatchedGetState = false;
+		static bool g_iatPatchedGetStateEx = false;
+		static void* g_iatThunkGetState = nullptr;
+		static void* g_iatThunkGetStateEx = nullptr;
+		static ULONG_PTR g_iatOriginalGetState = 0;
+		static ULONG_PTR g_iatOriginalGetStateEx = 0;
+
+		static DWORD WINAPI HookedIatXInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
+			DWORD result = g_iatOrigGetState ? g_iatOrigGetState(dwUserIndex, pState) : ERROR_DEVICE_NOT_CONNECTED;
+			if (result == ERROR_SUCCESS && pState && g_gamepadBlockedToGame.load() != false) {
+				ZeroMemory(&pState->Gamepad, sizeof(XINPUT_GAMEPAD));
+			}
+			return result;
+		}
+
+		static DWORD WINAPI HookedIatXInputGetStateEx(DWORD dwUserIndex, XINPUT_STATE* pState) {
+			DWORD result = g_iatOrigGetStateEx ? g_iatOrigGetStateEx(dwUserIndex, pState) : ERROR_DEVICE_NOT_CONNECTED;
+			if (result == ERROR_SUCCESS && pState && g_gamepadBlockedToGame.load() != false) {
+				ZeroMemory(&pState->Gamepad, sizeof(XINPUT_GAMEPAD));
+			}
+			return result;
+		}
+
+		static bool EqualsIgnoreCaseAscii(const char* a, const char* b) {
+			while (*a && *b) {
+				char ca = *a;
+				char cb = *b;
+				if (ca >= 'A' && ca <= 'Z') ca = static_cast<char>(ca - 'A' + 'a');
+				if (cb >= 'A' && cb <= 'Z') cb = static_cast<char>(cb - 'A' + 'a');
+				if (ca != cb) return false;
+				++a;
+				++b;
+			}
+			return *a == '\0' && *b == '\0';
+		}
+
+		static bool PatchXInputIatEntry(HMODULE module, const char* functionName, WORD ordinal, void* replacement,
+			void** savedThunk, ULONG_PTR* savedOriginal) {
+			BYTE* base = reinterpret_cast<BYTE*>(module);
+			IMAGE_DOS_HEADER* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+			if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+				return false;
+			}
+			IMAGE_NT_HEADERS* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+			if (nt->Signature != IMAGE_NT_SIGNATURE) {
+				return false;
+			}
+			IMAGE_DATA_DIRECTORY importDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+			if (importDir.VirtualAddress == 0) {
+				return false;
+			}
+			IMAGE_IMPORT_DESCRIPTOR* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + importDir.VirtualAddress);
+			for (; desc->Name != 0; ++desc) {
+				const char* dllName = reinterpret_cast<const char*>(base + desc->Name);
+				if (!EqualsIgnoreCaseAscii(dllName, "xinput1_3.dll")) {
+					continue;
+				}
+				IMAGE_THUNK_DATA* nameThunks = desc->OriginalFirstThunk != 0
+					? reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->OriginalFirstThunk)
+					: nullptr;
+				IMAGE_THUNK_DATA* iat = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->FirstThunk);
+				for (DWORD i = 0; iat[i].u1.Function != 0; ++i) {
+					bool match = false;
+					if (nameThunks != nullptr) {
+						if ((nameThunks[i].u1.Ordinal & IMAGE_ORDINAL_FLAG64) != 0) {
+							match = ordinal != 0 && IMAGE_ORDINAL64(nameThunks[i].u1.Ordinal) == ordinal;
+						} else {
+							IMAGE_IMPORT_BY_NAME* importName =
+								reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(base + nameThunks[i].u1.AddressOfData);
+							match = functionName != nullptr && std::strcmp(importName->Name, functionName) == 0;
+						}
+					}
+					if (!match) {
+						continue;
+					}
+					void* thunk = &iat[i].u1.Function;
+					if (*savedThunk == thunk) {
+						return true;
+					}
+					DWORD oldProtect = 0;
+					if (!VirtualProtect(thunk, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+						return false;
+					}
+					*savedOriginal = iat[i].u1.Function;
+					*reinterpret_cast<void**>(thunk) = replacement;
+					VirtualProtect(thunk, sizeof(void*), oldProtect, &oldProtect);
+					*savedThunk = thunk;
+					return true;
+				}
+			}
+			return false;
+		}
+
+		static void RestoreXInputIatEntry(void** savedThunk, ULONG_PTR savedOriginal) {
+			DWORD oldProtect = 0;
+			if (VirtualProtect(*savedThunk, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+				*reinterpret_cast<void**>(*savedThunk) = reinterpret_cast<void*>(savedOriginal);
+				VirtualProtect(*savedThunk, sizeof(void*), oldProtect, &oldProtect);
+			}
+			*savedThunk = nullptr;
+		}
+
+		static void EnsureXInput13IatFallback() {
+			HMODULE x13 = GetModuleHandleW(L"xinput1_3.dll");
+			if (!x13) {
+				return;
+			}
+			void* getStateTarget = reinterpret_cast<void*>(GetProcAddress(x13, "XInputGetState"));
+			void* getStateExTarget = reinterpret_cast<void*>(GetProcAddress(x13, reinterpret_cast<LPCSTR>(100)));
+			bool minHookedGetState = getStateTarget != nullptr && g_xinputHookedTargets.count(getStateTarget) != 0;
+			bool minHookedGetStateEx = getStateExTarget != nullptr && g_xinputExHookedTargets.count(getStateExTarget) != 0;
+			if (g_iatPatchedGetState && minHookedGetState && g_iatThunkGetState != nullptr) {
+				RestoreXInputIatEntry(&g_iatThunkGetState, g_iatOriginalGetState);
+				g_iatPatchedGetState = false;
+				spdlog::info("RawInput: xinput1_3 MinHook hook acquired - XInputGetState IAT fallback restored");
+			}
+			if (g_iatPatchedGetStateEx && minHookedGetStateEx && g_iatThunkGetStateEx != nullptr) {
+				RestoreXInputIatEntry(&g_iatThunkGetStateEx, g_iatOriginalGetStateEx);
+				g_iatPatchedGetStateEx = false;
+				spdlog::info("RawInput: xinput1_3 MinHook hook acquired - XInputGetStateEx IAT fallback restored");
+			}
+			if (!g_iatPatchedGetState && !minHookedGetState && getStateTarget != nullptr) {
+				if (!g_iatOrigGetState) {
+					g_iatOrigGetState = reinterpret_cast<XInputGetStateFunc>(getStateTarget);
+				}
+				if (PatchXInputIatEntry(x13, "XInputGetState", 0,
+					reinterpret_cast<void*>(&HookedIatXInputGetState),
+					&g_iatThunkGetState, &g_iatOriginalGetState)) {
+					g_iatPatchedGetState = true;
+					spdlog::info("RawInput: xinput1_3 XInputGetState IAT fallback active (MinHook trampoline unavailable near module)");
+				} else {
+					static bool warnedNoImport = false;
+					if (!warnedNoImport) {
+						warnedNoImport = true;
+						spdlog::warn("RawInput: xinput1_3 XInputGetState import not found in exe IAT - fallback unavailable");
+					}
+				}
+			}
+			if (!g_iatPatchedGetStateEx && !minHookedGetStateEx && getStateExTarget != nullptr) {
+				if (!g_iatOrigGetStateEx) {
+					g_iatOrigGetStateEx = reinterpret_cast<XInputGetStateFunc>(getStateExTarget);
+				}
+				if (PatchXInputIatEntry(x13, "XInputGetStateEx", 100,
+					reinterpret_cast<void*>(&HookedIatXInputGetStateEx),
+					&g_iatThunkGetStateEx, &g_iatOriginalGetStateEx)) {
+					g_iatPatchedGetStateEx = true;
+					spdlog::info("RawInput: xinput1_3 XInputGetStateEx IAT fallback active (MinHook trampoline unavailable near module)");
+				}
+			}
+		}
+
 		template <int N>
 		DWORD WINAPI HookedXInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
 			static std::atomic<unsigned long long> callCount{ 0 };
@@ -215,9 +369,12 @@ namespace RadarKeys {
 					g_xinputModuleCount < kMaxXInputModules) {
 					int slot = g_xinputModuleCount;
 					XInputGetStateFunc* origSlot = &g_origXInputGetState[slot];
-					if (MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
-						reinterpret_cast<LPVOID*>(origSlot)) == MH_OK &&
-						MH_EnableHook(target) == MH_OK) {
+					MH_STATUS hookStatus = MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
+						reinterpret_cast<LPVOID*>(origSlot));
+					if (hookStatus == MH_OK) {
+						hookStatus = MH_EnableHook(target) == MH_OK ? MH_OK : MH_ERROR_ENABLED;
+					}
+					if (hookStatus == MH_OK) {
 						g_xinputHookedTargets.insert(target);
 						g_xinputSlotNames[slot] = moduleNameNarrow;
 						++g_xinputModuleCount;
@@ -226,8 +383,8 @@ namespace RadarKeys {
 					} else {
 						MH_RemoveHook(target);
 						g_xinputFailedTargets[target] = GetTickCount64();
-						spdlog::warn("RawInput: failed to hook XInputGetState in {} (loaded from {}) - will retry",
-							moduleNameNarrow, modulePath);
+						spdlog::warn("RawInput: failed to hook XInputGetState in {} (loaded from {}, status {}) - will retry",
+							moduleNameNarrow, modulePath, MH_StatusToString(hookStatus));
 					}
 				}
 
@@ -249,9 +406,12 @@ namespace RadarKeys {
 					g_xinputExModuleCount < kMaxXInputModules) {
 					int slotEx = g_xinputExModuleCount;
 					XInputGetStateFunc* origSlotEx = &g_origXInputGetStateEx[slotEx];
-					if (MH_CreateHook(targetEx, reinterpret_cast<LPVOID>(g_xinputExDetours[slotEx]),
-						reinterpret_cast<LPVOID*>(origSlotEx)) == MH_OK &&
-						MH_EnableHook(targetEx) == MH_OK) {
+					MH_STATUS hookStatusEx = MH_CreateHook(targetEx, reinterpret_cast<LPVOID>(g_xinputExDetours[slotEx]),
+						reinterpret_cast<LPVOID*>(origSlotEx));
+					if (hookStatusEx == MH_OK) {
+						hookStatusEx = MH_EnableHook(targetEx) == MH_OK ? MH_OK : MH_ERROR_ENABLED;
+					}
+					if (hookStatusEx == MH_OK) {
 						g_xinputExHookedTargets.insert(targetEx);
 						g_xinputExSlotNames[slotEx] = moduleNameNarrow;
 						++g_xinputExModuleCount;
@@ -260,11 +420,13 @@ namespace RadarKeys {
 					} else {
 						MH_RemoveHook(targetEx);
 						g_xinputExFailedTargets[targetEx] = GetTickCount64();
-						spdlog::warn("RawInput: failed to hook XInputGetStateEx in {} (loaded from {}) - will retry",
-							moduleNameNarrow, modulePath);
+						spdlog::warn("RawInput: failed to hook XInputGetStateEx in {} (loaded from {}, status {}) - will retry",
+							moduleNameNarrow, modulePath, MH_StatusToString(hookStatusEx));
 					}
 				}
 			}
+
+			EnsureXInput13IatFallback();
 
 			static bool inputModuleScanDone = false;
 			if (!inputModuleScanDone) {
@@ -855,19 +1017,39 @@ namespace RadarKeys {
 				}
 				else if (pRaw->header.dwType == RIM_TYPEHID) {
 					static std::unordered_set<HANDLE> seenHidDevices;
+					static std::unordered_map<HANDLE, bool> hidIsGamepad;
 					HANDLE hidDevice = pRaw->header.hDevice;
-					if (seenHidDevices.find(hidDevice) == seenHidDevices.end()) {
-						seenHidDevices.insert(hidDevice);
+					bool isGamepadClass = false;
+					auto cachedIsGamepad = hidIsGamepad.find(hidDevice);
+					if (cachedIsGamepad != hidIsGamepad.end()) {
+						isGamepadClass = cachedIsGamepad->second;
+					} else {
 						RID_DEVICE_INFO hidInfo{};
 						hidInfo.cbSize = sizeof(RID_DEVICE_INFO);
 						UINT hidInfoSize = sizeof(RID_DEVICE_INFO);
 						if (GetRawInputDeviceInfoW(hidDevice, RIDI_DEVICEINFO, &hidInfo, &hidInfoSize) != static_cast<UINT>(-1)) {
-							spdlog::info("RawInput: WM_INPUT HID device seen (usagePage={:04X}, usage={:04X}{})",
-								hidInfo.hid.usUsagePage, hidInfo.hid.usUsage,
-								(hidInfo.hid.usUsagePage == 0x01 && (hidInfo.hid.usUsage == 0x04 || hidInfo.hid.usUsage == 0x05))
-								? " GAMEPAD/JOYSTICK" : "");
+							isGamepadClass = hidInfo.hid.usUsagePage == 0x01 &&
+								(hidInfo.hid.usUsage == 0x04 || hidInfo.hid.usUsage == 0x05);
+							if (seenHidDevices.find(hidDevice) == seenHidDevices.end()) {
+								seenHidDevices.insert(hidDevice);
+								spdlog::info("RawInput: WM_INPUT HID device seen (usagePage={:04X}, usage={:04X}{})",
+									hidInfo.hid.usUsagePage, hidInfo.hid.usUsage,
+									isGamepadClass ? " GAMEPAD/JOYSTICK" : "");
+								spdlog::default_logger()->flush();
+							}
+						}
+						hidIsGamepad.emplace(hidDevice, isGamepadClass);
+					}
+					if (isGamepadClass && g_gamepadBlockedToGame.load() != false) {
+						static std::unordered_set<HANDLE> blockedHidLogged;
+						if (blockedHidLogged.find(hidDevice) == blockedHidLogged.end()) {
+							blockedHidLogged.insert(hidDevice);
+							spdlog::info("RawInput: blocking raw-input HID gamepad {:p} to game (suppression active)",
+								static_cast<void*>(hidDevice));
 							spdlog::default_logger()->flush();
 						}
+						delete[] lpb;
+						return false;
 					}
 				}
 
