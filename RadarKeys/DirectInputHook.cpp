@@ -1196,6 +1196,9 @@ namespace RadarKeys {
 			if (r) {
 				LONG low = r->minV;
 				LONG high = r->maxV;
+				if (high - low < 16) {
+					return false;
+				}
 				LONG threshold = (high - low) / 2;
 				if (direction < 0) return value <= low + threshold / 2;
 				return value >= low + threshold + (high - low) / 4;
@@ -1572,6 +1575,39 @@ namespace RadarKeys {
 			return SonyGamepadPresentInSystem();
 		}
 
+		struct OwnedRangeContext {
+			IDirectInputDevice8* device;
+			DeviceInfo* info;
+		};
+
+		static BOOL CALLBACK OwnedRangeCallback(const DIDEVICEOBJECTINSTANCEW* pdidoi, void* pContext) {
+			OwnedRangeContext* ctx = reinterpret_cast<OwnedRangeContext*>(pContext);
+			if (!pdidoi || (pdidoi->dwType & DIDFT_AXIS) == 0 || (pdidoi->dwType & DIDFT_NODATA) != 0) {
+				return DIENUM_CONTINUE;
+			}
+			if ((pdidoi->dwOfs % 4) != 0) {
+				return DIENUM_CONTINUE;
+			}
+			size_t idx = pdidoi->dwOfs / 4;
+			if (idx >= 32) {
+				return DIENUM_CONTINUE;
+			}
+			void** vtbl = *reinterpret_cast<void***>(ctx->device);
+			GetProperty_t getProperty = reinterpret_cast<GetProperty_t>(vtbl[kSlotGetProperty]);
+			if (!getProperty) {
+				return DIENUM_CONTINUE;
+			}
+			DIPROPRANGE range{};
+			range.diph.dwSize = sizeof(DIPROPRANGE);
+			range.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+			range.diph.dwObj = pdidoi->dwOfs;
+			range.diph.dwHow = DIPH_BYOFFSET;
+			if (SUCCEEDED(getProperty(ctx->device, DIPROP_RANGE, &range.diph)) && range.lMax > range.lMin) {
+				ctx->info->perOffset[idx] = AxisRange{ true, range.lMin, range.lMax };
+			}
+			return DIENUM_CONTINUE;
+		}
+
 		static void ClassifyOwnedDevice(IDirectInputDevice8* device, DeviceInfo& info) {
 			DIDEVCAPS caps{};
 			caps.dwSize = sizeof(DIDEVCAPS);
@@ -1629,6 +1665,12 @@ namespace RadarKeys {
 				info.deviceRange.known = true;
 				info.deviceRange.minV = deviceQuery.lMin;
 				info.deviceRange.maxV = deviceQuery.lMax;
+			}
+			void** ownedVtbl = *reinterpret_cast<void***>(device);
+			DiEnumObjects_t enumObjectsOwned = reinterpret_cast<DiEnumObjects_t>(ownedVtbl[kSlotEnumObjects]);
+			if (enumObjectsOwned) {
+				OwnedRangeContext rangeCtx{ device, &info };
+				enumObjectsOwned(device, reinterpret_cast<void*>(&OwnedRangeCallback), &rangeCtx, DIDFT_AXIS);
 			}
 			info.rangeQueried = true;
 
