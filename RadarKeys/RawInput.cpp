@@ -16,7 +16,6 @@
 #include <list>
 #include <array>
 #include <unordered_set>
-#include <unordered_map>
 #include <filesystem>
 
 namespace RadarKeys {
@@ -114,8 +113,9 @@ namespace RadarKeys {
 		static const char* g_xinputSlotNames[kMaxXInputModules] = {};
 		static const char* g_xinputExSlotNames[kMaxXInputModules] = {};
 		static std::unordered_set<void*> g_xinputHookedTargets;
+		static std::unordered_set<void*> g_xinputFailedTargets;
 		static std::unordered_set<void*> g_xinputExHookedTargets;
-		static std::unordered_map<HANDLE, bool> g_hidIsGamepad;
+		static std::unordered_set<void*> g_xinputExFailedTargets;
 
 		template <int N>
 		DWORD WINAPI HookedXInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
@@ -200,12 +200,13 @@ namespace RadarKeys {
 				std::string modulePath = std::filesystem::path(modulePathW).string();
 				void* target = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetState"));
 				if (target && g_xinputHookedTargets.count(target) == 0 &&
+					g_xinputFailedTargets.count(target) == 0 &&
 					g_xinputModuleCount < kMaxXInputModules) {
 					int slot = g_xinputModuleCount;
 					XInputGetStateFunc* origSlot = &g_origXInputGetState[slot];
-					MH_STATUS hs = MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
-						reinterpret_cast<LPVOID*>(origSlot));
-					if (hs == MH_OK && MH_EnableHook(target) == MH_OK) {
+					if (MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
+						reinterpret_cast<LPVOID*>(origSlot)) == MH_OK &&
+						MH_EnableHook(target) == MH_OK) {
 						g_xinputHookedTargets.insert(target);
 						g_xinputSlotNames[slot] = moduleNameNarrow;
 						++g_xinputModuleCount;
@@ -213,8 +214,9 @@ namespace RadarKeys {
 							moduleNameNarrow, modulePath, g_xinputModuleCount);
 					} else {
 						MH_RemoveHook(target);
-						spdlog::info("RawInput: XInputGetState hook deferred in {} (status {}), will retry",
-							moduleNameNarrow, (int)hs);
+						g_xinputFailedTargets.insert(target);
+						spdlog::warn("RawInput: failed to hook XInputGetState in {} (loaded from {})",
+							moduleNameNarrow, modulePath);
 					}
 				}
 
@@ -223,12 +225,13 @@ namespace RadarKeys {
 					targetEx = reinterpret_cast<void*>(GetProcAddress(module, reinterpret_cast<LPCSTR>(100)));
 				}
 				if (targetEx && g_xinputExHookedTargets.count(targetEx) == 0 &&
+					g_xinputExFailedTargets.count(targetEx) == 0 &&
 					g_xinputExModuleCount < kMaxXInputModules) {
 					int slotEx = g_xinputExModuleCount;
 					XInputGetStateFunc* origSlotEx = &g_origXInputGetStateEx[slotEx];
-					MH_STATUS hsEx = MH_CreateHook(targetEx, reinterpret_cast<LPVOID>(g_xinputExDetours[slotEx]),
-						reinterpret_cast<LPVOID*>(origSlotEx));
-					if (hsEx == MH_OK && MH_EnableHook(targetEx) == MH_OK) {
+					if (MH_CreateHook(targetEx, reinterpret_cast<LPVOID>(g_xinputExDetours[slotEx]),
+						reinterpret_cast<LPVOID*>(origSlotEx)) == MH_OK &&
+						MH_EnableHook(targetEx) == MH_OK) {
 						g_xinputExHookedTargets.insert(targetEx);
 						g_xinputExSlotNames[slotEx] = moduleNameNarrow;
 						++g_xinputExModuleCount;
@@ -236,8 +239,9 @@ namespace RadarKeys {
 							moduleNameNarrow, modulePath, g_xinputExModuleCount);
 					} else {
 						MH_RemoveHook(targetEx);
-						spdlog::info("RawInput: XInputGetStateEx hook deferred in {} (status {}), will retry",
-							moduleNameNarrow, (int)hsEx);
+						g_xinputExFailedTargets.insert(targetEx);
+						spdlog::warn("RawInput: failed to hook XInputGetStateEx in {} (loaded from {})",
+							moduleNameNarrow, modulePath);
 					}
 				}
 			}
@@ -830,27 +834,19 @@ namespace RadarKeys {
 					}
 				}
 				else if (pRaw->header.dwType == RIM_TYPEHID) {
+					static std::unordered_set<HANDLE> seenHidDevices;
 					HANDLE hidDevice = pRaw->header.hDevice;
-					auto it = g_hidIsGamepad.find(hidDevice);
-					if (it == g_hidIsGamepad.end()) {
+					if (seenHidDevices.find(hidDevice) == seenHidDevices.end()) {
+						seenHidDevices.insert(hidDevice);
 						RID_DEVICE_INFO hidInfo{};
 						hidInfo.cbSize = sizeof(RID_DEVICE_INFO);
 						UINT hidInfoSize = sizeof(RID_DEVICE_INFO);
-						bool isGamepad = false;
 						if (GetRawInputDeviceInfoW(hidDevice, RIDI_DEVICEINFO, &hidInfo, &hidInfoSize) != static_cast<UINT>(-1)) {
-							isGamepad = (hidInfo.hid.usUsagePage == 0x01 && (hidInfo.hid.usUsage == 0x04 || hidInfo.hid.usUsage == 0x05));
-							spdlog::info("RawInput: WM_INPUT HID device seen (handle 0x%p usagePage={:04X} usage={:04X}{})",
-								hidDevice, hidInfo.hid.usUsagePage, hidInfo.hid.usUsage,
-								isGamepad ? " GAMEPAD/JOYSTICK" : "");
+							spdlog::info("RawInput: WM_INPUT HID device seen (usagePage={:04X}, usage={:04X}{})",
+								hidInfo.hid.usUsagePage, hidInfo.hid.usUsage,
+								(hidInfo.hid.usUsagePage == 0x01 && (hidInfo.hid.usUsage == 0x04 || hidInfo.hid.usUsage == 0x05))
+								? " GAMEPAD/JOYSTICK" : "");
 							spdlog::default_logger()->flush();
-						}
-						g_hidIsGamepad.emplace(hidDevice, isGamepad);
-						it = g_hidIsGamepad.find(hidDevice);
-					}
-					if (it != g_hidIsGamepad.end() && it->second) {
-						if (g_gamepadBlockedToGame.load() != false) {
-							delete[] lpb;
-							return false;
 						}
 					}
 				}
