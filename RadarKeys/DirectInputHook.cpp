@@ -582,8 +582,15 @@ namespace RadarKeys {
 		static std::unordered_map<void*, void*> g_classGetDeviceDataOrigins;
 		static std::atomic<bool> g_classGetDeviceStateHooked{ false };
 		static std::atomic<bool> g_classGetDeviceDataHooked{ false };
-		struct GameDeviceFormat;
 		static std::unordered_map<void*, ULONGLONG> g_lastSuppressedJoystickLog;
+		struct GameDeviceFormat {
+			bool valid = false;
+			bool buildAttempted = false;
+			std::vector<std::pair<DWORD, LONG>> axisNeutrals;
+			std::vector<DWORD> povOfs;
+			std::vector<DWORD> buttonOfs;
+		};
+		static std::unordered_map<void*, GameDeviceFormat> g_gameDeviceFormats;
 		static std::unordered_set<void*> g_classHookTargets;
 
 		static bool IsSelfOpenedDevice(IDirectInputDevice8* self) {
@@ -714,14 +721,6 @@ namespace RadarKeys {
 
 		typedef HRESULT(STDMETHODCALLTYPE* DiEnumObjects_t)(IDirectInputDevice8*, void*, void*, DWORD);
 
-		struct GameDeviceFormat {
-			bool valid = false;
-			bool buildAttempted = false;
-			std::vector<std::pair<DWORD, LONG>> axisNeutrals;
-			std::vector<DWORD> povOfs;
-			std::vector<DWORD> buttonOfs;
-		};
-		static std::unordered_map<void*, GameDeviceFormat> g_gameDeviceFormats;
 
 		struct FormatBuildContext {
 			IDirectInputDevice8* device;
