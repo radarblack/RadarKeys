@@ -17,6 +17,7 @@
 #include <cstring>
 #include <cstdint>
 #include <mutex>
+#include <string>
 #include <atomic>
 #include <unordered_map>
 #include <unordered_set>
@@ -654,7 +655,7 @@ namespace RadarKeys {
 			}
 			if (cbData >= offsetof(DIJOYSTATE, rgdwPOV) + sizeof(DWORD)) {
 				const DWORD* pov = reinterpret_cast<const DWORD*>(bytes + offsetof(DIJOYSTATE, rgdwPOV));
-				if (pov[0] != 0xFFFFFFFF) {
+				if (pov[0] <= 35999) {
 					return true;
 				}
 			}
@@ -684,6 +685,31 @@ namespace RadarKeys {
 			spdlog::default_logger()->flush();
 		}
 
+		static void LogClassDeviceDiag(IDirectInputDevice8* self, DWORD cbData) {
+			static std::unordered_set<void*> diagLogged;
+			std::lock_guard<std::mutex> lock(g_mutex);
+			if (diagLogged.find(self) != diagLogged.end()) {
+				return;
+			}
+			diagLogged.insert(self);
+			void** vtbl = *reinterpret_cast<void***>(self);
+			GetDeviceInfo_t getDeviceInfo = reinterpret_cast<GetDeviceInfo_t>(vtbl[kSlotGetDeviceInfo]);
+			DIDEVICEINSTANCE di{};
+			di.dwSize = sizeof(DIDEVICEINSTANCE);
+			if (getDeviceInfo && SUCCEEDED(getDeviceInfo(self, &di))) {
+				std::string name;
+				for (size_t i = 0; i < MAX_PATH - 1 && di.tszProductName[i] != L'\0'; ++i) {
+					name.push_back(static_cast<char>(di.tszProductName[i]));
+				}
+				spdlog::info("DirectInputHook: game joystick reads intercepted on {:p} (product \"{}\", devtype {:04X}, cbData {})",
+					static_cast<void*>(self), name, static_cast<unsigned>(di.dwDevType & 0xFFFF), cbData);
+			} else {
+				spdlog::info("DirectInputHook: game joystick reads intercepted on {:p} (devinfo unavailable, cbData {})",
+					static_cast<void*>(self), cbData);
+			}
+			spdlog::default_logger()->flush();
+		}
+
 		static HRESULT STDMETHODCALLTYPE HookedClassGetDeviceState(IDirectInputDevice8* self, DWORD cbData, LPVOID lpvData) {
 			void** selfVtbl = *reinterpret_cast<void***>(self);
 			GetDeviceState_t orig = reinterpret_cast<GetDeviceState_t>(g_classGetDeviceStateOrigins[selfVtbl[kSlotGetDeviceState]]);
@@ -691,6 +717,7 @@ namespace RadarKeys {
 			if (g_classGetDeviceStateHooked.load(std::memory_order_acquire) &&
 				SUCCEEDED(hr) && lpvData && cbData != 0 &&
 				RawInput::IsGamepadBlockedToGame() && !IsSelfOpenedDevice(self)) {
+				LogClassDeviceDiag(self, cbData);
 				DeviceInfo info = AcquireGameJoystickInfo(self, lpvData, cbData);
 				if (JoystickStateActive(info, lpvData, cbData)) {
 					LogSuppressedJoystick(self, lpvData, cbData);
@@ -708,6 +735,7 @@ namespace RadarKeys {
 			if (g_classGetDeviceDataHooked.load(std::memory_order_acquire) &&
 				SUCCEEDED(hr) && pdwInOut && rgdod && *pdwInOut != 0 &&
 				RawInput::IsGamepadBlockedToGame() && !IsSelfOpenedDevice(self)) {
+				LogClassDeviceDiag(self, cbObjectData);
 				DeviceInfo info = AcquireGameJoystickInfo(self, nullptr, 0);
 				bool hadInput = false;
 				const DWORD povOffsets[] = { DIJOFS_POV(0), DIJOFS_POV(1), DIJOFS_POV(2), DIJOFS_POV(3) };
