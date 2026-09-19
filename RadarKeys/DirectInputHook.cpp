@@ -86,6 +86,7 @@ namespace RadarKeys {
 		static std::unordered_map<void*, void**> g_di8OrigVTables;
 		static std::unordered_map<IDirectInputDevice8*, DeviceInfo> g_deviceInfo;
 		static std::unordered_set<void*> g_selfDevicePointers;
+		static std::vector<std::pair<GUID, IDirectInputDevice8*>> g_ownedDevices;
 
 		// GUIDs
 		static const GUID kGuidSysMouse =
@@ -1247,7 +1248,6 @@ namespace RadarKeys {
 			InstallInternal(false);
 		}
 
-		static std::vector<std::pair<GUID, IDirectInputDevice8*>> g_ownedDevices;
 		static ULONGLONG g_lastEnumTick = 0;
 		static int g_enumCallbackSeen = 0;
 
