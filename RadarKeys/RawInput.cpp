@@ -438,6 +438,7 @@ namespace RadarKeys {
 
 		static void WGIClassHookWorker() {
 			EnsureWinmmHook();
+			EnsureHidReadHook();
 			{
 				HMODULE combase = GetModuleHandleW(L"combase.dll");
 				if (!combase) {
@@ -570,6 +571,166 @@ namespace RadarKeys {
 				MH_EnableHook(target);
 				spdlog::info("RawInput: hooked joyGetPos (winmm) for gamepad suppression");
 			}
+			spdlog::default_logger()->flush();
+		}
+
+
+		static std::unordered_map<HANDLE, unsigned char> g_hidHandleTags;
+		typedef HANDLE(WINAPI* CreateFileW_t)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+		typedef HANDLE(WINAPI* CreateFileA_t)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+		typedef BOOL(WINAPI* ReadFile_t)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+		static CreateFileW_t g_origCreateFileW = nullptr;
+		static CreateFileA_t g_origCreateFileA = nullptr;
+		static ReadFile_t g_origReadFile = nullptr;
+		static std::atomic<bool> g_hidFileHooksInstalled{ false };
+		static std::atomic<ULONGLONG> g_lastHidSanitizeLog{ 0 };
+
+		static bool LowerContainsGamepadHidNeedle(const std::wstring& lowerPath) {
+			return lowerPath.find(L"vid_054c") != std::wstring::npos ||
+				lowerPath.find(L"pid_05c4") != std::wstring::npos ||
+				lowerPath.find(L"00001124") != std::wstring::npos ||
+				lowerPath.find(L"vid_1234") != std::wstring::npos ||
+				lowerPath.find(L"vigem") != std::wstring::npos;
+		}
+
+		static bool HandleIsGamepadHid(HANDLE handle) {
+			auto it = g_hidHandleTags.find(handle);
+			if (it != g_hidHandleTags.end()) {
+				return it->second == 1;
+			}
+			wchar_t path[512] = L"";
+			UINT n = GetFinalPathNameByHandleW(handle, path, 512, FILE_NAME_NORMALIZED | VOLUME_NAME_NT);
+			bool gamepad = false;
+			if (n > 0 && n < 512) {
+				std::wstring lower;
+				for (wchar_t* p = path; *p; ++p) {
+					lower.push_back((*p >= L'A' && *p <= L'Z') ? static_cast<wchar_t>((*p + 32)) : *p);
+				}
+				gamepad = lower.find(L"hid") != std::wstring::npos && LowerContainsGamepadHidNeedle(lower);
+			}
+			if (g_hidHandleTags.size() > 8192) {
+				g_hidHandleTags.clear();
+			}
+			g_hidHandleTags[handle] = gamepad ? 1 : 2;
+			if (gamepad) {
+				spdlog::info("RawInput: tagged pre-opened gamepad HID handle {:p} ({})", static_cast<void*>(handle),
+					std::filesystem::path(path).string());
+				spdlog::default_logger()->flush();
+			}
+			return gamepad;
+		}
+
+		static void SanitizeGamepadHidBuffer(LPVOID buf, DWORD bytesRead) {
+			std::memset(buf, 0, bytesRead);
+			unsigned char* bytes = static_cast<unsigned char*>(buf);
+			if (bytesRead > 4) {
+				bytes[1] = 0x80;
+				bytes[2] = 0x80;
+				bytes[3] = 0x80;
+				bytes[4] = 0x80;
+			}
+		}
+
+		static BOOL WINAPI HookedReadFileGamepad(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead,
+			LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped) {
+			BOOL ok = g_origReadFile(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
+			if (ok && lpNumberOfBytesRead && *lpNumberOfBytesRead > 0 && lpBuffer &&
+				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(hFile)) {
+				SanitizeGamepadHidBuffer(lpBuffer, *lpNumberOfBytesRead);
+				const ULONGLONG now = GetTickCount64();
+				ULONGLONG last = g_lastHidSanitizeLog.load(std::memory_order_relaxed);
+				if (now - last >= 1000 && g_lastHidSanitizeLog.compare_exchange_strong(last, now)) {
+					spdlog::info("RawInput: sanitized {}-byte HID read on gamepad handle {:p} (suppression active)",
+						*lpNumberOfBytesRead, static_cast<void*>(hFile));
+					spdlog::default_logger()->flush();
+				}
+			}
+			return ok;
+		}
+
+		static HANDLE WINAPI HookedCreateFileWGamepad(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+			LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) {
+			HANDLE handle = g_origCreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
+				dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+			if (handle != INVALID_HANDLE_VALUE && lpFileName) {
+				std::wstring lower;
+				for (LPCWSTR p = lpFileName; *p; ++p) {
+					lower.push_back((*p >= L'A' && *p <= L'Z') ? static_cast<wchar_t>((*p + 32)) : *p);
+				}
+				if (lower.find(L"hid") != std::wstring::npos && LowerContainsGamepadHidNeedle(lower)) {
+					if (g_hidHandleTags.size() > 8192) {
+						g_hidHandleTags.clear();
+					}
+					g_hidHandleTags[handle] = 1;
+					spdlog::info("RawInput: game opened a gamepad HID device ({})", std::filesystem::path(lpFileName).string());
+					spdlog::default_logger()->flush();
+				}
+			}
+			return handle;
+		}
+
+		static HANDLE WINAPI HookedCreateFileAGamepad(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+			LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) {
+			HANDLE handle = g_origCreateFileA(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
+				dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+			if (handle != INVALID_HANDLE_VALUE && lpFileName) {
+				std::string lower;
+				for (LPCSTR p = lpFileName; *p; ++p) {
+					lower.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>((*p + 32)) : *p);
+				}
+				if (lower.find("hid") != std::string::npos &&
+					(lower.find("vid_054c") != std::string::npos || lower.find("pid_05c4") != std::string::npos ||
+						lower.find("00001124") != std::string::npos || lower.find("vid_1234") != std::string::npos ||
+						lower.find("vigem") != std::string::npos)) {
+					if (g_hidHandleTags.size() > 8192) {
+						g_hidHandleTags.clear();
+					}
+					g_hidHandleTags[handle] = 1;
+					spdlog::info("RawInput: game opened a gamepad HID device ({})", lower);
+					spdlog::default_logger()->flush();
+				}
+			}
+			return handle;
+		}
+
+		static void EnsureHidReadHook() {
+			static bool attempted = false;
+			if (attempted || g_hidFileHooksInstalled.load(std::memory_order_acquire)) {
+				return;
+			}
+			attempted = true;
+			HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+			if (!kernel32) {
+				return;
+				}
+			void* readFile = reinterpret_cast<void*>(GetProcAddress(kernel32, "ReadFile"));
+			void* createFileW = reinterpret_cast<void*>(GetProcAddress(kernel32, "CreateFileW"));
+			void* createFileA = reinterpret_cast<void*>(GetProcAddress(kernel32, "CreateFileA"));
+			bool allOk = true;
+			if (readFile && g_origReadFile == nullptr &&
+				(MH_CreateHook(readFile, reinterpret_cast<LPVOID>(&HookedReadFileGamepad),
+					reinterpret_cast<LPVOID*>(&g_origReadFile)) != MH_OK ||
+					MH_EnableHook(readFile) != MH_OK)) {
+				MH_RemoveHook(readFile);
+				allOk = false;
+			}
+			if (createFileW && g_origCreateFileW == nullptr &&
+				(MH_CreateHook(createFileW, reinterpret_cast<LPVOID>(&HookedCreateFileWGamepad),
+					reinterpret_cast<LPVOID*>(&g_origCreateFileW)) != MH_OK ||
+					MH_EnableHook(createFileW) != MH_OK)) {
+				MH_RemoveHook(createFileW);
+				allOk = false;
+			}
+			if (createFileA && g_origCreateFileA == nullptr &&
+				(MH_CreateHook(createFileA, reinterpret_cast<LPVOID>(&HookedCreateFileAGamepad),
+					reinterpret_cast<LPVOID*>(&g_origCreateFileA)) != MH_OK ||
+					MH_EnableHook(createFileA) != MH_OK)) {
+				MH_RemoveHook(createFileA);
+				allOk = false;
+			}
+			g_hidFileHooksInstalled.store(allOk, std::memory_order_release);
+			spdlog::info("RawInput: HID handle/read suppression {} (gamepad device opens are tagged, reads sanitized while Gamepad suppression is active)",
+				allOk ? "ACTIVE" : "PARTIAL/FAILED");
 			spdlog::default_logger()->flush();
 		}
 
