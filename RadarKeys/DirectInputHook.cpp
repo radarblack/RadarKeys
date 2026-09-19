@@ -60,6 +60,7 @@ namespace RadarKeys {
 		static constexpr size_t kSlotGetDeviceState = 9;
 		static constexpr size_t kSlotGetDeviceData = 10;
 		static constexpr size_t kSlotGetDeviceInfo = 15;
+		static constexpr size_t kSlotEnumObjects = 4;
 
 		enum class DeviceKind { Unknown, Keyboard, Mouse, Joystick };
 
@@ -685,6 +686,165 @@ namespace RadarKeys {
 			spdlog::default_logger()->flush();
 		}
 
+		typedef HRESULT(STDMETHODCALLTYPE* DiEnumObjects_t)(IDirectInputDevice8*, void*, void*, DWORD);
+
+		struct GameDeviceFormat {
+			bool valid = false;
+			bool buildAttempted = false;
+			std::vector<std::pair<DWORD, LONG>> axisNeutrals;
+			std::vector<DWORD> povOfs;
+			std::vector<DWORD> buttonOfs;
+		};
+		static std::unordered_map<void*, GameDeviceFormat> g_gameDeviceFormats;
+
+		struct FormatBuildContext {
+			IDirectInputDevice8* device;
+			GetProperty_t getProperty;
+			GameDeviceFormat* format;
+			int axisCount;
+		};
+
+		static BOOL CALLBACK GameFormatObjectCallback(const DIDEVICEOBJECTINSTANCEW* pdidoi, void* pContext) {
+			FormatBuildContext* ctx = reinterpret_cast<FormatBuildContext*>(pContext);
+			if (!pdidoi || (pdidoi->dwType & DIDFT_NODATA) != 0) {
+				return DIENUM_CONTINUE;
+			}
+			if ((pdidoi->dwType & DIDFT_POV) != 0) {
+				ctx->format->povOfs.push_back(pdidoi->dwOfs);
+				return DIENUM_CONTINUE;
+			}
+			if ((pdidoi->dwType & DIDFT_BUTTON) != 0) {
+				ctx->format->buttonOfs.push_back(pdidoi->dwOfs);
+				return DIENUM_CONTINUE;
+			}
+			if ((pdidoi->dwType & DIDFT_AXIS) != 0) {
+				DIPROPRANGE range{};
+				range.diph.dwSize = sizeof(DIPROPRANGE);
+				range.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+				range.diph.dwObj = pdidoi->dwOfs;
+				range.diph.dwHow = DIPH_BYOFFSET;
+				if (SUCCEEDED(ctx->getProperty(ctx->device, DIPROP_RANGE, &range.diph)) &&
+					range.lMax > range.lMin) {
+					ctx->format->axisNeutrals.push_back({ pdidoi->dwOfs, range.lMin + (range.lMax - range.lMin) / 2 });
+					++ctx->axisCount;
+				}
+			}
+			return DIENUM_CONTINUE;
+		}
+
+		static void SuppressGameJoystickRead(IDirectInputDevice8* self, LPVOID lpvData, DWORD cbData) {
+			std::lock_guard<std::mutex> lock(g_mutex);
+			GameDeviceFormat& fmt = g_gameDeviceFormats[self];
+			if (!fmt.valid && !fmt.buildAttempted) {
+				fmt.buildAttempted = true;
+				void** vtbl = *reinterpret_cast<void***>(self);
+				DiEnumObjects_t enumObjects = reinterpret_cast<DiEnumObjects_t>(vtbl[kSlotEnumObjects]);
+				GetProperty_t getProperty = reinterpret_cast<GetProperty_t>(vtbl[kSlotGetProperty]);
+				if (enumObjects && getProperty) {
+					FormatBuildContext ctx{ self, getProperty, &fmt, 0 };
+					if (SUCCEEDED(enumObjects(self, reinterpret_cast<void*>(&GameFormatObjectCallback), &ctx,
+						DIDFT_AXIS | DIDFT_POV | DIDFT_BUTTON))) {
+						fmt.valid = true;
+						spdlog::info("DirectInputHook: built read map for game joystick {:p} (axes {}, buttons {}, povs {}, cbData {})",
+							static_cast<void*>(self), ctx.axisCount, fmt.buttonOfs.size(), fmt.povOfs.size(), cbData);
+						spdlog::default_logger()->flush();
+					}
+				}
+			}
+			bool active = false;
+			if (fmt.valid) {
+				const unsigned char* bytes = static_cast<const unsigned char*>(lpvData);
+				for (const auto& axis : fmt.axisNeutrals) {
+					if (axis.first + sizeof(LONG) <= cbData &&
+						*reinterpret_cast<const LONG*>(bytes + axis.first) != axis.second) {
+						active = true;
+						break;
+					}
+				}
+				if (!active) {
+					for (DWORD ofs : fmt.buttonOfs) {
+						if (ofs < cbData && (bytes[ofs] & 0x80) != 0) {
+							active = true;
+							break;
+						}
+					}
+				}
+				if (!active) {
+					for (DWORD ofs : fmt.povOfs) {
+						if (ofs + sizeof(DWORD) <= cbData &&
+							*reinterpret_cast<const DWORD*>(bytes + ofs) <= 35999) {
+							active = true;
+							break;
+						}
+					}
+				}
+				if (active) {
+					LogSuppressedJoystick(self, lpvData, cbData);
+				}
+				std::memset(lpvData, 0, cbData);
+				for (const auto& axis : fmt.axisNeutrals) {
+					if (axis.first + sizeof(LONG) <= cbData) {
+						*reinterpret_cast<LONG*>(static_cast<unsigned char*>(lpvData) + axis.first) = axis.second;
+					}
+				}
+				for (DWORD ofs : fmt.povOfs) {
+					if (ofs + sizeof(DWORD) <= cbData) {
+						*reinterpret_cast<DWORD*>(static_cast<unsigned char*>(lpvData) + ofs) = 0xFFFFFFFF;
+					}
+				}
+			} else {
+				DeviceInfo info;
+				auto it = g_deviceInfo.find(self);
+				if (it != g_deviceInfo.end()) {
+					info = it->second;
+				}
+				active = JoystickStateActive(info, lpvData, cbData);
+				if (active) {
+					LogSuppressedJoystick(self, lpvData, cbData);
+				}
+				NeutralizeJoystick(lpvData, cbData, info);
+			}
+		}
+
+		static void SuppressGameJoystickBuffered(IDirectInputDevice8* self, DIDEVICEOBJECTDATA* rgdod, DWORD count) {
+			std::lock_guard<std::mutex> lock(g_mutex);
+			GameDeviceFormat& fmt = g_gameDeviceFormats[self];
+			if (!fmt.valid && !fmt.buildAttempted) {
+				return;
+			}
+			if (!fmt.valid) {
+				return;
+			}
+			bool hadInput = false;
+			for (DWORD i = 0; i < count; ++i) {
+				bool isPov = false;
+				for (DWORD ofs : fmt.povOfs) {
+					if (rgdod[i].dwOfs == ofs) { isPov = true; break; }
+				}
+				if (rgdod[i].dwData != 0) {
+					hadInput = true;
+				}
+				if (isPov) {
+					rgdod[i].dwData = 0xFFFFFFFF;
+					continue;
+				}
+				bool isAxis = false;
+				for (const auto& axis : fmt.axisNeutrals) {
+					if (rgdod[i].dwOfs == axis.first) {
+						rgdod[i].dwData = static_cast<DWORD>(axis.second);
+						isAxis = true;
+						break;
+					}
+				}
+				if (!isAxis) {
+					rgdod[i].dwData = 0;
+				}
+			}
+			if (hadInput) {
+				LogSuppressedJoystick(self, nullptr, 0);
+			}
+		}
+
 		static void LogClassDeviceDiag(IDirectInputDevice8* self, DWORD cbData) {
 			static std::unordered_set<void*> diagLogged;
 			std::lock_guard<std::mutex> lock(g_mutex);
@@ -718,11 +878,7 @@ namespace RadarKeys {
 				SUCCEEDED(hr) && lpvData && cbData != 0 &&
 				RawInput::IsGamepadBlockedToGame() && !IsSelfOpenedDevice(self)) {
 				LogClassDeviceDiag(self, cbData);
-				DeviceInfo info = AcquireGameJoystickInfo(self, lpvData, cbData);
-				if (JoystickStateActive(info, lpvData, cbData)) {
-					LogSuppressedJoystick(self, lpvData, cbData);
-				}
-				NeutralizeJoystick(lpvData, cbData, info);
+				SuppressGameJoystickRead(self, lpvData, cbData);
 			}
 			return hr;
 		}
@@ -736,30 +892,7 @@ namespace RadarKeys {
 				SUCCEEDED(hr) && pdwInOut && rgdod && *pdwInOut != 0 &&
 				RawInput::IsGamepadBlockedToGame() && !IsSelfOpenedDevice(self)) {
 				LogClassDeviceDiag(self, cbObjectData);
-				DeviceInfo info = AcquireGameJoystickInfo(self, nullptr, 0);
-				bool hadInput = false;
-				const DWORD povOffsets[] = { DIJOFS_POV(0), DIJOFS_POV(1), DIJOFS_POV(2), DIJOFS_POV(3) };
-				for (DWORD i = 0; i < *pdwInOut; ++i) {
-					bool isPov = false;
-					for (DWORD pov : povOffsets) {
-						if (rgdod[i].dwOfs == pov) { isPov = true; break; }
-					}
-					if (isPov) {
-						rgdod[i].dwData = 0xFFFFFFFFu;
-						continue;
-					}
-					if (rgdod[i].dwData != 0) {
-						hadInput = true;
-					}
-					if (rgdod[i].dwOfs < 32 && (rgdod[i].dwOfs % 4) == 0) {
-						rgdod[i].dwData = static_cast<DWORD>(AxisNeutral(info, rgdod[i].dwOfs, IsStickAxisOffset(rgdod[i].dwOfs, info.isPlaystation)));
-					} else {
-						rgdod[i].dwData = 0;
-					}
-				}
-				if (hadInput) {
-					LogSuppressedJoystick(self, nullptr, 0);
-				}
+				SuppressGameJoystickBuffered(self, rgdod, *pdwInOut);
 			}
 			return hr;
 		}
