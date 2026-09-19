@@ -9,9 +9,11 @@
 #include <tlhelp32.h>
 #include <cstdlib>
 #include <cstring>
+#include <mmsystem.h>
 #include <algorithm>
 #include <utility>
 #include <mutex>
+#include <thread>
 #include <vector>
 #include <atomic>
 #include <list>
@@ -330,6 +332,246 @@ namespace RadarKeys {
 			&HookedXInputGetStateEx<2>, &HookedXInputGetStateEx<3>,
 			&HookedXInputGetStateEx<4>,
 		};
+
+		struct WGIGamepadReading {
+			ULONGLONG timestamp;
+			ULONGLONG buttons;
+			double leftThumbstickX;
+			double leftThumbstickY;
+			double rightThumbstickX;
+			double rightThumbstickY;
+			double leftTrigger;
+			double rightTrigger;
+		};
+		typedef HRESULT(__stdcall* WIGetCurrentReading_t)(void*, WGIGamepadReading*);
+		static WIGetCurrentReading_t g_origWIGetCurrentReading = nullptr;
+		static std::atomic<bool> g_wiGetCurrentReadingHooked{ false };
+		static std::atomic<ULONGLONG> g_lastWGISuppressLog{ 0 };
+
+		static HRESULT __stdcall HookedWIGetCurrentReading(void* self, WGIGamepadReading* reading) {
+			HRESULT hr = g_origWIGetCurrentReading ? g_origWIGetCurrentReading(self, reading) : E_POINTER;
+			if (SUCCEEDED(hr) && reading && g_gamepadBlockedToGame.load() != false) {
+				if (reading->buttons != 0 || reading->leftThumbstickX != 0 || reading->leftThumbstickY != 0 ||
+					reading->rightThumbstickX != 0 || reading->rightThumbstickY != 0 ||
+					reading->leftTrigger != 0 || reading->rightTrigger != 0) {
+					const ULONGLONG now = GetTickCount64();
+					ULONGLONG last = g_lastWGISuppressLog.load(std::memory_order_relaxed);
+					if (now - last >= 1000 && g_lastWGISuppressLog.compare_exchange_strong(last, now)) {
+						spdlog::info("RawInput: WGI gamepad reading intercepted (buttons {:016X}, lx {:.2f} ly {:.2f} rx {:.2f} ry {:.2f}) - suppressed",
+							reading->buttons, reading->leftThumbstickX, reading->leftThumbstickY,
+							reading->rightThumbstickX, reading->rightThumbstickY);
+						spdlog::default_logger()->flush();
+					}
+				}
+				reading->buttons = 0;
+				reading->leftThumbstickX = 0;
+				reading->leftThumbstickY = 0;
+				reading->rightThumbstickX = 0;
+				reading->rightThumbstickY = 0;
+				reading->leftTrigger = 0;
+				reading->rightTrigger = 0;
+			}
+			return hr;
+		}
+
+		static void EnsureWinmmHook();
+
+		typedef HRESULT(__stdcall* RoGetActivationFactory_t)(void*, const IID*, void**);
+		typedef LONG(__stdcall* WindowsCreateString_t)(LPCWSTR, UINT32, void**);
+		typedef LONG(__stdcall* WindowsDeleteString_t)(void*);
+		typedef HRESULT(__stdcall* WIGetGamepads_t)(void*, void**);
+		typedef HRESULT(__stdcall* WIGetAt_t)(void*, UINT32, void**);
+		typedef ULONG(__stdcall* WIRelease_t)(void*);
+
+		struct WGIWalkResult {
+			HRESULT factoryHr;
+			HRESULT gamepadsHr;
+			HRESULT getAtHr;
+			void* factory;
+			void* vectorView;
+			void* gamepad;
+			void* getCurrentReadingTarget;
+		};
+
+		static WGIWalkResult WGIClassWalk(RoGetActivationFactory_t roGetActivationFactory,
+			WindowsCreateString_t windowsCreateString, WindowsDeleteString_t windowsDeleteString) {
+			WGIWalkResult result{};
+			void* className = nullptr;
+			if (FAILED(windowsCreateString(L"Windows.Gaming.Input.Gamepad", 28, &className))) {
+				result.factoryHr = E_FAIL;
+				return result;
+			}
+			static const IID kIID_IGamepadStatics = { 0x8BBCE529, 0xD49C, 0x39E9, { 0x95, 0x60, 0xE4, 0x7D, 0xDE, 0x96, 0xB7, 0xC8 } };
+			result.factoryHr = roGetActivationFactory(className, &kIID_IGamepadStatics, &result.factory);
+			windowsDeleteString(className);
+			if (FAILED(result.factoryHr) || !result.factory) {
+				return result;
+			}
+			__try {
+				void** factoryVtbl = *reinterpret_cast<void***>(result.factory);
+				WIGetGamepads_t getGamepads = reinterpret_cast<WIGetGamepads_t>(factoryVtbl[6]);
+				if (!getGamepads) {
+					result.gamepadsHr = E_POINTER;
+					return result;
+				}
+				result.gamepadsHr = getGamepads(result.factory, &result.vectorView);
+				if (FAILED(result.gamepadsHr) || !result.vectorView) {
+					return result;
+				}
+				void** viewVtbl = *reinterpret_cast<void***>(result.vectorView);
+				WIGetAt_t getAt = reinterpret_cast<WIGetAt_t>(viewVtbl[6]);
+				if (!getAt) {
+					result.getAtHr = E_POINTER;
+					return result;
+				}
+				result.getAtHr = getAt(result.vectorView, 0, &result.gamepad);
+				if (SUCCEEDED(result.getAtHr) && result.gamepad) {
+					void** padVtbl = *reinterpret_cast<void***>(result.gamepad);
+					result.getCurrentReadingTarget = padVtbl[6];
+				}
+			}
+			__except (EXCEPTION_EXECUTE_HANDLER) {
+				result.factoryHr = E_FAIL;
+			}
+			return result;
+		}
+
+		static void WGIClassHookWorker() {
+			EnsureWinmmHook();
+			{
+				HMODULE combase = GetModuleHandleW(L"combase.dll");
+				if (!combase) {
+					combase = LoadLibraryW(L"combase.dll");
+				}
+				if (combase) {
+					typedef HRESULT(__stdcall* RoInitialize_t)(UINT);
+					auto roInitialize = reinterpret_cast<RoInitialize_t>(GetProcAddress(combase, "RoInitialize"));
+					if (roInitialize) {
+						hroInitialize(1);
+					}
+				}
+			}
+			for (int attempt = 1; attempt <= 150; ++attempt) {
+				if (g_wiGetCurrentReadingHooked.load(std::memory_order_acquire)) {
+					return;
+				}
+				HMODULE combase = GetModuleHandleW(L"combase.dll");
+				if (!combase) {
+					combase = LoadLibraryW(L"combase.dll");
+				}
+				if (!combase) {
+					return;
+				}
+				RoGetActivationFactory_t roGetActivationFactory =
+					reinterpret_cast<RoGetActivationFactory_t>(GetProcAddress(combase, "RoGetActivationFactory"));
+				WindowsCreateString_t windowsCreateString =
+					reinterpret_cast<WindowsCreateString_t>(GetProcAddress(combase, "WindowsCreateString"));
+				WindowsDeleteString_t windowsDeleteString =
+					reinterpret_cast<WindowsDeleteString_t>(GetProcAddress(combase, "WindowsDeleteString"));
+				if (!roGetActivationFactory || !windowsCreateString || !windowsDeleteString) {
+					return;
+				}
+				WGIWalkResult walk = WGIClassWalk(roGetActivationFactory, windowsCreateString, windowsDeleteString);
+				if (SUCCEEDED(walk.factoryHr) && walk.factory && walk.getCurrentReadingTarget) {
+					void* trampoline = nullptr;
+					if (MH_CreateHook(walk.getCurrentReadingTarget,
+						reinterpret_cast<LPVOID>(&HookedWIGetCurrentReading),
+						reinterpret_cast<LPVOID*>(&g_origWIGetCurrentReading)) == MH_OK &&
+						MH_EnableHook(walk.getCurrentReadingTarget) == MH_OK) {
+						g_wiGetCurrentReadingHooked.store(true, std::memory_order_release);
+						spdlog::info("RawInput: WGI GetCurrentReading class hook active at {:p} (covers every Windows.Gaming.Input gamepad in the process)",
+							walk.getCurrentReadingTarget);
+					} else {
+						MH_RemoveHook(walk.getCurrentReadingTarget);
+						spdlog::warn("RawInput: WGI GetCurrentReading hook failed - will retry");
+					}
+				} else if (attempt == 1) {
+					spdlog::info("RawInput: WGI gamepad factory probe (factoryHr={:08X}, gamepadsHr={:08X}, getAtHr={:08X})",
+						static_cast<unsigned>(walk.factoryHr), static_cast<unsigned>(walk.gamepadsHr),
+						static_cast<unsigned>(walk.getAtHr));
+				}
+				if (walk.factory) {
+					void** factoryVtbl = *reinterpret_cast<void***>(walk.factory);
+					reinterpret_cast<WIRelease_t>(factoryVtbl[2])(walk.factory);
+				}
+				if (walk.vectorView) {
+					void** viewVtbl = *reinterpret_cast<void***>(walk.vectorView);
+					reinterpret_cast<WIRelease_t>(viewVtbl[2])(walk.vectorView);
+				}
+				if (walk.gamepad) {
+					void** padVtbl = *reinterpret_cast<void***>(walk.gamepad);
+					reinterpret_cast<WIRelease_t>(padVtbl[2])(walk.gamepad);
+				}
+				if (g_wiGetCurrentReadingHooked.load(std::memory_order_acquire)) {
+					return;
+				}
+				Sleep(2000);
+			}
+		}
+
+		void StartWGIClassHookWorker() {
+			std::thread(WGIClassHookWorker).detach();
+		}
+		typedef DWORD(__stdcall* joyGetPosEx_t)(UINT, JOYINFOEX*);
+		typedef DWORD(__stdcall* joyGetPos_t)(UINT, JOYINFO*);
+		static joyGetPosEx_t g_origJoyGetPosEx = nullptr;
+		static joyGetPos_t g_origJoyGetPos = nullptr;
+
+		static DWORD __stdcall HookedJoyGetPosEx(UINT uJoyID, JOYINFOEX* pji) {
+			DWORD result = g_origJoyGetPosEx ? g_origJoyGetPosEx(uJoyID, pji) : JOYERR_NOCANDO;
+			if (result == JOYERR_NOERROR && pji && g_gamepadBlockedToGame.load() != false) {
+				pji->dwXpos = 32767;
+				pji->dwYpos = 32767;
+				pji->dwZpos = 32767;
+				pji->dwRpos = 32767;
+				pji->dwUpos = 32767;
+				pji->dwVpos = 32767;
+				pji->dwButtons = 0;
+				pji->dwButtonNumber = 0;
+			}
+			return result;
+		}
+
+		static DWORD __stdcall HookedJoyGetPos(UINT uJoyID, JOYINFO* pji) {
+			DWORD result = g_origJoyGetPos ? g_origJoyGetPos(uJoyID, pji) : JOYERR_NOCANDO;
+			if (result == JOYERR_NOERROR && pji && g_gamepadBlockedToGame.load() != false) {
+				pji->dwXpos = 32767;
+				pji->dwYpos = 32767;
+				pji->dwZpos = 32767;
+				pji->dwButtons = 0;
+			}
+			return result;
+		}
+
+		static void EnsureWinmmHook() {
+			static bool attempted = false;
+			if (attempted) {
+				return;
+			}
+			attempted = true;
+			HMODULE module = GetModuleHandleW(L"winmm.dll");
+			if (!module) {
+				module = LoadLibraryW(L"winmm.dll");
+			}
+			if (!module) {
+				return;
+			}
+			void* target = reinterpret_cast<void*>(GetProcAddress(module, "joyGetPosEx"));
+			if (target && !g_origJoyGetPosEx &&
+				MH_CreateHook(target, reinterpret_cast<LPVOID>(&HookedJoyGetPosEx),
+					reinterpret_cast<LPVOID*>(&g_origJoyGetPosEx)) == MH_OK) {
+				MH_EnableHook(target);
+				spdlog::info("RawInput: hooked joyGetPosEx (winmm) for gamepad suppression");
+			}
+			target = reinterpret_cast<void*>(GetProcAddress(module, "joyGetPos"));
+			if (target && !g_origJoyGetPos &&
+				MH_CreateHook(target, reinterpret_cast<LPVOID>(&HookedJoyGetPos),
+					reinterpret_cast<LPVOID*>(&g_origJoyGetPos)) == MH_OK) {
+				MH_EnableHook(target);
+				spdlog::info("RawInput: hooked joyGetPos (winmm) for gamepad suppression");
+			}
+			spdlog::default_logger()->flush();
+		}
 
 		void EnsureXInputHook() {
 			static const wchar_t* kModuleNames[] = {
