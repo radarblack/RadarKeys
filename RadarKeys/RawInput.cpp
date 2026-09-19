@@ -1,6 +1,3 @@
-//DEBUGNOW this only really gets you OnKeyDown, OnKeyUp reliably as Held will be limited by key repeat rate
-//the solution there would be to have another state array and have the input events set up,down and querry that with the assumption that down is held
-
 #include "RawInput.h"
 #include "DirectInputHook.h"
 #include "spdlog/spdlog.h"
@@ -18,15 +15,18 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <filesystem>
+#include <string>
+#include <cctype>
+#include <delayimp.h>
 
 namespace RadarKeys {
 	namespace RawInput {
 		const USHORT vKeyMax = kMaxVKey;
-		USHORT currFlags[vKeyMax]; // indexed by Virtual Keycode
+		USHORT currFlags[vKeyMax];
 		namespace { struct CurrFlagsFiller { CurrFlagsFiller() { std::fill_n(currFlags, vKeyMax, static_cast<USHORT>(RI_KEY_BREAK)); } }; }
 		static CurrFlagsFiller g_currFlagsFiller;
-		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys (written once, before input starts)
-		std::atomic<unsigned char> blockGameKeys[vKeyMax]{}; // block game from recieving message
+		bool ignore[vKeyMax] = { false };
+		std::atomic<unsigned char> blockGameKeys[vKeyMax]{};
 		std::atomic<unsigned char> realStateHeld[vKeyMax]{};
 		std::atomic<unsigned char> g_keyboardBlockedToGame{ false };
 		std::atomic<unsigned char> g_mouseBlockedToGame{ false };
@@ -106,7 +106,7 @@ namespace RadarKeys {
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
 
 		typedef DWORD(WINAPI* XInputGetStateFunc)(DWORD, XINPUT_STATE*);
-		static constexpr int kMaxXInputModules = 5;
+		static constexpr int kMaxXInputModules = 8;
 		static XInputGetStateFunc g_origXInputGetState[kMaxXInputModules] = {};
 		static XInputGetStateFunc g_origXInputGetStateEx[kMaxXInputModules] = {};
 		static int g_xinputModuleCount = 0;
@@ -114,9 +114,9 @@ namespace RadarKeys {
 		static const char* g_xinputSlotNames[kMaxXInputModules] = {};
 		static const char* g_xinputExSlotNames[kMaxXInputModules] = {};
 		static std::unordered_set<void*> g_xinputHookedTargets;
-		static std::unordered_set<void*> g_xinputFailedTargets;
 		static std::unordered_set<void*> g_xinputExHookedTargets;
-		static std::unordered_set<void*> g_xinputExFailedTargets;
+		static XInputGetStateFunc g_iatOrigXInputGetState = nullptr;
+		static XInputGetStateFunc g_iatOrigXInputGetStateEx = nullptr;
 
 		template <int N>
 		DWORD WINAPI HookedXInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
@@ -164,94 +164,343 @@ namespace RadarKeys {
 			return result;
 		}
 
+		DWORD WINAPI HookedXInputGetState_IAT(DWORD dwUserIndex, XINPUT_STATE* pState) {
+			static std::atomic<unsigned long long> callCount{ 0 };
+			static std::atomic<ULONGLONG> lastLogTick{ 0 };
+			DWORD result = ERROR_DEVICE_NOT_CONNECTED;
+			if (g_iatOrigXInputGetState) {
+				result = g_iatOrigXInputGetState(dwUserIndex, pState);
+			} else {
+				for (int i = 0; i < g_xinputModuleCount; ++i) {
+					if (g_origXInputGetState[i]) {
+						result = g_origXInputGetState[i](dwUserIndex, pState);
+						if (result == ERROR_SUCCESS) break;
+					}
+				}
+			}
+			const bool blocked = g_gamepadBlockedToGame.load() != false;
+			if (result == ERROR_SUCCESS && pState && blocked) {
+				ZeroMemory(&pState->Gamepad, sizeof(XINPUT_GAMEPAD));
+			}
+			const unsigned long long calls = callCount.fetch_add(1, std::memory_order_relaxed) + 1;
+			const ULONGLONG now = GetTickCount64();
+			ULONGLONG last = lastLogTick.load(std::memory_order_relaxed);
+			if (calls == 1 || (now - last >= 2000 && lastLogTick.compare_exchange_strong(last, now))) {
+				spdlog::info("RawInput: XInputGetState via IAT: {} call(s) so far, last userIndex {} result {} blocked {}",
+					calls, dwUserIndex, result, blocked);
+				spdlog::default_logger()->flush();
+			}
+			return result;
+		}
+
+		DWORD WINAPI HookedXInputGetStateEx_IAT(DWORD dwUserIndex, XINPUT_STATE* pState) {
+			static std::atomic<unsigned long long> callCount{ 0 };
+			static std::atomic<ULONGLONG> lastLogTick{ 0 };
+			DWORD result = ERROR_DEVICE_NOT_CONNECTED;
+			if (g_iatOrigXInputGetStateEx) {
+				result = g_iatOrigXInputGetStateEx(dwUserIndex, pState);
+			} else {
+				for (int i = 0; i < g_xinputExModuleCount; ++i) {
+					if (g_origXInputGetStateEx[i]) {
+						result = g_origXInputGetStateEx[i](dwUserIndex, pState);
+						if (result == ERROR_SUCCESS) break;
+					}
+				}
+			}
+			const bool blocked = g_gamepadBlockedToGame.load() != false;
+			if (result == ERROR_SUCCESS && pState && blocked) {
+				ZeroMemory(&pState->Gamepad, sizeof(XINPUT_GAMEPAD));
+			}
+			const unsigned long long calls = callCount.fetch_add(1, std::memory_order_relaxed) + 1;
+			const ULONGLONG now = GetTickCount64();
+			ULONGLONG last = lastLogTick.load(std::memory_order_relaxed);
+			if (calls == 1 || (now - last >= 2000 && lastLogTick.compare_exchange_strong(last, now))) {
+				spdlog::info("RawInput: XInputGetStateEx via IAT: {} call(s) so far, last userIndex {} result {} blocked {}",
+					calls, dwUserIndex, result, blocked);
+				spdlog::default_logger()->flush();
+			}
+			return result;
+		}
+
 		static XInputGetStateFunc g_xinputDetours[kMaxXInputModules] = {
 			&HookedXInputGetState<0>, &HookedXInputGetState<1>,
 			&HookedXInputGetState<2>, &HookedXInputGetState<3>,
-			&HookedXInputGetState<4>,
+			&HookedXInputGetState<4>, &HookedXInputGetState<5>,
+			&HookedXInputGetState<6>, &HookedXInputGetState<7>,
 		};
 
 		static XInputGetStateFunc g_xinputExDetours[kMaxXInputModules] = {
 			&HookedXInputGetStateEx<0>, &HookedXInputGetStateEx<1>,
 			&HookedXInputGetStateEx<2>, &HookedXInputGetStateEx<3>,
-			&HookedXInputGetStateEx<4>,
+			&HookedXInputGetStateEx<4>, &HookedXInputGetStateEx<5>,
+			&HookedXInputGetStateEx<6>, &HookedXInputGetStateEx<7>,
 		};
 
+		static std::string ToLowerAsciiStr(const std::string& s) {
+			std::string r;
+			r.reserve(s.size());
+			for (unsigned char c : s) r.push_back(static_cast<char>(::tolower(c)));
+			return r;
+		}
+
+		static int PatchIATInModule(HMODULE hMod, const char* funcName, WORD ordinal, void* detour, void** origOut) {
+			if (!hMod || !detour) return 0;
+			PIMAGE_DOS_HEADER dos = reinterpret_cast<PIMAGE_DOS_HEADER>(hMod);
+			if (dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
+			PIMAGE_NT_HEADERS nt = reinterpret_cast<PIMAGE_NT_HEADERS>(reinterpret_cast<BYTE*>(hMod) + dos->e_lfanew);
+			if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
+			DWORD importRVA = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+			if (importRVA == 0) return 0;
+			PIMAGE_IMPORT_DESCRIPTOR impDesc = reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(reinterpret_cast<BYTE*>(hMod) + importRVA);
+			int patched = 0;
+			for (; impDesc->Name != 0; ++impDesc) {
+				const char* dllName = reinterpret_cast<const char*>(reinterpret_cast<BYTE*>(hMod) + impDesc->Name);
+				std::string dllLower = ToLowerAsciiStr(dllName);
+				if (dllLower.find("xinput") == std::string::npos) continue;
+				PIMAGE_THUNK_DATA origThunk = nullptr;
+				if (impDesc->OriginalFirstThunk != 0) {
+					origThunk = reinterpret_cast<PIMAGE_THUNK_DATA>(reinterpret_cast<BYTE*>(hMod) + impDesc->OriginalFirstThunk);
+				}
+				PIMAGE_THUNK_DATA iatThunk = reinterpret_cast<PIMAGE_THUNK_DATA>(reinterpret_cast<BYTE*>(hMod) + impDesc->FirstThunk);
+				for (size_t idx = 0; ; ++idx) {
+					ULONGLONG origAddr = origThunk ? origThunk[idx].u1.AddressOfData : 0;
+					ULONGLONG iatFunc = iatThunk[idx].u1.Function;
+					if (origThunk) {
+						if (origAddr == 0) break;
+					} else {
+						if (iatFunc == 0) break;
+					}
+					bool isOrdinal = false;
+					WORD curOrd = 0;
+					const char* curName = nullptr;
+					if (origThunk) {
+						if (IMAGE_SNAP_BY_ORDINAL(origThunk[idx].u1.Ordinal)) {
+							isOrdinal = true;
+							curOrd = IMAGE_ORDINAL(origThunk[idx].u1.Ordinal);
+						} else {
+							PIMAGE_IMPORT_BY_NAME byName = reinterpret_cast<PIMAGE_IMPORT_BY_NAME>(reinterpret_cast<BYTE*>(hMod) + origAddr);
+							curName = reinterpret_cast<const char*>(byName->Name);
+						}
+					}
+					bool match = false;
+					if (funcName && curName && _stricmp(curName, funcName) == 0) match = true;
+					if (ordinal != 0 && isOrdinal && curOrd == ordinal) match = true;
+					if (ordinal == 100 && funcName && _stricmp(funcName, "XInputGetStateEx") == 0) {
+						if (isOrdinal && curOrd == 100) match = true;
+					}
+					if (!match) continue;
+					void* currentFunc = reinterpret_cast<void*>(iatThunk[idx].u1.Function);
+					if (currentFunc == detour) continue;
+					if (origOut && *origOut == nullptr) {
+						*origOut = currentFunc;
+					}
+					DWORD oldProtect = 0;
+					if (VirtualProtect(&iatThunk[idx].u1.Function, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+						iatThunk[idx].u1.Function = reinterpret_cast<ULONGLONG>(detour);
+						VirtualProtect(&iatThunk[idx].u1.Function, sizeof(void*), oldProtect, &oldProtect);
+						++patched;
+					}
+				}
+			}
+			return patched;
+		}
+
+		static int PatchDelayIATInModule(HMODULE hMod, const char* funcName, WORD ordinal, void* detour, void** origOut) {
+			if (!hMod || !detour) return 0;
+			PIMAGE_DOS_HEADER dos = reinterpret_cast<PIMAGE_DOS_HEADER>(hMod);
+			if (dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
+			PIMAGE_NT_HEADERS nt = reinterpret_cast<PIMAGE_NT_HEADERS>(reinterpret_cast<BYTE*>(hMod) + dos->e_lfanew);
+			if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
+			DWORD delayRVA = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT].VirtualAddress;
+			if (delayRVA == 0) return 0;
+			PIMAGE_DELAYLOAD_DESCRIPTOR delayDesc = reinterpret_cast<PIMAGE_DELAYLOAD_DESCRIPTOR>(reinterpret_cast<BYTE*>(hMod) + delayRVA);
+			int patched = 0;
+			for (; delayDesc->DllNameRVA != 0; ++delayDesc) {
+				const char* dllName = reinterpret_cast<const char*>(reinterpret_cast<BYTE*>(hMod) + delayDesc->DllNameRVA);
+				std::string dllLower = ToLowerAsciiStr(dllName);
+				if (dllLower.find("xinput") == std::string::npos) continue;
+				PIMAGE_THUNK_DATA nameThunk = reinterpret_cast<PIMAGE_THUNK_DATA>(reinterpret_cast<BYTE*>(hMod) + delayDesc->ImportNameTableRVA);
+				PIMAGE_THUNK_DATA iatThunk = reinterpret_cast<PIMAGE_THUNK_DATA>(reinterpret_cast<BYTE*>(hMod) + delayDesc->ImportAddressTableRVA);
+				for (size_t idx = 0; nameThunk[idx].u1.AddressOfData != 0; ++idx) {
+					bool isOrdinal = IMAGE_SNAP_BY_ORDINAL(nameThunk[idx].u1.Ordinal) != 0;
+					WORD curOrd = 0;
+					const char* curName = nullptr;
+					if (isOrdinal) {
+						curOrd = IMAGE_ORDINAL(nameThunk[idx].u1.Ordinal);
+					} else {
+						PIMAGE_IMPORT_BY_NAME byName = reinterpret_cast<PIMAGE_IMPORT_BY_NAME>(reinterpret_cast<BYTE*>(hMod) + nameThunk[idx].u1.AddressOfData);
+						curName = reinterpret_cast<const char*>(byName->Name);
+					}
+					bool match = false;
+					if (funcName && curName && _stricmp(curName, funcName) == 0) match = true;
+					if (ordinal != 0 && isOrdinal && curOrd == ordinal) match = true;
+					if (!match) continue;
+					void* currentFunc = reinterpret_cast<void*>(iatThunk[idx].u1.Function);
+					if (currentFunc == detour) continue;
+					if (origOut && *origOut == nullptr) {
+						*origOut = currentFunc;
+					}
+					DWORD oldProtect = 0;
+					if (VirtualProtect(&iatThunk[idx].u1.Function, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+						iatThunk[idx].u1.Function = reinterpret_cast<ULONGLONG>(detour);
+						VirtualProtect(&iatThunk[idx].u1.Function, sizeof(void*), oldProtect, &oldProtect);
+						++patched;
+					}
+				}
+			}
+			return patched;
+		}
+
+		static int PatchAllModulesIAT() {
+			int totalPatched = 0;
+			HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
+			if (snapshot == INVALID_HANDLE_VALUE) return 0;
+			MODULEENTRY32W entry{};
+			entry.dwSize = sizeof(entry);
+			if (!Module32FirstW(snapshot, &entry)) {
+				CloseHandle(snapshot);
+				return 0;
+			}
+			do {
+				HMODULE hMod = reinterpret_cast<HMODULE>(entry.modBaseAddr);
+				void* origStateTmp = nullptr;
+				void* origExTmp = nullptr;
+				int p1 = PatchIATInModule(hMod, "XInputGetState", 0, reinterpret_cast<void*>(&HookedXInputGetState_IAT), g_iatOrigXInputGetState ? nullptr : &origStateTmp);
+				int p2 = PatchIATInModule(hMod, "XInputGetStateEx", 100, reinterpret_cast<void*>(&HookedXInputGetStateEx_IAT), g_iatOrigXInputGetStateEx ? nullptr : &origExTmp);
+				int p3 = PatchDelayIATInModule(hMod, "XInputGetState", 0, reinterpret_cast<void*>(&HookedXInputGetState_IAT), g_iatOrigXInputGetState ? nullptr : &origStateTmp);
+				int p4 = PatchDelayIATInModule(hMod, "XInputGetStateEx", 100, reinterpret_cast<void*>(&HookedXInputGetStateEx_IAT), g_iatOrigXInputGetStateEx ? nullptr : &origExTmp);
+				if (p1 || p2 || p3 || p4) {
+					if (origStateTmp && !g_iatOrigXInputGetState) g_iatOrigXInputGetState = reinterpret_cast<XInputGetStateFunc>(origStateTmp);
+					if (origExTmp && !g_iatOrigXInputGetStateEx) g_iatOrigXInputGetStateEx = reinterpret_cast<XInputGetStateFunc>(origExTmp);
+				}
+				totalPatched += p1 + p2 + p3 + p4;
+			} while (Module32NextW(snapshot, &entry));
+			CloseHandle(snapshot);
+			return totalPatched;
+		}
+
 		void EnsureXInputHook() {
-			static const wchar_t* kModuleNames[] = {
-				L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll", L"xinput1_2.dll", L"xinput1_1.dll"
+			static const wchar_t* kModuleNamesW[] = {
+				L"xinput1_3.dll", L"xinput1_4.dll", L"xinput9_1_0.dll", L"xinput1_2.dll", L"xinput1_1.dll"
 			};
-			static const char* kModuleNamesNarrow[] = {
-				"xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll", "xinput1_2.dll", "xinput1_1.dll"
+			static const char* kModuleNamesA[] = {
+				"xinput1_3.dll", "xinput1_4.dll", "xinput9_1_0.dll", "xinput1_2.dll", "xinput1_1.dll"
 			};
 			static bool loadAttemptedFor[kMaxXInputModules] = {};
 
-			for (int nameIndex = 0; nameIndex < kMaxXInputModules; ++nameIndex) {
-				const wchar_t* moduleName = kModuleNames[nameIndex];
-				const char* moduleNameNarrow = kModuleNamesNarrow[nameIndex];
-				HMODULE module = GetModuleHandleW(moduleName);
+			if (!g_iatOrigXInputGetState) {
+				HMODULE mod13 = GetModuleHandleW(L"xinput1_3.dll");
+				if (!mod13) mod13 = GetModuleHandleW(L"XINPUT1_3.dll");
+				if (mod13) {
+					void* p = reinterpret_cast<void*>(GetProcAddress(mod13, "XInputGetState"));
+					if (p) g_iatOrigXInputGetState = reinterpret_cast<XInputGetStateFunc>(p);
+				}
+				if (!g_iatOrigXInputGetState) {
+					HMODULE mod14 = GetModuleHandleW(L"xinput1_4.dll");
+					if (mod14) {
+						void* p = reinterpret_cast<void*>(GetProcAddress(mod14, "XInputGetState"));
+						if (p) g_iatOrigXInputGetState = reinterpret_cast<XInputGetStateFunc>(p);
+					}
+				}
+			}
+			if (!g_iatOrigXInputGetStateEx) {
+				HMODULE mod13 = GetModuleHandleW(L"xinput1_3.dll");
+				if (!mod13) mod13 = GetModuleHandleW(L"XINPUT1_3.dll");
+				if (mod13) {
+					void* p = reinterpret_cast<void*>(GetProcAddress(mod13, "XInputGetStateEx"));
+					if (!p) p = reinterpret_cast<void*>(GetProcAddress(mod13, reinterpret_cast<LPCSTR>(100)));
+					if (p) g_iatOrigXInputGetStateEx = reinterpret_cast<XInputGetStateFunc>(p);
+				}
+				if (!g_iatOrigXInputGetStateEx) {
+					HMODULE mod14 = GetModuleHandleW(L"xinput1_4.dll");
+					if (mod14) {
+						void* p = reinterpret_cast<void*>(GetProcAddress(mod14, "XInputGetStateEx"));
+						if (!p) p = reinterpret_cast<void*>(GetProcAddress(mod14, reinterpret_cast<LPCSTR>(100)));
+						if (p) g_iatOrigXInputGetStateEx = reinterpret_cast<XInputGetStateFunc>(p);
+					}
+				}
+			}
+
+			for (int nameIndex = 0; nameIndex < 5; ++nameIndex) {
+				const wchar_t* moduleNameW = kModuleNamesW[nameIndex];
+				const char* moduleNameA = kModuleNamesA[nameIndex];
+				HMODULE module = GetModuleHandleW(moduleNameW);
 				if (!module && !loadAttemptedFor[nameIndex]) {
 					loadAttemptedFor[nameIndex] = true;
-					module = LoadLibraryW(moduleName);
+					module = LoadLibraryW(moduleNameW);
 				}
-				if (!module) {
-					continue;
-				}
+				if (!module) continue;
 				wchar_t modulePathW[MAX_PATH] = L"";
 				GetModuleFileNameW(module, modulePathW, MAX_PATH);
 				std::string modulePath = std::filesystem::path(modulePathW).string();
 				void* target = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetState"));
-				if (target && g_xinputHookedTargets.count(target) == 0 &&
-					g_xinputFailedTargets.count(target) == 0 &&
-					g_xinputModuleCount < kMaxXInputModules) {
+				if (target && g_xinputHookedTargets.count(target) == 0 && g_xinputModuleCount < kMaxXInputModules) {
 					int slot = g_xinputModuleCount;
 					XInputGetStateFunc* origSlot = &g_origXInputGetState[slot];
-					if (MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
-						reinterpret_cast<LPVOID*>(origSlot)) == MH_OK &&
-						MH_EnableHook(target) == MH_OK) {
+					if (!*origSlot) *origSlot = reinterpret_cast<XInputGetStateFunc>(target);
+					MH_STATUS stCreate = MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]), reinterpret_cast<LPVOID*>(origSlot));
+					MH_STATUS stEnable = MH_OK;
+					if (stCreate == MH_OK) stEnable = MH_EnableHook(target);
+					if (stCreate == MH_OK && stEnable == MH_OK) {
 						g_xinputHookedTargets.insert(target);
-						g_xinputSlotNames[slot] = moduleNameNarrow;
+						g_xinputSlotNames[slot] = moduleNameA;
 						++g_xinputModuleCount;
 						spdlog::info("RawInput: hooked XInputGetState in {} (loaded from {}) for gamepad suppression ({} module(s))",
-							moduleNameNarrow, modulePath, g_xinputModuleCount);
+							moduleNameA, modulePath, g_xinputModuleCount);
 					} else {
-						MH_RemoveHook(target);
-						g_xinputFailedTargets.insert(target);
-						spdlog::warn("RawInput: failed to hook XInputGetState in {} (loaded from {})",
-							moduleNameNarrow, modulePath);
+						if (stCreate != MH_OK) {
+							spdlog::warn("RawInput: failed to hook XInputGetState in {} (loaded from {}) status {} {}",
+								moduleNameA, modulePath, static_cast<int>(stCreate), MH_StatusToString(stCreate));
+						} else {
+							spdlog::warn("RawInput: failed to enable hook XInputGetState in {} (loaded from {}) status {} {}",
+								moduleNameA, modulePath, static_cast<int>(stEnable), MH_StatusToString(stEnable));
+							MH_RemoveHook(target);
+						}
 					}
 				}
-
 				void* targetEx = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetStateEx"));
-				if (!targetEx) {
-					targetEx = reinterpret_cast<void*>(GetProcAddress(module, reinterpret_cast<LPCSTR>(100)));
-				}
-				if (targetEx && g_xinputExHookedTargets.count(targetEx) == 0 &&
-					g_xinputExFailedTargets.count(targetEx) == 0 &&
-					g_xinputExModuleCount < kMaxXInputModules) {
+				if (!targetEx) targetEx = reinterpret_cast<void*>(GetProcAddress(module, reinterpret_cast<LPCSTR>(100)));
+				if (targetEx && g_xinputExHookedTargets.count(targetEx) == 0 && g_xinputExModuleCount < kMaxXInputModules) {
 					int slotEx = g_xinputExModuleCount;
 					XInputGetStateFunc* origSlotEx = &g_origXInputGetStateEx[slotEx];
-					if (MH_CreateHook(targetEx, reinterpret_cast<LPVOID>(g_xinputExDetours[slotEx]),
-						reinterpret_cast<LPVOID*>(origSlotEx)) == MH_OK &&
-						MH_EnableHook(targetEx) == MH_OK) {
+					if (!*origSlotEx) *origSlotEx = reinterpret_cast<XInputGetStateFunc>(targetEx);
+					MH_STATUS stCreate = MH_CreateHook(targetEx, reinterpret_cast<LPVOID>(g_xinputExDetours[slotEx]), reinterpret_cast<LPVOID*>(origSlotEx));
+					MH_STATUS stEnable = MH_OK;
+					if (stCreate == MH_OK) stEnable = MH_EnableHook(targetEx);
+					if (stCreate == MH_OK && stEnable == MH_OK) {
 						g_xinputExHookedTargets.insert(targetEx);
-						g_xinputExSlotNames[slotEx] = moduleNameNarrow;
+						g_xinputExSlotNames[slotEx] = moduleNameA;
 						++g_xinputExModuleCount;
 						spdlog::info("RawInput: hooked XInputGetStateEx in {} (loaded from {}) for gamepad suppression ({} module(s))",
-							moduleNameNarrow, modulePath, g_xinputExModuleCount);
+							moduleNameA, modulePath, g_xinputExModuleCount);
 					} else {
-						MH_RemoveHook(targetEx);
-						g_xinputExFailedTargets.insert(targetEx);
-						spdlog::warn("RawInput: failed to hook XInputGetStateEx in {} (loaded from {})",
-							moduleNameNarrow, modulePath);
+						if (stCreate != MH_OK) {
+							spdlog::warn("RawInput: failed to hook XInputGetStateEx in {} (loaded from {}) status {} {}",
+								moduleNameA, modulePath, static_cast<int>(stCreate), MH_StatusToString(stCreate));
+						} else {
+							spdlog::warn("RawInput: failed to enable hook XInputGetStateEx in {} (loaded from {}) status {} {}",
+								moduleNameA, modulePath, static_cast<int>(stEnable), MH_StatusToString(stEnable));
+							MH_RemoveHook(targetEx);
+						}
 					}
+				}
+			}
+
+			static ULONGLONG lastIatPatchTick = 0;
+			ULONGLONG now = GetTickCount64();
+			if (now - lastIatPatchTick >= 1000) {
+				lastIatPatchTick = now;
+				int patched = PatchAllModulesIAT();
+				if (patched > 0) {
+					spdlog::info("RawInput: IAT patched {} import(s) for XInput suppression", patched);
+					spdlog::default_logger()->flush();
 				}
 			}
 
 			static bool inputModuleScanDone = false;
 			if (!inputModuleScanDone) {
 				inputModuleScanDone = true;
-				HANDLE snapshot = CreateToolhelp32Snapshot(
-					TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
+				HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
 				if (snapshot != INVALID_HANDLE_VALUE) {
 					MODULEENTRY32W entry{};
 					entry.dwSize = sizeof(entry);
@@ -308,6 +557,22 @@ namespace RadarKeys {
 				if (abs((int)s.Gamepad.sThumbLY) > abs((int)ly)) ly = s.Gamepad.sThumbLY;
 				if (abs((int)s.Gamepad.sThumbRX) > abs((int)rx)) rx = s.Gamepad.sThumbRX;
 				if (abs((int)s.Gamepad.sThumbRY) > abs((int)ry)) ry = s.Gamepad.sThumbRY;
+				}
+			}
+
+			if (g_iatOrigXInputGetState) {
+				for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
+					XINPUT_STATE s{};
+					if (g_iatOrigXInputGetState(i, &s) != ERROR_SUCCESS) continue;
+					anyConnected = true;
+					xinputConnected = true;
+					buttons |= s.Gamepad.wButtons;
+					leftTrigger = (std::max)(leftTrigger, s.Gamepad.bLeftTrigger);
+					rightTrigger = (std::max)(rightTrigger, s.Gamepad.bRightTrigger);
+					if (abs((int)s.Gamepad.sThumbLX) > abs((int)lx)) lx = s.Gamepad.sThumbLX;
+					if (abs((int)s.Gamepad.sThumbLY) > abs((int)ly)) ly = s.Gamepad.sThumbLY;
+					if (abs((int)s.Gamepad.sThumbRX) > abs((int)rx)) rx = s.Gamepad.sThumbRX;
+					if (abs((int)s.Gamepad.sThumbRY) > abs((int)ry)) ry = s.Gamepad.sThumbRY;
 				}
 			}
 
@@ -417,6 +682,23 @@ namespace RadarKeys {
 					if (abs((int)s.Gamepad.sThumbRY) > abs((int)ry)) ry = s.Gamepad.sThumbRY;
 				}
 			}
+			if (g_iatOrigXInputGetState) {
+				for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
+					XINPUT_STATE s{};
+					if (g_iatOrigXInputGetState(i, &s) != ERROR_SUCCESS) continue;
+					if (!slotSeen[i]) {
+						slotSeen[i] = true;
+						++connectedSlots;
+					}
+					buttons |= s.Gamepad.wButtons;
+					leftTrigger = (std::max)(leftTrigger, s.Gamepad.bLeftTrigger);
+					rightTrigger = (std::max)(rightTrigger, s.Gamepad.bRightTrigger);
+					if (abs((int)s.Gamepad.sThumbLX) > abs((int)lx)) lx = s.Gamepad.sThumbLX;
+					if (abs((int)s.Gamepad.sThumbLY) > abs((int)ly)) ly = s.Gamepad.sThumbLY;
+					if (abs((int)s.Gamepad.sThumbRX) > abs((int)rx)) rx = s.Gamepad.sThumbRX;
+					if (abs((int)s.Gamepad.sThumbRY) > abs((int)ry)) ry = s.Gamepad.sThumbRY;
+				}
+			}
 
 			static bool bridgeActive = false;
 			static ULONGLONG lastBridgeCheck = 0;
@@ -489,7 +771,6 @@ namespace RadarKeys {
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
 
 		void ProcessKey(PRAWINPUT pRaw) {
-			//spdlog::trace("ProcessKey");//DEBUG
 			USHORT vKey = pRaw->data.keyboard.VKey;
 			if (vKey >= vKeyMax) {
 				spdlog::warn("RawInput::ProcessKey: ignoring out-of-range VKey {}", vKey);
@@ -502,49 +783,26 @@ namespace RadarKeys {
 			const bool wasBreak = (oldFlags & RI_KEY_BREAK) != 0;
 
 			BUTTONEVENT buttonEvent = BUTTONEVENT::UP;
-			if (!isBreak && wasBreak) {//OnKeyDown
+			if (!isBreak && wasBreak) {
 				buttonEvent = BUTTONEVENT::ONDOWN;
-				realStateHeld[vKey] = true; // Update tracking table
+				realStateHeld[vKey] = true;
 			}
-			else if (isBreak && !wasBreak) {//OnKeyUp
+			else if (isBreak && !wasBreak) {
 				buttonEvent = BUTTONEVENT::ONUP;
-				realStateHeld[vKey] = false; // Update tracking table
+				realStateHeld[vKey] = false;
 			}
-			else if (!isBreak && !wasBreak) {//Held
+			else if (!isBreak && !wasBreak) {
 				buttonEvent = BUTTONEVENT::HELD;
 			}
-			//else up, which you shouldnt hit
 
 			currFlags[vKey] = flags;
 
 			DoActions(vKey, buttonEvent);
 
-#ifdef _DEBUG
-			//WCHAR wcTextBuffer[512];
-			//UINT keyChar = MapVirtualKey(pRaw->data.keyboard.VKey, MAPVK_VK_TO_CHAR);
+		}
 
-			//wsprintf(wcTextBuffer,
-			//	TEXT("Type=%d\nDevice=0x%x\nMakeCode=0x%x\nFlags=0x%x\nReserved=0x%x\nExtraInformation=0x%x\nMessage=0x%x\nVKey=0x%x\nEvent=0x%x\nkeyChar=0x%x\n\n"),
-			//	/// device header
-			//	pRaw->header.dwType,
-			//	// device handle, pass this to GetRawInputDeviceInfo
-			//	pRaw->header.hDevice,
-
-			//	pRaw->data.keyboard.MakeCode,
-			//	pRaw->data.keyboard.Flags,
-			//	pRaw->data.keyboard.Reserved,
-			//	pRaw->data.keyboard.ExtraInformation,
-			//	pRaw->data.keyboard.Message,
-			//	pRaw->data.keyboard.VKey,
-			//	keyChar);
-
-			//wprintf(wcTextBuffer);
-#endif // _DEBUG
-		}//ProcessRawInput
-
-		// modified to add in mouse keys
 		struct {
-			USHORT vk;		UINT downflag;					UINT upflag;
+			USHORT vk;		UINT downflag;						UINT upflag;
 		} const k[] = {
 			{ VK_LBUTTON,   RI_MOUSE_LEFT_BUTTON_DOWN,		RI_MOUSE_LEFT_BUTTON_UP },
 			{ VK_RBUTTON,   RI_MOUSE_RIGHT_BUTTON_DOWN,		RI_MOUSE_RIGHT_BUTTON_UP },
@@ -597,31 +855,11 @@ namespace RadarKeys {
 					allowGameInput = false;
 				}
 
-				// safety filter
 				if (!ignore[vKey] && vKey != VK_LBUTTON && vKey != VK_RBUTTON) {
 					DoActions(vKey, buttonEvent);
 				}
 			}
 
-#ifdef _DEBUG
-			/* FIXED: Wrapped the multi-line string text cleanly inside a block comment to stop the syntax crash on line 207 */
-			//WCHAR wcTextBuffer[512];
-
-			//wsprintf(wcTextBuffer,
-			//	TEXT("Type=%d\nDevice=0x%x\nulButtons=0x%x\nulRawButtons=0x%x\nusButtonData=0x%x\nusButtonFlags=0x%x\nusFlags=0x%x\nlLastX=0x%x\nlLastY=0x%x\n\n"),
-			//	pRaw->header.dwType,
-			//	pRaw->header.hDevice,
-
-			//	pRaw->data.mouse.ulButtons,
-			//	pRaw->data.mouse.ulRawButtons,
-			//	pRaw->data.mouse.usButtonData,
-			//	pRaw->data.mouse.usButtonFlags,
-			//	pRaw->data.mouse.usFlags,
-			//	pRaw->data.mouse.lLastX,
-			//	pRaw->data.mouse.lLastY);
-
-			//wprintf(wcTextBuffer);
-#endif // _DEBUG
 			return allowGameInput;
 		}
 
@@ -646,7 +884,7 @@ namespace RadarKeys {
 					action(buttonEvent);
 				}
 			}
-		}//DoActions
+		}
 
 
 		ActionHandle RegisterAction(USHORT vKey, ButtonAction action) {
@@ -663,7 +901,7 @@ namespace RadarKeys {
 			ActionHandle handle = nextActionHandle++;
 			buttonActions[vKey]->push_back({ handle, action });
 			return handle;
-		}//RegisterAction
+		}
 
 		void UnRegisterAction(USHORT vKey) {
 			if (vKey >= vKeyMax) {
@@ -679,7 +917,7 @@ namespace RadarKeys {
 				delete buttonActions[vKey];
 				buttonActions[vKey] = nullptr;
 			}
-		}//UnRegisterAction
+		}
 
 		void UnRegisterAction(USHORT vKey, ActionHandle handle) {
 			if (vKey >= vKeyMax || handle == 0) {
@@ -703,14 +941,12 @@ namespace RadarKeys {
 				}
 			}
 			spdlog::warn("RawInput UnRegisterAction: handle {} not found for vKey {}", handle, vKey);
-		}//UnRegisterAction (handle)
+		}
 
 		bool IsKeyDown(USHORT vKey) {
 			return vKey < vKeyMax && !((currFlags[vKey] & RI_KEY_BREAK) != 0);
-		}//IsKeyDown
+		}
 
-		//DEBUG
-		//tex: don't process key //DEBUGNOW what am I doing here?
 		void InitIgnoreKeys() {
 			ignore[VK_KANA] = true;
 			ignore[VK_HANGEUL] = true;
@@ -775,7 +1011,7 @@ namespace RadarKeys {
 			ignore[VK_NONAME] = true;
 			ignore[VK_PA1] = true;
 			ignore[VK_OEM_CLEAR] = true;
-		}//InitIgnoreKeys
+		}
 
 		void InitializeInput() {
 			spdlog::debug("Rawinput InitializeInput");
@@ -789,12 +1025,8 @@ namespace RadarKeys {
 			switch (uMsg) {
 			case WM_INPUT:
 			{
-				// wParam is either RIM_INPUT (this app foreground) or RIM_INPUTSINK (this app background)
-				// lParam is the RAWINPUT handle
-
 				UINT dwSize;
 
-				// determine size of buffer
 				if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER)) == -1) {
 					break;
 				}
@@ -805,13 +1037,11 @@ namespace RadarKeys {
 				}
 				ZeroMemory(lpb, dwSize);
 
-				// get actual data
 				if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
 					delete[] lpb;
 					break;
 				}
 
-				// process it
 				PRAWINPUT pRaw = (PRAWINPUT)lpb;
 				if (pRaw->header.dwType == RIM_TYPEKEYBOARD) {
 					USHORT vKey = pRaw->data.keyboard.VKey;
@@ -872,17 +1102,15 @@ namespace RadarKeys {
 					}
 				}
 
-				// not needed
 				delete[] lpb;
 				break;
-			}//case WM_INPUT
-			}//switch uMsg
+			}
+			}
 
 			return true;
-		}//OnMessage
+		}
 
 		bool IsKeyHeldReal(USHORT vKey) {
-			// this is for the hold function.
 			if (vKey >= vKeyMax) return false;
 			return realStateHeld[vKey];
 		}
