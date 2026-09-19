@@ -581,8 +581,27 @@ namespace RadarKeys {
 			HANDLE handle;
 			LPVOID buffer;
 			DWORD size;
+			HANDLE event;
+			LPOVERLAPPED_COMPLETION_ROUTINE exRoutine;
 		};
 		static std::unordered_map<LPOVERLAPPED, HidOverlappedRead> g_hidOverlappedReads;
+		static std::unordered_map<HANDLE, HidOverlappedRead> g_hidEventReads;
+		typedef LONG(NTAPI* NtReadFile_t)(HANDLE, HANDLE, void*, void*, void*, void*, ULONG, void*, void*);
+		static NtReadFile_t g_origNtReadFile = nullptr;
+		typedef BOOL(WINAPI* ReadFileEx_t)(HANDLE, LPVOID, DWORD, LPOVERLAPPED, LPOVERLAPPED_COMPLETION_ROUTINE);
+		static ReadFileEx_t g_origReadFileEx = nullptr;
+		typedef DWORD(WINAPI* WaitForSingleObject_t)(HANDLE, DWORD);
+		typedef DWORD(WINAPI* WaitForSingleObjectEx_t)(HANDLE, DWORD, BOOL);
+		typedef DWORD(WINAPI* WaitForMultipleObjects_t)(DWORD, const HANDLE*, BOOL, DWORD);
+		typedef DWORD(WINAPI* WaitForMultipleObjectsEx_t)(DWORD, const HANDLE*, BOOL, DWORD, BOOL);
+		static WaitForSingleObject_t g_origWaitForSingleObject = nullptr;
+		static WaitForSingleObjectEx_t g_origWaitForSingleObjectEx = nullptr;
+		static WaitForMultipleObjects_t g_origWaitForMultipleObjects = nullptr;
+		static WaitForMultipleObjectsEx_t g_origWaitForMultipleObjectsEx = nullptr;
+		struct NtIoStatusBlock {
+			LONG status;
+			ULONG_PTR information;
+		};
 		typedef BOOL(WINAPI* GetOverlappedResult_t)(HANDLE, LPOVERLAPPED, LPDWORD, BOOL);
 		typedef BOOL(WINAPI* GetOverlappedResultEx_t)(HANDLE, LPOVERLAPPED, LPDWORD, DWORD, BOOL);
 		static GetOverlappedResult_t g_origGetOverlappedResult = nullptr;
@@ -643,6 +662,35 @@ namespace RadarKeys {
 			}
 		}
 
+		static void SanitizeCompletedHidRead(const HidOverlappedRead& rec, DWORD transferred) {
+			if (transferred == 0 || !rec.buffer) {
+				return;
+			}
+			if (g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(rec.handle)) {
+				DWORD toSanitize = transferred < rec.size ? transferred : rec.size;
+				SanitizeGamepadHidBuffer(rec.buffer, toSanitize);
+				const ULONGLONG now = GetTickCount64();
+				ULONGLONG last = g_lastHidSanitizeLog.load(std::memory_order_relaxed);
+				if (now - last >= 1000 && g_lastHidSanitizeLog.compare_exchange_strong(last, now)) {
+					spdlog::info("RawInput: sanitized {}-byte HID read on gamepad handle {:p} (suppression active)",
+						toSanitize, static_cast<void*>(rec.handle));
+					spdlog::default_logger()->flush();
+				}
+			}
+		}
+
+		static void SanitizeHidEventReadsForHandle(HANDLE hHandle, DWORD waitResult) {
+			if (waitResult != WAIT_OBJECT_0 && waitResult != WAIT_ABANDONED) {
+				return;
+			}
+			auto it = g_hidEventReads.find(hHandle);
+			if (it == g_hidEventReads.end()) {
+				return;
+			}
+			SanitizeCompletedHidRead(it->second, it->second.size);
+			g_hidEventReads.erase(it);
+		}
+
 		static void SanitizeHidOverlappedCompletion(HANDLE hFile, LPOVERLAPPED lpOverlapped, DWORD transferred) {
 			auto it = g_hidOverlappedReads.find(lpOverlapped);
 			if (it == g_hidOverlappedReads.end()) {
@@ -691,10 +739,16 @@ namespace RadarKeys {
 				if (g_hidOverlappedReads.size() > 4096) {
 					g_hidOverlappedReads.clear();
 				}
-				HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead };
+				HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
 				g_hidOverlappedReads[lpOverlapped] = record;
+				if (record.event) {
+					if (g_hidEventReads.size() > 4096) {
+						g_hidEventReads.clear();
+					}
+					g_hidEventReads[record.event] = record;
+				}
 			}
-			if (ok && lpNumberOfBytesRead && *lpNumberOfBytesRead > 0 && lpBuffer &&
+			if (ok && !lpOverlapped && lpNumberOfBytesRead && *lpNumberOfBytesRead > 0 && lpBuffer &&
 				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(hFile)) {
 				SanitizeGamepadHidBuffer(lpBuffer, *lpNumberOfBytesRead);
 				const ULONGLONG now = GetTickCount64();
@@ -706,6 +760,105 @@ namespace RadarKeys {
 				}
 			}
 			return ok;
+		}
+
+		static VOID CALLBACK WrappedExCompletion(DWORD dwErrorCode, DWORD dwNumberOfBytesTransfered, LPOVERLAPPED lpOverlapped);
+		struct HidExWrap {
+			LPOVERLAPPED_COMPLETION_ROUTINE routine;
+			HidOverlappedRead rec;
+		};
+		static std::unordered_map<LPOVERLAPPED, HidExWrap> g_hidExRoutines;
+
+		static VOID CALLBACK WrappedExCompletion(DWORD dwErrorCode, DWORD dwNumberOfBytesTransfered, LPOVERLAPPED lpOverlapped) {
+			auto it = g_hidExRoutines.find(lpOverlapped);
+			if (it != g_hidExRoutines.end()) {
+				if (dwErrorCode == 0) {
+					SanitizeCompletedHidRead(it->second.rec, dwNumberOfBytesTransfered);
+				}
+				LPOVERLAPPED_COMPLETION_ROUTINE routine = it->second.routine;
+				g_hidExRoutines.erase(it);
+				if (routine) {
+					routine(dwErrorCode, dwNumberOfBytesTransfered, lpOverlapped);
+				}
+				return;
+			}
+		}
+
+		static LONG NTAPI HookedNtReadFileGamepad(HANDLE fileHandle, HANDLE hEvent, void* apcRoutine, void* apcContext,
+			void* ioStatusBlock, void* buffer, ULONG length, void* byteOffset, void* key) {
+			LONG status = g_origNtReadFile(fileHandle, hEvent, apcRoutine, apcContext, ioStatusBlock, buffer, length, byteOffset, key);
+			constexpr LONG kStatusPending = 0x00000103;
+			if ((status >= 0 || status == kStatusPending) && buffer && length > 0 && HandleIsGamepadHid(fileHandle)) {
+				if (status == kStatusPending) {
+					if (hEvent) {
+						if (g_hidEventReads.size() > 4096) {
+							g_hidEventReads.clear();
+						}
+						HidOverlappedRead record{ fileHandle, buffer, length, hEvent, nullptr };
+						g_hidEventReads[hEvent] = record;
+					}
+				} else if (ioStatusBlock) {
+					NtIoStatusBlock* iosb = static_cast<NtIoStatusBlock*>(ioStatusBlock);
+					DWORD transferred = static_cast<DWORD>(iosb->information);
+					if (transferred > 0 && transferred <= length && g_gamepadBlockedToGame.load() != false) {
+						SanitizeGamepadHidBuffer(buffer, transferred);
+						const ULONGLONG now = GetTickCount64();
+						ULONGLONG last = g_lastHidSanitizeLog.load(std::memory_order_relaxed);
+						if (now - last >= 1000 && g_lastHidSanitizeLog.compare_exchange_strong(last, now)) {
+							spdlog::info("RawInput: sanitized {}-byte HID read on gamepad handle {:p} (ntdll path, suppression active)",
+								transferred, static_cast<void*>(fileHandle));
+							spdlog::default_logger()->flush();
+						}
+					}
+				}
+			}
+			return status;
+		}
+
+		static BOOL WINAPI HookedReadFileExGamepad(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead,
+			LPOVERLAPPED lpOverlapped, LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine) {
+			LPOVERLAPPED_COMPLETION_ROUTINE routine = lpCompletionRoutine;
+			if (lpOverlapped && lpBuffer && nNumberOfBytesToRead > 0 && HandleIsGamepadHid(hFile)) {
+				if (g_hidExRoutines.size() > 4096) {
+					g_hidExRoutines.clear();
+				}
+				HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
+				g_hidExRoutines[lpOverlapped] = { lpCompletionRoutine, record };
+				routine = &WrappedExCompletion;
+			}
+			return g_origReadFileEx(hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped, routine);
+		}
+
+		static DWORD WINAPI HookedWaitForSingleObjectGamepad(HANDLE hHandle, DWORD dwMilliseconds) {
+			DWORD result = g_origWaitForSingleObject(hHandle, dwMilliseconds);
+			SanitizeHidEventReadsForHandle(hHandle, result);
+			return result;
+		}
+
+		static DWORD WINAPI HookedWaitForSingleObjectExGamepad(HANDLE hHandle, DWORD dwMilliseconds, BOOL bAlertable) {
+			DWORD result = g_origWaitForSingleObjectEx(hHandle, dwMilliseconds, bAlertable);
+			SanitizeHidEventReadsForHandle(hHandle, result);
+			return result;
+		}
+
+		static DWORD WINAPI HookedWaitForMultipleObjectsGamepad(DWORD nCount, const HANDLE* lpHandles, BOOL bWaitAll, DWORD dwMilliseconds) {
+			DWORD result = g_origWaitForMultipleObjects(nCount, lpHandles, bWaitAll, dwMilliseconds);
+			if (nCount > 0 && nCount <= MAXIMUM_WAIT_OBJECTS && result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + nCount) {
+				for (DWORD i = 0; i < nCount; ++i) {
+					SanitizeHidEventReadsForHandle(lpHandles[i], WAIT_OBJECT_0);
+				}
+			}
+			return result;
+		}
+
+		static DWORD WINAPI HookedWaitForMultipleObjectsExGamepad(DWORD nCount, const HANDLE* lpHandles, BOOL bWaitAll, DWORD dwMilliseconds, BOOL bAlertable) {
+			DWORD result = g_origWaitForMultipleObjectsEx(nCount, lpHandles, bWaitAll, dwMilliseconds, bAlertable);
+			if (nCount > 0 && nCount <= MAXIMUM_WAIT_OBJECTS && result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + nCount) {
+				for (DWORD i = 0; i < nCount; ++i) {
+					SanitizeHidEventReadsForHandle(lpHandles[i], WAIT_OBJECT_0);
+				}
+			}
+			return result;
 		}
 
 		static HANDLE WINAPI HookedCreateFileWGamepad(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
@@ -841,6 +994,43 @@ namespace RadarKeys {
 					MH_EnableHook(overlappedResultEx) != MH_OK)) {
 				MH_RemoveHook(overlappedResultEx);
 				allOk = false;
+			}
+			HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+			if (ntdll) {
+				void* ntReadFile = reinterpret_cast<void*>(GetProcAddress(ntdll, "NtReadFile"));
+				if (ntReadFile && g_origNtReadFile == nullptr) {
+					if (MH_CreateHook(ntReadFile, reinterpret_cast<LPVOID>(&HookedNtReadFileGamepad),
+						reinterpret_cast<LPVOID*>(&g_origNtReadFile)) == MH_OK &&
+						MH_EnableHook(ntReadFile) == MH_OK) {
+						spdlog::info("RawInput: hooked NtReadFile (ntdll) - direct syscall-path HID reads now sanitized");
+					} else {
+						MH_RemoveHook(ntReadFile);
+						spdlog::warn("RawInput: NtReadFile hook failed - direct ntdll reads will bypass sanitization");
+					}
+				}
+			}
+			void* readFileEx = reinterpret_cast<void*>(GetProcAddress(kernel32, "ReadFileEx"));
+			if (readFileEx && g_origReadFileEx == nullptr &&
+				(MH_CreateHook(readFileEx, reinterpret_cast<LPVOID>(&HookedReadFileExGamepad),
+					reinterpret_cast<LPVOID*>(&g_origReadFileEx)) != MH_OK ||
+					MH_EnableHook(readFileEx) != MH_OK)) {
+				MH_RemoveHook(readFileEx);
+				spdlog::warn("RawInput: ReadFileEx hook failed - alertable HID reads will bypass sanitization");
+			}
+			struct WaitTarget { const char* name; void** origSlot; void* detour; };
+			const WaitTarget waitTargets[] = {
+				{ "WaitForSingleObject", reinterpret_cast<void**>(&g_origWaitForSingleObject), reinterpret_cast<void*>(&HookedWaitForSingleObjectGamepad) },
+				{ "WaitForSingleObjectEx", reinterpret_cast<void**>(&g_origWaitForSingleObjectEx), reinterpret_cast<void*>(&HookedWaitForSingleObjectExGamepad) },
+				{ "WaitForMultipleObjects", reinterpret_cast<void**>(&g_origWaitForMultipleObjects), reinterpret_cast<void*>(&HookedWaitForMultipleObjectsGamepad) },
+				{ "WaitForMultipleObjectsEx", reinterpret_cast<void**>(&g_origWaitForMultipleObjectsEx), reinterpret_cast<void*>(&HookedWaitForMultipleObjectsExGamepad) },
+			};
+			for (const WaitTarget& wait : waitTargets) {
+				void* waitTarget = reinterpret_cast<void*>(GetProcAddress(kernel32, wait.name));
+				if (waitTarget && *wait.origSlot == nullptr &&
+					MH_CreateHook(waitTarget, wait.detour, wait.origSlot) == MH_OK &&
+					MH_EnableHook(waitTarget) == MH_OK) {
+					spdlog::info("RawInput: hooked {} - event-driven HID read completions now sanitized", wait.name);
+				}
 			}
 			g_hidFileHooksInstalled.store(allOk, std::memory_order_release);
 			spdlog::info("RawInput: HID handle/read suppression {} (gamepad device opens are tagged, reads sanitized while Gamepad suppression is active)",
