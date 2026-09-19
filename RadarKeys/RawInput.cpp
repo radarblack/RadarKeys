@@ -447,7 +447,7 @@ namespace RadarKeys {
 					typedef HRESULT(__stdcall* RoInitialize_t)(UINT);
 					auto roInitialize = reinterpret_cast<RoInitialize_t>(GetProcAddress(combase, "RoInitialize"));
 					if (roInitialize) {
-						hroInitialize(1);
+						roInitialize(1);
 					}
 				}
 			}
@@ -535,10 +535,10 @@ namespace RadarKeys {
 		static DWORD __stdcall HookedJoyGetPos(UINT uJoyID, JOYINFO* pji) {
 			DWORD result = g_origJoyGetPos ? g_origJoyGetPos(uJoyID, pji) : JOYERR_NOCANDO;
 			if (result == JOYERR_NOERROR && pji && g_gamepadBlockedToGame.load() != false) {
-				pji->dwXpos = 32767;
-				pji->dwYpos = 32767;
-				pji->dwZpos = 32767;
-				pji->dwButtons = 0;
+				pji->wXpos = 32767;
+				pji->wYpos = 32767;
+				pji->wZpos = 32767;
+				pji->wButtons = 0;
 			}
 			return result;
 		}
