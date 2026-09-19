@@ -582,7 +582,8 @@ namespace RadarKeys {
 		static std::unordered_map<void*, void*> g_classGetDeviceDataOrigins;
 		static std::atomic<bool> g_classGetDeviceStateHooked{ false };
 		static std::atomic<bool> g_classGetDeviceDataHooked{ false };
-		static std::atomic<ULONGLONG> g_lastSuppressedJoystickLog{ 0 };
+		struct GameDeviceFormat;
+		static std::unordered_map<void*, ULONGLONG> g_lastSuppressedJoystickLog;
 		static std::unordered_set<void*> g_classHookTargets;
 
 		static bool IsSelfOpenedDevice(IDirectInputDevice8* self) {
@@ -663,10 +664,35 @@ namespace RadarKeys {
 			return false;
 		}
 
-		static void LogSuppressedJoystick(IDirectInputDevice8* self, LPVOID lpvData, DWORD cbData) {
+		static void LogSuppressedJoystick(IDirectInputDevice8* self, LPVOID lpvData, DWORD cbData, const GameDeviceFormat* fmt) {
 			const ULONGLONG now = GetTickCount64();
-			ULONGLONG last = g_lastSuppressedJoystickLog.load(std::memory_order_relaxed);
-			if (now - last < 1000 || !g_lastSuppressedJoystickLog.compare_exchange_strong(last, now)) {
+			ULONGLONG& last = g_lastSuppressedJoystickLog[self];
+			if (now - last < 1000) {
+				return;
+			}
+			last = now;
+			if (fmt && lpvData) {
+				std::string axisText;
+				char valueText[40];
+				size_t printed = 0;
+				for (const auto& axis : fmt->axisNeutrals) {
+					if (axis.first + sizeof(LONG) <= cbData) {
+						if (printed > 0) {
+							axisText.push_back(' ');
+						}
+						sprintf_s(valueText, sizeof(valueText), "@%u=%d",
+							static_cast<unsigned>(axis.first),
+							static_cast<int>(*reinterpret_cast<const LONG*>(static_cast<const unsigned char*>(lpvData) + axis.first)));
+						axisText += valueText;
+						++printed;
+						if (printed >= 8) {
+							break;
+						}
+					}
+				}
+				spdlog::info("DirectInputHook: suppressed game joystick {:p} pre-neutral [{}]",
+					static_cast<void*>(self), axisText);
+				spdlog::default_logger()->flush();
 				return;
 			}
 			if (lpvData && cbData >= 8 * sizeof(LONG)) {
@@ -779,7 +805,7 @@ namespace RadarKeys {
 					}
 				}
 				if (active) {
-					LogSuppressedJoystick(self, lpvData, cbData);
+					LogSuppressedJoystick(self, lpvData, cbData, &fmt);
 				}
 				std::memset(lpvData, 0, cbData);
 				for (const auto& axis : fmt.axisNeutrals) {
@@ -800,7 +826,7 @@ namespace RadarKeys {
 				}
 				active = JoystickStateActive(info, lpvData, cbData);
 				if (active) {
-					LogSuppressedJoystick(self, lpvData, cbData);
+					LogSuppressedJoystick(self, lpvData, cbData, nullptr);
 				}
 				NeutralizeJoystick(lpvData, cbData, info);
 			}
@@ -841,7 +867,7 @@ namespace RadarKeys {
 				}
 			}
 			if (hadInput) {
-				LogSuppressedJoystick(self, nullptr, 0);
+				LogSuppressedJoystick(self, nullptr, 0, &fmt);
 			}
 		}
 
