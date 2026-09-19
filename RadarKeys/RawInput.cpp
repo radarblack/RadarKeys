@@ -106,15 +106,45 @@ namespace RadarKeys {
 		typedef DWORD(WINAPI* XInputGetStateFunc)(DWORD, XINPUT_STATE*);
 		static constexpr int kMaxXInputModules = 5;
 		static XInputGetStateFunc g_origXInputGetState[kMaxXInputModules] = {};
+		static XInputGetStateFunc g_origXInputGetStateEx[kMaxXInputModules] = {};
 		static int g_xinputModuleCount = 0;
+		static int g_xinputExModuleCount = 0;
+		static const char* g_xinputSlotNames[kMaxXInputModules] = {};
+		static const char* g_xinputExSlotNames[kMaxXInputModules] = {};
 		static std::unordered_set<void*> g_xinputHookedTargets;
 		static std::unordered_set<void*> g_xinputFailedTargets;
+		static std::unordered_set<void*> g_xinputExHookedTargets;
+		static std::unordered_set<void*> g_xinputExFailedTargets;
 
 		template <int N>
 		DWORD WINAPI HookedXInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
+			static std::atomic<bool> firstCallLogged{ false };
 			DWORD result = ERROR_DEVICE_NOT_CONNECTED;
 			if (g_origXInputGetState[N]) {
 				result = g_origXInputGetState[N](dwUserIndex, pState);
+			}
+			if (!firstCallLogged.exchange(true)) {
+				spdlog::info("RawInput: game called XInputGetState (slot {}, module {}, userIndex {}, result {})",
+					N, g_xinputSlotNames[N] ? g_xinputSlotNames[N] : "?", dwUserIndex, result);
+				spdlog::default_logger()->flush();
+			}
+			if (result == ERROR_SUCCESS && pState && g_gamepadBlockedToGame.load()) {
+				ZeroMemory(&pState->Gamepad, sizeof(XINPUT_GAMEPAD));
+			}
+			return result;
+		}
+
+		template <int N>
+		DWORD WINAPI HookedXInputGetStateEx(DWORD dwUserIndex, XINPUT_STATE* pState) {
+			static std::atomic<bool> firstCallLogged{ false };
+			DWORD result = ERROR_DEVICE_NOT_CONNECTED;
+			if (g_origXInputGetStateEx[N]) {
+				result = g_origXInputGetStateEx[N](dwUserIndex, pState);
+			}
+			if (!firstCallLogged.exchange(true)) {
+				spdlog::info("RawInput: game called XInputGetStateEx (slot {}, module {}, userIndex {}, result {})",
+					N, g_xinputExSlotNames[N] ? g_xinputExSlotNames[N] : "?", dwUserIndex, result);
+				spdlog::default_logger()->flush();
 			}
 			if (result == ERROR_SUCCESS && pState && g_gamepadBlockedToGame.load()) {
 				ZeroMemory(&pState->Gamepad, sizeof(XINPUT_GAMEPAD));
@@ -128,6 +158,12 @@ namespace RadarKeys {
 			&HookedXInputGetState<4>,
 		};
 
+		static XInputGetStateFunc g_xinputExDetours[kMaxXInputModules] = {
+			&HookedXInputGetStateEx<0>, &HookedXInputGetStateEx<1>,
+			&HookedXInputGetStateEx<2>, &HookedXInputGetStateEx<3>,
+			&HookedXInputGetStateEx<4>,
+		};
+
 		void EnsureXInputHook() {
 			static const wchar_t* kModuleNames[] = {
 				L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll", L"xinput1_2.dll", L"xinput1_1.dll"
@@ -138,9 +174,6 @@ namespace RadarKeys {
 			static bool loadAttemptedFor[kMaxXInputModules] = {};
 
 			for (int nameIndex = 0; nameIndex < kMaxXInputModules; ++nameIndex) {
-				if (g_xinputModuleCount >= kMaxXInputModules) {
-					break;
-				}
 				const wchar_t* moduleName = kModuleNames[nameIndex];
 				const char* moduleNameNarrow = kModuleNamesNarrow[nameIndex];
 				HMODULE module = GetModuleHandleW(moduleName);
@@ -155,28 +188,50 @@ namespace RadarKeys {
 				GetModuleFileNameW(module, modulePathW, MAX_PATH);
 				std::string modulePath = std::filesystem::path(modulePathW).string();
 				void* target = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetState"));
-				if (!target) {
-					target = reinterpret_cast<void*>(GetProcAddress(module, reinterpret_cast<LPCSTR>(100)));
-				}
-				if (!target || g_xinputHookedTargets.count(target) != 0 ||
-					g_xinputFailedTargets.count(target) != 0) {
-					continue;
+				if (target && g_xinputHookedTargets.count(target) == 0 &&
+					g_xinputFailedTargets.count(target) == 0 &&
+					g_xinputModuleCount < kMaxXInputModules) {
+					int slot = g_xinputModuleCount;
+					XInputGetStateFunc* origSlot = &g_origXInputGetState[slot];
+					if (MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
+						reinterpret_cast<LPVOID*>(origSlot)) == MH_OK &&
+						MH_EnableHook(target) == MH_OK) {
+						g_xinputHookedTargets.insert(target);
+						g_xinputSlotNames[slot] = moduleNameNarrow;
+						++g_xinputModuleCount;
+						spdlog::info("RawInput: hooked XInputGetState in {} (loaded from {}) for gamepad suppression ({} module(s))",
+							moduleNameNarrow, modulePath, g_xinputModuleCount);
+					} else {
+						MH_RemoveHook(target);
+						g_xinputFailedTargets.insert(target);
+						spdlog::warn("RawInput: failed to hook XInputGetState in {} (loaded from {})",
+							moduleNameNarrow, modulePath);
+					}
 				}
 
-				int slot = g_xinputModuleCount;
-				XInputGetStateFunc* origSlot = &g_origXInputGetState[slot];
-				if (MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
-					reinterpret_cast<LPVOID*>(origSlot)) == MH_OK &&
-					MH_EnableHook(target) == MH_OK) {
-					g_xinputHookedTargets.insert(target);
-					++g_xinputModuleCount;
-					spdlog::info("RawInput: hooked XInputGetState in {} (loaded from {}) for gamepad suppression ({} module(s))",
-						moduleNameNarrow, modulePath, g_xinputModuleCount);
-				} else {
-					MH_RemoveHook(target);
-					g_xinputFailedTargets.insert(target);
-					spdlog::warn("RawInput: failed to hook XInputGetState in {} (loaded from {})",
-						moduleNameNarrow, modulePath);
+				void* targetEx = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetStateEx"));
+				if (!targetEx) {
+					targetEx = reinterpret_cast<void*>(GetProcAddress(module, reinterpret_cast<LPCSTR>(100)));
+				}
+				if (targetEx && g_xinputExHookedTargets.count(targetEx) == 0 &&
+					g_xinputExFailedTargets.count(targetEx) == 0 &&
+					g_xinputExModuleCount < kMaxXInputModules) {
+					int slotEx = g_xinputExModuleCount;
+					XInputGetStateFunc* origSlotEx = &g_origXInputGetStateEx[slotEx];
+					if (MH_CreateHook(targetEx, reinterpret_cast<LPVOID>(g_xinputExDetours[slotEx]),
+						reinterpret_cast<LPVOID*>(origSlotEx)) == MH_OK &&
+						MH_EnableHook(targetEx) == MH_OK) {
+						g_xinputExHookedTargets.insert(targetEx);
+						g_xinputExSlotNames[slotEx] = moduleNameNarrow;
+						++g_xinputExModuleCount;
+						spdlog::info("RawInput: hooked XInputGetStateEx in {} (loaded from {}) for gamepad suppression ({} module(s))",
+							moduleNameNarrow, modulePath, g_xinputExModuleCount);
+					} else {
+						MH_RemoveHook(targetEx);
+						g_xinputExFailedTargets.insert(targetEx);
+						spdlog::warn("RawInput: failed to hook XInputGetStateEx in {} (loaded from {})",
+							moduleNameNarrow, modulePath);
+					}
 				}
 			}
 		}
@@ -734,6 +789,23 @@ namespace RadarKeys {
 					if (!ProcessMouseButtons(pRaw)) {
 						delete[] lpb;
 						return false;
+					}
+				}
+				else if (pRaw->header.dwType == RIM_TYPEHID) {
+					static std::unordered_set<HANDLE> seenHidDevices;
+					HANDLE hidDevice = pRaw->header.hDevice;
+					if (seenHidDevices.find(hidDevice) == seenHidDevices.end()) {
+						seenHidDevices.insert(hidDevice);
+						RID_DEVICE_INFO hidInfo{};
+						hidInfo.cbSize = sizeof(RID_DEVICE_INFO);
+						UINT hidInfoSize = sizeof(RID_DEVICE_INFO);
+						if (GetRawInputDeviceInfoW(hidDevice, RIDI_DEVICEINFO, &hidInfo, &hidInfoSize) != static_cast<UINT>(-1)) {
+							spdlog::info("RawInput: WM_INPUT HID device seen (usagePage={:04X}, usage={:04X}{})",
+								hidInfo.hid.usUsagePage, hidInfo.hid.usUsage,
+								(hidInfo.hid.usUsagePage == 0x01 && (hidInfo.hid.usUsage == 0x04 || hidInfo.hid.usUsage == 0x05))
+								? " GAMEPAD/JOYSTICK" : "");
+							spdlog::default_logger()->flush();
+						}
 					}
 				}
 
