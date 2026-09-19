@@ -49,16 +49,16 @@ namespace RadarKeys {
 		static IDirectInput8* g_ownDI8 = nullptr;
 
 		static constexpr size_t kDirectInput8VTableSize = 11;
-		static constexpr size_t kDeviceVTableSize = 25;
+		static constexpr size_t kDeviceVTableSize = 30;
 		static constexpr size_t kSlotGetCapabilities = 3;
 		static constexpr size_t kSlotRelease = 2;
 		static constexpr size_t kSlotGetProperty = 5;
 		static constexpr size_t kSlotCreateDevice = 3;
-		static constexpr size_t kSlotSetProperty = 4;
+		static constexpr size_t kSlotSetProperty = 6;
 		static constexpr size_t kSlotAcquire = 7;
-		static constexpr size_t kSlotGetDeviceState = 8;
-		static constexpr size_t kSlotGetDeviceData = 9;
-		static constexpr size_t kSlotGetDeviceInfo = 14;
+		static constexpr size_t kSlotGetDeviceState = 9;
+		static constexpr size_t kSlotGetDeviceData = 10;
+		static constexpr size_t kSlotGetDeviceInfo = 15;
 
 		enum class DeviceKind { Unknown, Keyboard, Mouse, Joystick };
 
