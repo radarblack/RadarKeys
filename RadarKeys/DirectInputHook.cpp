@@ -47,8 +47,8 @@ namespace RadarKeys {
 
 		static IDirectInput8* g_ownDI8 = nullptr;
 
-		static constexpr size_t kDirectInput8VTableSize = 11;
-		static constexpr size_t kDeviceVTableSize = 29;
+		static constexpr size_t kDirectInput8VTableSize = 9;
+		static constexpr size_t kDeviceVTableSize = 24;
 		static constexpr size_t kSlotGetCapabilities = 3;
 		static constexpr size_t kSlotRelease = 2;
 		static constexpr size_t kSlotGetProperty = 5;
