@@ -65,5 +65,6 @@ namespace RadarKeys {
 		bool IsKeyboardBlockedToGame();
 		bool IsMouseBlockedToGame();
 		void OnFocusLost();
+		void StartWGIClassHookWorker();
 	}
 }
