@@ -6,6 +6,7 @@
 #include "spdlog/spdlog.h"
 #include <MinHook.h>
 #include <Xinput.h>
+#include <tlhelp32.h>
 #include <cstdlib>
 #include <algorithm>
 #include <utility>
@@ -118,36 +119,46 @@ namespace RadarKeys {
 
 		template <int N>
 		DWORD WINAPI HookedXInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
-			static std::atomic<bool> firstCallLogged{ false };
+			static std::atomic<unsigned long long> callCount{ 0 };
+			static std::atomic<ULONGLONG> lastLogTick{ 0 };
 			DWORD result = ERROR_DEVICE_NOT_CONNECTED;
 			if (g_origXInputGetState[N]) {
 				result = g_origXInputGetState[N](dwUserIndex, pState);
 			}
-			if (!firstCallLogged.exchange(true)) {
-				spdlog::info("RawInput: game called XInputGetState (slot {}, module {}, userIndex {}, result {})",
-					N, g_xinputSlotNames[N] ? g_xinputSlotNames[N] : "?", dwUserIndex, result);
-				spdlog::default_logger()->flush();
-			}
-			if (result == ERROR_SUCCESS && pState && g_gamepadBlockedToGame.load()) {
+			const bool blocked = g_gamepadBlockedToGame.load() != false;
+			if (result == ERROR_SUCCESS && pState && blocked) {
 				ZeroMemory(&pState->Gamepad, sizeof(XINPUT_GAMEPAD));
+			}
+			const unsigned long long calls = callCount.fetch_add(1, std::memory_order_relaxed) + 1;
+			const ULONGLONG now = GetTickCount64();
+			ULONGLONG last = lastLogTick.load(std::memory_order_relaxed);
+			if (calls == 1 || (now - last >= 2000 && lastLogTick.compare_exchange_strong(last, now))) {
+				spdlog::info("RawInput: XInputGetState via {} slot {}: {} call(s) so far, last userIndex {} result {} blocked {}",
+					g_xinputSlotNames[N] ? g_xinputSlotNames[N] : "?", N, calls, dwUserIndex, result, blocked);
+				spdlog::default_logger()->flush();
 			}
 			return result;
 		}
 
 		template <int N>
 		DWORD WINAPI HookedXInputGetStateEx(DWORD dwUserIndex, XINPUT_STATE* pState) {
-			static std::atomic<bool> firstCallLogged{ false };
+			static std::atomic<unsigned long long> callCount{ 0 };
+			static std::atomic<ULONGLONG> lastLogTick{ 0 };
 			DWORD result = ERROR_DEVICE_NOT_CONNECTED;
 			if (g_origXInputGetStateEx[N]) {
 				result = g_origXInputGetStateEx[N](dwUserIndex, pState);
 			}
-			if (!firstCallLogged.exchange(true)) {
-				spdlog::info("RawInput: game called XInputGetStateEx (slot {}, module {}, userIndex {}, result {})",
-					N, g_xinputExSlotNames[N] ? g_xinputExSlotNames[N] : "?", dwUserIndex, result);
-				spdlog::default_logger()->flush();
-			}
-			if (result == ERROR_SUCCESS && pState && g_gamepadBlockedToGame.load()) {
+			const bool blocked = g_gamepadBlockedToGame.load() != false;
+			if (result == ERROR_SUCCESS && pState && blocked) {
 				ZeroMemory(&pState->Gamepad, sizeof(XINPUT_GAMEPAD));
+			}
+			const unsigned long long calls = callCount.fetch_add(1, std::memory_order_relaxed) + 1;
+			const ULONGLONG now = GetTickCount64();
+			ULONGLONG last = lastLogTick.load(std::memory_order_relaxed);
+			if (calls == 1 || (now - last >= 2000 && lastLogTick.compare_exchange_strong(last, now))) {
+				spdlog::info("RawInput: XInputGetStateEx via {} slot {}: {} call(s) so far, last userIndex {} result {} blocked {}",
+					g_xinputExSlotNames[N] ? g_xinputExSlotNames[N] : "?", N, calls, dwUserIndex, result, blocked);
+				spdlog::default_logger()->flush();
 			}
 			return result;
 		}
@@ -232,6 +243,37 @@ namespace RadarKeys {
 						spdlog::warn("RawInput: failed to hook XInputGetStateEx in {} (loaded from {})",
 							moduleNameNarrow, modulePath);
 					}
+				}
+			}
+
+			static bool inputModuleScanDone = false;
+			if (!inputModuleScanDone) {
+				inputModuleScanDone = true;
+				HANDLE snapshot = CreateToolhelp32Snapshot(
+					TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
+				if (snapshot != INVALID_HANDLE_VALUE) {
+					MODULEENTRY32W entry{};
+					entry.dwSize = sizeof(entry);
+					static const wchar_t* kInputRelated[] = {
+						L"xinput", L"dinput", L"gameinput", L"gaming.input", L"hid.dll",
+						L"steam_api", L"steamclient", L"gameoverlayrenderer", L"vigem",
+						L"sdl", L"xusb", L"inputhost"
+					};
+					if (Module32FirstW(snapshot, &entry)) {
+						do {
+							std::wstring lowerName(entry.szModule);
+							std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::towlower);
+							for (const wchar_t* needle : kInputRelated) {
+								if (lowerName.find(needle) != std::wstring::npos) {
+									spdlog::info("RawInput: input-related module in process: {} ({})",
+										std::filesystem::path(entry.szModule).string(),
+										std::filesystem::path(entry.szExePath).string());
+									break;
+								}
+							}
+						} while (Module32NextW(snapshot, &entry));
+					}
+					CloseHandle(snapshot);
 				}
 			}
 		}
