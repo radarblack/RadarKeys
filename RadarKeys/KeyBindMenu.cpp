@@ -27,7 +27,7 @@
 #include <mutex>
 #include <memory>
 #include <cmath>
-#include "spdlog/sinks/rotating_file_sink.h"
+#include "spdlog/sinks/basic_file_sink.h"
 
 namespace RadarKeys {
 	std::atomic<bool> showCapturePrompt{ false };
@@ -185,20 +185,25 @@ namespace RadarKeys {
 			initialized = true;
 			try {
 				EnsureBindsDirectory();
-				std::error_code removeEc;
-				for (int rolledIndex = 1; rolledIndex <= 3; ++rolledIndex) {
-					std::filesystem::remove(
-						std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" /
-						("radarkeys_debug." + std::to_string(rolledIndex) + ".txt"), removeEc);
+				std::error_code logEc;
+				const std::filesystem::path logPath(GetDebugLogFileName());
+				const std::filesystem::path prevPath = logPath.parent_path() / "radarkeys_debug_prev.txt";
+				if (std::filesystem::exists(logPath, logEc)) {
+					std::filesystem::copy_file(logPath, prevPath,
+						std::filesystem::copy_options::overwrite_existing, logEc);
 				}
-				auto sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-					GetDebugLogFileName(), 1024 * 1024, 3, true);
+				for (int rolledIndex = 1; rolledIndex <= 3; ++rolledIndex) {
+					std::filesystem::remove(logPath.parent_path() /
+						("radarkeys_debug." + std::to_string(rolledIndex) + ".txt"), logEc);
+				}
+				auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
 				auto logger = std::make_shared<spdlog::logger>("radarkeys", sink);
 				logger->set_level(spdlog::level::debug);
-				logger->flush_on(spdlog::level::warn);
+				logger->flush_on(spdlog::level::info);
 				spdlog::set_default_logger(logger);
 				spdlog::flush_every(std::chrono::seconds(5));
-				spdlog::info("RadarKeys diagnostics: debug log at {}", GetDebugLogFileName());
+				spdlog::info("RadarKeys diagnostics: debug log at {} (previous session preserved at {})",
+					logPath.string(), prevPath.string());
 			} catch (const std::exception& e) {
 				spdlog::warn("InitDiagnostics failed ({}); diagnostics stay on the default sink", e.what());
 			}
