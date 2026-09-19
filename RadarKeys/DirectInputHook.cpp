@@ -47,17 +47,17 @@ namespace RadarKeys {
 
 		static IDirectInput8* g_ownDI8 = nullptr;
 
-		static constexpr size_t kDirectInput8VTableSize = 9;
-		static constexpr size_t kDeviceVTableSize = 24;
+		static constexpr size_t kDirectInput8VTableSize = 11;
+		static constexpr size_t kDeviceVTableSize = 25;
 		static constexpr size_t kSlotGetCapabilities = 3;
 		static constexpr size_t kSlotRelease = 2;
 		static constexpr size_t kSlotGetProperty = 5;
 		static constexpr size_t kSlotCreateDevice = 3;
-		static constexpr size_t kSlotSetProperty = 6;
+		static constexpr size_t kSlotSetProperty = 4;
 		static constexpr size_t kSlotAcquire = 7;
-		static constexpr size_t kSlotGetDeviceState = 9;
-		static constexpr size_t kSlotGetDeviceData = 10;
-		static constexpr size_t kSlotGetDeviceInfo = 15;
+		static constexpr size_t kSlotGetDeviceState = 8;
+		static constexpr size_t kSlotGetDeviceData = 9;
+		static constexpr size_t kSlotGetDeviceInfo = 14;
 
 		enum class DeviceKind { Unknown, Keyboard, Mouse, Joystick };
 
@@ -924,38 +924,64 @@ namespace RadarKeys {
 			return false;
 		}
 
-		void Install() {
-			static bool attempted = false;
-			if (attempted) {
-				return;
-			}
+		static bool g_directInput8CreateHooked = false;
+		static bool warnedInstallFailure = false;
 
+		static bool InstallInternal(bool earlyPass) {
+			if (g_directInput8CreateHooked) {
+				return true;
+			}
 			HMODULE module = GetModuleHandleW(L"dinput8.dll");
-			if (!module) {
+			if (!module && !earlyPass) {
 				module = LoadLibraryW(L"dinput8.dll");
 			}
 			if (!module) {
-				return;
+				return false;
 			}
-			attempted = true;
 
 			void* target = reinterpret_cast<void*>(GetProcAddress(module, "DirectInput8Create"));
 			if (!target) {
-				spdlog::warn("DirectInputHook: DirectInput8Create export not found - suppression disabled");
-				return;
+				if (!warnedInstallFailure) {
+					warnedInstallFailure = true;
+					spdlog::warn("DirectInputHook: DirectInput8Create export not found - suppression disabled");
+				}
+				return false;
 			}
 
-			if (MH_CreateHook(target, reinterpret_cast<LPVOID>(&Hooked_DirectInput8Create),
-				reinterpret_cast<LPVOID*>(&g_origDirectInput8Create)) != MH_OK ||
-				MH_EnableHook(target) != MH_OK) {
-				spdlog::warn("DirectInputHook: failed to hook DirectInput8Create - suppression disabled");
-				return;
+			MH_STATUS createStatus = MH_CreateHook(target, reinterpret_cast<LPVOID>(&Hooked_DirectInput8Create),
+				reinterpret_cast<LPVOID*>(&g_origDirectInput8Create));
+			bool createUsable = (createStatus == MH_OK) ||
+				(createStatus == MH_ERROR_ALREADY_CREATED && g_origDirectInput8Create != nullptr);
+			if (!createUsable) {
+				if (!warnedInstallFailure) {
+					warnedInstallFailure = true;
+					spdlog::warn("DirectInputHook: failed to hook DirectInput8Create (mh={}) - will retry", static_cast<int>(createStatus));
+				}
+				return false;
+			}
+			MH_STATUS enableStatus = MH_EnableHook(target);
+			if (enableStatus != MH_OK && enableStatus != MH_ERROR_ENABLED) {
+				if (!warnedInstallFailure) {
+					warnedInstallFailure = true;
+					spdlog::warn("DirectInputHook: failed to enable DirectInput8Create hook (mh={}) - will retry", static_cast<int>(enableStatus));
+				}
+				return false;
 			}
 
+			g_directInput8CreateHooked = true;
 			spdlog::info("DirectInputHook: hooked DirectInput8Create in the loaded dinput8.dll (chains through any proxy such as IHHook's)");
 			spdlog::info("DirectInputHook: passive vtable wrapping {} (kill switch: mod/radarKeys/di_vtable_wrap_off.txt)",
 				PassiveWrapEnabled() ? "ENABLED" : "DISABLED");
 			spdlog::default_logger()->flush();
+			return true;
+		}
+
+		void InstallEarly() {
+			InstallInternal(true);
+		}
+
+		void Install() {
+			InstallInternal(false);
 		}
 
 		static std::vector<std::pair<GUID, IDirectInputDevice8*>> g_ownedDevices;
