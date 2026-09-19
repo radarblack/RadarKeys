@@ -16,6 +16,7 @@
 #include <list>
 #include <array>
 #include <unordered_set>
+#include <unordered_map>
 #include <filesystem>
 
 namespace RadarKeys {
@@ -834,20 +835,40 @@ namespace RadarKeys {
 					}
 				}
 				else if (pRaw->header.dwType == RIM_TYPEHID) {
+					static std::unordered_map<HANDLE, bool> hidIsGamepad;
 					static std::unordered_set<HANDLE> seenHidDevices;
+					static std::atomic<ULONGLONG> lastHidBlockLog{ 0 };
 					HANDLE hidDevice = pRaw->header.hDevice;
-					if (seenHidDevices.find(hidDevice) == seenHidDevices.end()) {
-						seenHidDevices.insert(hidDevice);
+					bool isGamepad = false;
+					auto it = hidIsGamepad.find(hidDevice);
+					if (it != hidIsGamepad.end()) {
+						isGamepad = it->second;
+					} else {
 						RID_DEVICE_INFO hidInfo{};
 						hidInfo.cbSize = sizeof(RID_DEVICE_INFO);
 						UINT hidInfoSize = sizeof(RID_DEVICE_INFO);
 						if (GetRawInputDeviceInfoW(hidDevice, RIDI_DEVICEINFO, &hidInfo, &hidInfoSize) != static_cast<UINT>(-1)) {
-							spdlog::info("RawInput: WM_INPUT HID device seen (usagePage={:04X}, usage={:04X}{})",
-								hidInfo.hid.usUsagePage, hidInfo.hid.usUsage,
-								(hidInfo.hid.usUsagePage == 0x01 && (hidInfo.hid.usUsage == 0x04 || hidInfo.hid.usUsage == 0x05))
-								? " GAMEPAD/JOYSTICK" : "");
+							isGamepad = (hidInfo.hid.usUsagePage == 0x01 &&
+								(hidInfo.hid.usUsage == 0x04 || hidInfo.hid.usUsage == 0x05));
+							hidIsGamepad[hidDevice] = isGamepad;
+							if (seenHidDevices.find(hidDevice) == seenHidDevices.end()) {
+								seenHidDevices.insert(hidDevice);
+								spdlog::info("RawInput: WM_INPUT HID device seen (usagePage={:04X}, usage={:04X}{})",
+									hidInfo.hid.usUsagePage, hidInfo.hid.usUsage,
+									isGamepad ? " GAMEPAD/JOYSTICK" : "");
+								spdlog::default_logger()->flush();
+							}
+						}
+					}
+					if (isGamepad && g_gamepadBlockedToGame.load() != false) {
+						ULONGLONG now = GetTickCount64();
+						ULONGLONG last = lastHidBlockLog.load(std::memory_order_relaxed);
+						if (now - last >= 2000 && lastHidBlockLog.compare_exchange_strong(last, now)) {
+							spdlog::info("RawInput: HID GAMEPAD/JOYSTICK blocked to game (device {:p})", hidDevice);
 							spdlog::default_logger()->flush();
 						}
+						delete[] lpb;
+						return false;
 					}
 				}
 
