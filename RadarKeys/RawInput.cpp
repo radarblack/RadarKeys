@@ -375,6 +375,7 @@ namespace RadarKeys {
 		}
 
 		static void EnsureWinmmHook();
+		static void EnsureHidReadHook();
 
 		typedef HRESULT(__stdcall* RoGetActivationFactory_t)(void*, const IID*, void**);
 		typedef LONG(__stdcall* WindowsCreateString_t)(LPCWSTR, UINT32, void**);
