@@ -15,6 +15,7 @@
 #include <list>
 #include <array>
 #include <unordered_set>
+#include <unordered_map>
 #include <filesystem>
 
 namespace RadarKeys {
@@ -792,20 +793,29 @@ namespace RadarKeys {
 					}
 				}
 				else if (pRaw->header.dwType == RIM_TYPEHID) {
-					static std::unordered_set<HANDLE> seenHidDevices;
+					static std::unordered_map<HANDLE, bool> hidGamepadDevices;
 					HANDLE hidDevice = pRaw->header.hDevice;
-					if (seenHidDevices.find(hidDevice) == seenHidDevices.end()) {
-						seenHidDevices.insert(hidDevice);
+					auto seen = hidGamepadDevices.find(hidDevice);
+					bool isGamepad;
+					if (seen == hidGamepadDevices.end()) {
 						RID_DEVICE_INFO hidInfo{};
 						hidInfo.cbSize = sizeof(RID_DEVICE_INFO);
 						UINT hidInfoSize = sizeof(RID_DEVICE_INFO);
+						isGamepad = false;
 						if (GetRawInputDeviceInfoW(hidDevice, RIDI_DEVICEINFO, &hidInfo, &hidInfoSize) != static_cast<UINT>(-1)) {
+							isGamepad = (hidInfo.hid.usUsagePage == 0x01 && (hidInfo.hid.usUsage == 0x04 || hidInfo.hid.usUsage == 0x05));
 							spdlog::info("RawInput: WM_INPUT HID device seen (usagePage={:04X}, usage={:04X}{})",
 								hidInfo.hid.usUsagePage, hidInfo.hid.usUsage,
-								(hidInfo.hid.usUsagePage == 0x01 && (hidInfo.hid.usUsage == 0x04 || hidInfo.hid.usUsage == 0x05))
-								? " GAMEPAD/JOYSTICK" : "");
+								isGamepad ? " GAMEPAD/JOYSTICK" : "");
 							spdlog::default_logger()->flush();
 						}
+						hidGamepadDevices[hidDevice] = isGamepad;
+					} else {
+						isGamepad = seen->second;
+					}
+					if (isGamepad && IsGamepadBlockedToGame()) {
+						delete[] lpb;
+						return false;
 					}
 				}
 
