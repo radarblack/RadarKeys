@@ -576,8 +576,8 @@ namespace RadarKeys {
 			return hr;
 		}
 
-		static GetDeviceState_t g_origClassGetDeviceState = nullptr;
-		static GetDeviceData_t g_origClassGetDeviceData = nullptr;
+		static std::unordered_map<void*, void*> g_classGetDeviceStateOrigins;
+		static std::unordered_map<void*, void*> g_classGetDeviceDataOrigins;
 		static std::atomic<bool> g_classGetDeviceStateHooked{ false };
 		static std::atomic<bool> g_classGetDeviceDataHooked{ false };
 		static std::atomic<ULONGLONG> g_lastSuppressedJoystickLog{ 0 };
@@ -685,7 +685,9 @@ namespace RadarKeys {
 		}
 
 		static HRESULT STDMETHODCALLTYPE HookedClassGetDeviceState(IDirectInputDevice8* self, DWORD cbData, LPVOID lpvData) {
-			HRESULT hr = g_origClassGetDeviceState(self, cbData, lpvData);
+			void** selfVtbl = *reinterpret_cast<void***>(self);
+			GetDeviceState_t orig = reinterpret_cast<GetDeviceState_t>(g_classGetDeviceStateOrigins[selfVtbl[kSlotGetDeviceState]]);
+			HRESULT hr = orig ? orig(self, cbData, lpvData) : E_FAIL;
 			if (g_classGetDeviceStateHooked.load(std::memory_order_acquire) &&
 				SUCCEEDED(hr) && lpvData && cbData != 0 &&
 				RawInput::IsGamepadBlockedToGame() && !IsSelfOpenedDevice(self)) {
@@ -700,7 +702,9 @@ namespace RadarKeys {
 
 		static HRESULT STDMETHODCALLTYPE HookedClassGetDeviceData(IDirectInputDevice8* self,
 			DWORD cbObjectData, DIDEVICEOBJECTDATA* rgdod, LPDWORD pdwInOut, DWORD dwFlags) {
-			HRESULT hr = g_origClassGetDeviceData(self, cbObjectData, rgdod, pdwInOut, dwFlags);
+			void** selfVtbl = *reinterpret_cast<void***>(self);
+			GetDeviceData_t orig = reinterpret_cast<GetDeviceData_t>(g_classGetDeviceDataOrigins[selfVtbl[kSlotGetDeviceData]]);
+			HRESULT hr = orig ? orig(self, cbObjectData, rgdod, pdwInOut, dwFlags) : E_FAIL;
 			if (g_classGetDeviceDataHooked.load(std::memory_order_acquire) &&
 				SUCCEEDED(hr) && pdwInOut && rgdod && *pdwInOut != 0 &&
 				RawInput::IsGamepadBlockedToGame() && !IsSelfOpenedDevice(self)) {
@@ -760,14 +764,15 @@ namespace RadarKeys {
 			return pdidInstance ? ClassProbeEnumDevice(pdidInstance->guidInstance, pContext) : DIENUM_CONTINUE;
 		}
 
-		static bool HookClassFunction(void* target, void* detour, void** orig, const char* label) {
+		static bool HookClassFunction(void* target, void* detour, std::unordered_map<void*, void*>& origins, const char* label) {
 			if (!target) {
 				return false;
 			}
 			if (g_classHookTargets.find(target) != g_classHookTargets.end()) {
 				return true;
 			}
-			if (MH_CreateHook(target, detour, orig) != MH_OK) {
+			void* trampoline = nullptr;
+			if (MH_CreateHook(target, detour, &trampoline) != MH_OK) {
 				spdlog::warn("DirectInputHook: class hook create failed for {} (MinHook trampoline unavailable)", label);
 				return false;
 			}
@@ -776,6 +781,7 @@ namespace RadarKeys {
 				spdlog::warn("DirectInputHook: class hook enable failed for {}", label);
 				return false;
 			}
+			origins[target] = trampoline;
 			g_classHookTargets.insert(target);
 			spdlog::info("DirectInputHook: class hook active for {} at {:p} (covers every DirectInput joystick device in the process)", label, target);
 			spdlog::default_logger()->flush();
@@ -807,7 +813,8 @@ namespace RadarKeys {
 					void** deviceVtbl = *reinterpret_cast<void***>(ctx.device);
 					stateTargets.push_back(deviceVtbl[kSlotGetDeviceState]);
 					dataTargets.push_back(deviceVtbl[kSlotGetDeviceData]);
-					reinterpret_cast<DiReleaseGeneric_t>(*reinterpret_cast<void***>(ctx.device))[kSlotRelease](ctx.device);
+					void** probeVtbl = *reinterpret_cast<void***>(ctx.device);
+					reinterpret_cast<DiReleaseGeneric_t>(probeVtbl[kSlotRelease])(ctx.device);
 				}
 				releaseA(di8A);
 			} else {
@@ -818,11 +825,11 @@ namespace RadarKeys {
 			bool anyData = false;
 			for (void* target : stateTargets) {
 				anyState = HookClassFunction(target, reinterpret_cast<void*>(&HookedClassGetDeviceState),
-					reinterpret_cast<void**>(&g_origClassGetDeviceState), "GetDeviceState(joystick)") || anyState;
+					g_classGetDeviceStateOrigins, "GetDeviceState(joystick)") || anyState;
 			}
 			for (void* target : dataTargets) {
 				anyData = HookClassFunction(target, reinterpret_cast<void*>(&HookedClassGetDeviceData),
-					reinterpret_cast<void**>(&g_origClassGetDeviceData), "GetDeviceData(joystick)") || anyData;
+					g_classGetDeviceDataOrigins, "GetDeviceData(joystick)") || anyData;
 			}
 			g_classGetDeviceStateHooked.store(anyState, std::memory_order_release);
 			g_classGetDeviceDataHooked.store(anyData, std::memory_order_release);
@@ -835,8 +842,8 @@ namespace RadarKeys {
 				MH_RemoveHook(target);
 			}
 			g_classHookTargets.clear();
-			g_origClassGetDeviceState = nullptr;
-			g_origClassGetDeviceData = nullptr;
+			g_classGetDeviceStateOrigins.clear();
+			g_classGetDeviceDataOrigins.clear();
 		}
 
 		static ULONG STDMETHODCALLTYPE Hooked_Release(IDirectInputDevice8* self) {
