@@ -5,9 +5,6 @@
 #include <MinHook.h>
 #include "spdlog/spdlog.h"
 #include <filesystem>
-#include <tlhelp32.h>
-#include <algorithm>
-#include <intrin.h>
 
 #define DI8SDK
 #define INITGUID
@@ -498,16 +495,6 @@ namespace RadarKeys {
 				return hr;
 			}
 
-			static std::atomic<ULONGLONG> lastBlockLog{ 0 };
-			ULONGLONG nowBlk = GetTickCount64();
-			ULONGLONG lastBlk = lastBlockLog.load(std::memory_order_relaxed);
-			if (nowBlk - lastBlk >= 2000 && lastBlockLog.compare_exchange_strong(lastBlk, nowBlk)) {
-				spdlog::info("DirectInputHook: {} blocked to game (device {:p} selfOpened={})",
-					kind == DeviceKind::Joystick ? "Joystick" : kind == DeviceKind::Keyboard ? "Keyboard" : "Mouse",
-					static_cast<void*>(self), selfOpened);
-				spdlog::default_logger()->flush();
-			}
-
 			switch (kind) {
 			case DeviceKind::Keyboard:
 				std::memset(lpvData, 0, cbData);
@@ -680,17 +667,10 @@ namespace RadarKeys {
 
 		static HRESULT WINAPI Hooked_DirectInput8Create(HINSTANCE hinst, DWORD dwVersion,
 			REFGUID riidltf, LPVOID* ppvOut, LPUNKNOWN punkOuter) {
-			HRESULT hr = g_origDirectInput8Create ? g_origDirectInput8Create(hinst, dwVersion, riidltf, ppvOut, punkOuter) : E_FAIL;
-			HMODULE callerMod = nullptr;
-			void* retAddr = _ReturnAddress();
-			GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-				static_cast<LPCSTR>(retAddr), &callerMod);
-			wchar_t callerPathW[MAX_PATH] = L"";
-			if (callerMod) GetModuleFileNameW(callerMod, callerPathW, MAX_PATH);
-			std::string callerPath = callerMod ? std::filesystem::path(callerPathW).string() : std::string("unknown");
-			spdlog::info("DirectInputHook: DirectInput8Create called (dwVersion={:08X}, riid={:08X}, hr={:08X}, wrapping={}, caller={})",
+			HRESULT hr = g_origDirectInput8Create(hinst, dwVersion, riidltf, ppvOut, punkOuter);
+			spdlog::info("DirectInputHook: DirectInput8Create called (dwVersion={:08X}, riid={:08X}, hr={:08X}, wrapping={})",
 				dwVersion, riidltf.Data1, static_cast<unsigned>(hr),
-				(SUCCEEDED(hr) && PassiveWrapEnabled()) ? "on" : "off", callerPath);
+				(SUCCEEDED(hr) && PassiveWrapEnabled()) ? "on" : "off");
 			spdlog::default_logger()->flush();
 			if (FAILED(hr) || !ppvOut || !*ppvOut) {
 				return hr;
@@ -944,84 +924,35 @@ namespace RadarKeys {
 			return false;
 		}
 
-		static std::unordered_set<void*> g_hookedDI8Targets;
-		static bool TryHookDI8CreateInModule(HMODULE mod, const std::string& pathForLog) {
-			if (!mod) return false;
-			void* target = reinterpret_cast<void*>(GetProcAddress(mod, "DirectInput8Create"));
-			if (!target) return false;
-			if (g_hookedDI8Targets.count(target) != 0) return false;
-			if (MH_CreateHook(target, reinterpret_cast<LPVOID>(&Hooked_DirectInput8Create),
-				reinterpret_cast<LPVOID*>(&g_origDirectInput8Create)) == MH_OK &&
-				MH_EnableHook(target) == MH_OK) {
-				g_hookedDI8Targets.insert(target);
-				spdlog::info("DirectInputHook: hooked DirectInput8Create in {} (loaded from {})",
-					"dinput8.dll", pathForLog);
-				return true;
-			}
-			if (g_origDirectInput8Create) {
-				g_hookedDI8Targets.insert(target);
-				spdlog::info("DirectInputHook: DirectInput8Create in {} already hooked, using existing orig (loaded from {})",
-					"dinput8.dll", pathForLog);
-				return true;
-			}
-			spdlog::warn("DirectInputHook: failed to hook DirectInput8Create in {} (loaded from {})",
-				"dinput8.dll", pathForLog);
-			return false;
-		}
-
 		void Install() {
 			static bool attempted = false;
 			if (attempted) {
-				HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
-				if (snap != INVALID_HANDLE_VALUE) {
-					MODULEENTRY32W me{}; me.dwSize = sizeof(me);
-					if (Module32FirstW(snap, &me)) {
-						do {
-							std::wstring lower(me.szModule);
-							std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
-							if (lower.find(L"dinput8") != std::wstring::npos) {
-								HMODULE h = reinterpret_cast<HMODULE>(me.modBaseAddr);
-								std::string p = std::filesystem::path(me.szExePath).string();
-								TryHookDI8CreateInModule(h, p);
-							}
-						} while (Module32NextW(snap, &me));
-					}
-					CloseHandle(snap);
-				}
+				return;
+			}
+
+			HMODULE module = GetModuleHandleW(L"dinput8.dll");
+			if (!module) {
+				module = LoadLibraryW(L"dinput8.dll");
+			}
+			if (!module) {
 				return;
 			}
 			attempted = true;
 
-			int hooked = 0;
-			HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
-			if (snapshot != INVALID_HANDLE_VALUE) {
-				MODULEENTRY32W entry{}; entry.dwSize = sizeof(entry);
-				if (Module32FirstW(snapshot, &entry)) {
-					do {
-						std::wstring lower(entry.szModule);
-						std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
-						if (lower.find(L"dinput8") != std::wstring::npos) {
-							HMODULE mod = reinterpret_cast<HMODULE>(entry.modBaseAddr);
-							std::string path = std::filesystem::path(entry.szExePath).string();
-							if (TryHookDI8CreateInModule(mod, path)) ++hooked;
-						}
-					} while (Module32NextW(snapshot, &entry));
-				}
-				CloseHandle(snapshot);
-			}
-			if (hooked == 0) {
-				HMODULE module = GetModuleHandleW(L"dinput8.dll");
-				if (!module) module = LoadLibraryW(L"dinput8.dll");
-				if (module) {
-					wchar_t buf[MAX_PATH] = L""; GetModuleFileNameW(module, buf, MAX_PATH);
-					std::string path = std::filesystem::path(buf).string();
-					if (TryHookDI8CreateInModule(module, path)) ++hooked;
-				}
-			}
-			if (hooked == 0) {
+			void* target = reinterpret_cast<void*>(GetProcAddress(module, "DirectInput8Create"));
+			if (!target) {
 				spdlog::warn("DirectInputHook: DirectInput8Create export not found - suppression disabled");
 				return;
 			}
+
+			if (MH_CreateHook(target, reinterpret_cast<LPVOID>(&Hooked_DirectInput8Create),
+				reinterpret_cast<LPVOID*>(&g_origDirectInput8Create)) != MH_OK ||
+				MH_EnableHook(target) != MH_OK) {
+				spdlog::warn("DirectInputHook: failed to hook DirectInput8Create - suppression disabled");
+				return;
+			}
+
+			spdlog::info("DirectInputHook: hooked DirectInput8Create in the loaded dinput8.dll (chains through any proxy such as IHHook's)");
 			spdlog::info("DirectInputHook: passive vtable wrapping {} (kill switch: mod/radarKeys/di_vtable_wrap_off.txt)",
 				PassiveWrapEnabled() ? "ENABLED" : "DISABLED");
 			spdlog::default_logger()->flush();
