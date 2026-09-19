@@ -48,7 +48,8 @@ namespace RadarKeys {
 		KeyBindMenu::InitDiagnostics();
 		spdlog::info("RadarKeys InitThread starting");
 
-		if (MH_Initialize() != MH_OK) {
+		MH_STATUS mhStatus = MH_Initialize();
+		if (mhStatus != MH_OK && mhStatus != MH_ERROR_ALREADY_INITIALIZED) {
 			spdlog::error("RadarKeys InitThread: MH_Initialize failed");
 			return;
 		}
@@ -307,6 +308,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	switch (ul_reason_for_call) {
 	case DLL_PROCESS_ATTACH:
 		DisableThreadLibraryCalls(hModule);
+		MH_Initialize();
+		RadarKeys::DirectInputHook::InstallEarly();
 		std::thread(RadarKeys::InitThread).detach();
 		break;
 	case DLL_PROCESS_DETACH:
