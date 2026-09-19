@@ -16,6 +16,7 @@
 #include <list>
 #include <array>
 #include <unordered_set>
+#include <unordered_map>
 #include <filesystem>
 
 namespace RadarKeys {
@@ -113,9 +114,10 @@ namespace RadarKeys {
 		static const char* g_xinputSlotNames[kMaxXInputModules] = {};
 		static const char* g_xinputExSlotNames[kMaxXInputModules] = {};
 		static std::unordered_set<void*> g_xinputHookedTargets;
-		static std::unordered_set<void*> g_xinputFailedTargets;
+		static std::unordered_map<void*, ULONGLONG> g_xinputFailedTargets;
 		static std::unordered_set<void*> g_xinputExHookedTargets;
-		static std::unordered_set<void*> g_xinputExFailedTargets;
+		static std::unordered_map<void*, ULONGLONG> g_xinputExFailedTargets;
+		static constexpr ULONGLONG kXInputRetryDelayMs = 2000;
 
 		template <int N>
 		DWORD WINAPI HookedXInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState) {
@@ -199,8 +201,17 @@ namespace RadarKeys {
 				GetModuleFileNameW(module, modulePathW, MAX_PATH);
 				std::string modulePath = std::filesystem::path(modulePathW).string();
 				void* target = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetState"));
+				if (target) {
+					auto failedIt = g_xinputFailedTargets.find(target);
+					if (failedIt != g_xinputFailedTargets.end()) {
+						if (GetTickCount64() - failedIt->second < kXInputRetryDelayMs) {
+							target = nullptr;
+						} else {
+							g_xinputFailedTargets.erase(failedIt);
+						}
+					}
+				}
 				if (target && g_xinputHookedTargets.count(target) == 0 &&
-					g_xinputFailedTargets.count(target) == 0 &&
 					g_xinputModuleCount < kMaxXInputModules) {
 					int slot = g_xinputModuleCount;
 					XInputGetStateFunc* origSlot = &g_origXInputGetState[slot];
@@ -214,8 +225,8 @@ namespace RadarKeys {
 							moduleNameNarrow, modulePath, g_xinputModuleCount);
 					} else {
 						MH_RemoveHook(target);
-						g_xinputFailedTargets.insert(target);
-						spdlog::warn("RawInput: failed to hook XInputGetState in {} (loaded from {})",
+						g_xinputFailedTargets[target] = GetTickCount64();
+						spdlog::warn("RawInput: failed to hook XInputGetState in {} (loaded from {}) - will retry",
 							moduleNameNarrow, modulePath);
 					}
 				}
@@ -224,8 +235,17 @@ namespace RadarKeys {
 				if (!targetEx) {
 					targetEx = reinterpret_cast<void*>(GetProcAddress(module, reinterpret_cast<LPCSTR>(100)));
 				}
+				if (targetEx) {
+					auto failedExIt = g_xinputExFailedTargets.find(targetEx);
+					if (failedExIt != g_xinputExFailedTargets.end()) {
+						if (GetTickCount64() - failedExIt->second < kXInputRetryDelayMs) {
+							targetEx = nullptr;
+						} else {
+							g_xinputExFailedTargets.erase(failedExIt);
+						}
+					}
+				}
 				if (targetEx && g_xinputExHookedTargets.count(targetEx) == 0 &&
-					g_xinputExFailedTargets.count(targetEx) == 0 &&
 					g_xinputExModuleCount < kMaxXInputModules) {
 					int slotEx = g_xinputExModuleCount;
 					XInputGetStateFunc* origSlotEx = &g_origXInputGetStateEx[slotEx];
@@ -239,8 +259,8 @@ namespace RadarKeys {
 							moduleNameNarrow, modulePath, g_xinputExModuleCount);
 					} else {
 						MH_RemoveHook(targetEx);
-						g_xinputExFailedTargets.insert(targetEx);
-						spdlog::warn("RawInput: failed to hook XInputGetStateEx in {} (loaded from {})",
+						g_xinputExFailedTargets[targetEx] = GetTickCount64();
+						spdlog::warn("RawInput: failed to hook XInputGetStateEx in {} (loaded from {}) - will retry",
 							moduleNameNarrow, modulePath);
 					}
 				}
