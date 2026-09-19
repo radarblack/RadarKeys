@@ -247,7 +247,7 @@ namespace RadarKeys {
 				if (!g_iatOrigGetState) {
 					g_iatOrigGetState = reinterpret_cast<XInputGetStateFunc>(getStateTarget);
 				}
-				if (PatchXInputIatEntry(x13, "XInputGetState", 0,
+				if (PatchXInputIatEntry(GetModuleHandleW(nullptr), "XInputGetState", 0,
 					reinterpret_cast<void*>(&HookedIatXInputGetState),
 					&g_iatThunkGetState, &g_iatOriginalGetState)) {
 					g_iatPatchedGetState = true;
@@ -264,7 +264,7 @@ namespace RadarKeys {
 				if (!g_iatOrigGetStateEx) {
 					g_iatOrigGetStateEx = reinterpret_cast<XInputGetStateFunc>(getStateExTarget);
 				}
-				if (PatchXInputIatEntry(x13, "XInputGetStateEx", 100,
+				if (PatchXInputIatEntry(GetModuleHandleW(nullptr), "XInputGetStateEx", 100,
 					reinterpret_cast<void*>(&HookedIatXInputGetStateEx),
 					&g_iatThunkGetStateEx, &g_iatOriginalGetStateEx)) {
 					g_iatPatchedGetStateEx = true;
@@ -562,6 +562,10 @@ namespace RadarKeys {
 				realStateHeld[vKey] = isDown;
 				currFlags[vKey] = isDown ? RI_KEY_MAKE : RI_KEY_BREAK;
 				DoActions(vKey, isDown ? BUTTONEVENT::ONDOWN : BUTTONEVENT::ONUP);
+				if (g_gamepadBlockedToGame.load() != false) {
+					spdlog::info("RawInput: GP key vKey={} {} (suppression active)", vKey, isDown ? "DOWN" : "UP");
+					spdlog::default_logger()->flush();
+				}
 			}
 
 			g_anyGamepadConnected = anyConnected;
@@ -656,6 +660,10 @@ namespace RadarKeys {
 				realStateHeld[psKey] = isDown;
 				currFlags[psKey] = isDown ? RI_KEY_MAKE : RI_KEY_BREAK;
 				DoActions(psKey, isDown ? BUTTONEVENT::ONDOWN : BUTTONEVENT::ONUP);
+				if (g_gamepadBlockedToGame.load() != false) {
+					spdlog::info("RawInput: PS key vKey={} {} (suppression active)", psKey, isDown ? "DOWN" : "UP");
+					spdlog::default_logger()->flush();
+				}
 			}
 		}
 
