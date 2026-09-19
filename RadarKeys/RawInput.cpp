@@ -17,6 +17,8 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <filesystem>
+#include <string>
+#include <cwctype>
 
 namespace RadarKeys {
 	namespace RawInput {
@@ -237,11 +239,56 @@ namespace RadarKeys {
 			}
 		}
 
+		typedef HANDLE(WINAPI* CreateFileW_t)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+		static CreateFileW_t g_origCreateFileW = nullptr;
+
+		HANDLE WINAPI HookedCreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+			LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition,
+			DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) {
+			HANDLE handle = g_origCreateFileW(lpFileName, dwDesiredAccess, dwShareMode,
+				lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+			if (handle != INVALID_HANDLE_VALUE && lpFileName) {
+				std::wstring path(lpFileName);
+				std::transform(path.begin(), path.end(), path.begin(), ::towupper);
+				if (path.find(L"HID#VID_054C") != std::wstring::npos) {
+					spdlog::info("RawInput: game opened HID device handle {:p} ({})",
+						static_cast<void*>(handle), std::filesystem::path(lpFileName).string());
+					spdlog::default_logger()->flush();
+				}
+			}
+			return handle;
+		}
+
+		void EnsureHidOpenDiagnosticHook() {
+			static bool installed = false;
+			if (installed) {
+				return;
+			}
+			installed = true;
+
+			HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+			if (!kernel32) {
+				return;
+			}
+			void* target = reinterpret_cast<void*>(GetProcAddress(kernel32, "CreateFileW"));
+			if (target && MH_CreateHook(target, reinterpret_cast<LPVOID>(&HookedCreateFileW),
+				reinterpret_cast<LPVOID*>(&g_origCreateFileW)) == MH_OK &&
+				MH_EnableHook(target) == MH_OK) {
+				spdlog::info("RawInput: hooked CreateFileW for HID device open diagnostics (VID_054C)");
+			} else {
+				MH_RemoveHook(target);
+				g_origCreateFileW = nullptr;
+				spdlog::warn("RawInput: failed to hook CreateFileW for HID device open diagnostics");
+			}
+			spdlog::default_logger()->flush();
+		}
+
 		std::atomic<bool> g_anyGamepadConnected{ false };
 		std::atomic<bool> g_xinputGamepadConnected{ false };
 		std::atomic<bool> g_psBridgeActive{ false };
 		void PollGamepad() {
 			EnsureXInputHook();
+			EnsureHidOpenDiagnosticHook();
 
 			WORD buttons = 0;
 			BYTE leftTrigger = 0, rightTrigger = 0;
