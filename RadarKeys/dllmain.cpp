@@ -61,6 +61,7 @@ namespace RadarKeys {
 		Render::CreateD3DHook();
 		InitCursorHook();
 		DirectInputHook::Install();
+		RawInput::StartWGIClassHookWorker();
 
 		spdlog::info("RadarKeys frame initialized");
 	}
