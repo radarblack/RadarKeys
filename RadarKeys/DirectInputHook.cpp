@@ -142,7 +142,7 @@ namespace RadarKeys {
 			switch (kind) {
 			case DeviceKind::Keyboard: return RawInput::IsKeyboardBlockedToGame();
 			case DeviceKind::Mouse:    return RawInput::IsMouseBlockedToGame();
-			case DeviceKind::Joystick: return RawInput::IsGamepadBlockedToGame();
+			case DeviceKind::Joystick: return false;
 			default:                   return false;
 			}
 		}
@@ -758,154 +758,10 @@ namespace RadarKeys {
 			return DIENUM_CONTINUE;
 		}
 
-		static void SuppressGameJoystickRead(IDirectInputDevice8* self, LPVOID lpvData, DWORD cbData) {
-			std::lock_guard<std::mutex> lock(g_mutex);
-			GameDeviceFormat& fmt = g_gameDeviceFormats[self];
-			if (!fmt.valid && !fmt.buildAttempted) {
-				fmt.buildAttempted = true;
-				void** vtbl = *reinterpret_cast<void***>(self);
-				DiEnumObjects_t enumObjects = reinterpret_cast<DiEnumObjects_t>(vtbl[kSlotEnumObjects]);
-				GetProperty_t getProperty = reinterpret_cast<GetProperty_t>(vtbl[kSlotGetProperty]);
-				if (enumObjects && getProperty) {
-					FormatBuildContext ctx{ self, getProperty, &fmt, 0 };
-					if (SUCCEEDED(enumObjects(self, reinterpret_cast<void*>(&GameFormatObjectCallback), &ctx,
-						DIDFT_AXIS | DIDFT_POV | DIDFT_BUTTON))) {
-						fmt.valid = true;
-						spdlog::info("DirectInputHook: built read map for game joystick {:p} (axes {}, buttons {}, povs {}, cbData {})",
-							static_cast<void*>(self), ctx.axisCount, fmt.buttonOfs.size(), fmt.povOfs.size(), cbData);
-						spdlog::default_logger()->flush();
-					}
-				}
-			}
-			bool active = false;
-			if (fmt.valid) {
-				const unsigned char* bytes = static_cast<const unsigned char*>(lpvData);
-				for (const auto& axis : fmt.axisNeutrals) {
-					if (axis.first + sizeof(LONG) <= cbData &&
-						*reinterpret_cast<const LONG*>(bytes + axis.first) != axis.second) {
-						active = true;
-						break;
-					}
-				}
-				if (!active) {
-					for (DWORD ofs : fmt.buttonOfs) {
-						if (ofs < cbData && (bytes[ofs] & 0x80) != 0) {
-							active = true;
-							break;
-						}
-					}
-				}
-				if (!active) {
-					for (DWORD ofs : fmt.povOfs) {
-						if (ofs + sizeof(DWORD) <= cbData &&
-							*reinterpret_cast<const DWORD*>(bytes + ofs) <= 35999) {
-							active = true;
-							break;
-						}
-					}
-				}
-				if (active) {
-					LogSuppressedJoystick(self, lpvData, cbData, &fmt);
-				}
-				std::memset(lpvData, 0, cbData);
-				for (const auto& axis : fmt.axisNeutrals) {
-					if (axis.first + sizeof(LONG) <= cbData) {
-						*reinterpret_cast<LONG*>(static_cast<unsigned char*>(lpvData) + axis.first) = axis.second;
-					}
-				}
-				for (DWORD ofs : fmt.povOfs) {
-					if (ofs + sizeof(DWORD) <= cbData) {
-						*reinterpret_cast<DWORD*>(static_cast<unsigned char*>(lpvData) + ofs) = 0xFFFFFFFF;
-					}
-				}
-			} else {
-				DeviceInfo info;
-				auto it = g_deviceInfo.find(self);
-				if (it != g_deviceInfo.end()) {
-					info = it->second;
-				}
-				active = JoystickStateActive(info, lpvData, cbData);
-				if (active) {
-					LogSuppressedJoystick(self, lpvData, cbData, nullptr);
-				}
-				NeutralizeJoystick(lpvData, cbData, info);
-			}
-		}
-
-		static void SuppressGameJoystickBuffered(IDirectInputDevice8* self, DIDEVICEOBJECTDATA* rgdod, DWORD count) {
-			std::lock_guard<std::mutex> lock(g_mutex);
-			GameDeviceFormat& fmt = g_gameDeviceFormats[self];
-			if (!fmt.valid && !fmt.buildAttempted) {
-				return;
-			}
-			if (!fmt.valid) {
-				return;
-			}
-			bool hadInput = false;
-			for (DWORD i = 0; i < count; ++i) {
-				bool isPov = false;
-				for (DWORD ofs : fmt.povOfs) {
-					if (rgdod[i].dwOfs == ofs) { isPov = true; break; }
-				}
-				if (rgdod[i].dwData != 0) {
-					hadInput = true;
-				}
-				if (isPov) {
-					rgdod[i].dwData = 0xFFFFFFFF;
-					continue;
-				}
-				bool isAxis = false;
-				for (const auto& axis : fmt.axisNeutrals) {
-					if (rgdod[i].dwOfs == axis.first) {
-						rgdod[i].dwData = static_cast<DWORD>(axis.second);
-						isAxis = true;
-						break;
-					}
-				}
-				if (!isAxis) {
-					rgdod[i].dwData = 0;
-				}
-			}
-			if (hadInput) {
-				LogSuppressedJoystick(self, nullptr, 0, &fmt);
-			}
-		}
-
-		static void LogClassDeviceDiag(IDirectInputDevice8* self, DWORD cbData) {
-			static std::unordered_set<void*> diagLogged;
-			std::lock_guard<std::mutex> lock(g_mutex);
-			if (diagLogged.find(self) != diagLogged.end()) {
-				return;
-			}
-			diagLogged.insert(self);
-			void** vtbl = *reinterpret_cast<void***>(self);
-			GetDeviceInfo_t getDeviceInfo = reinterpret_cast<GetDeviceInfo_t>(vtbl[kSlotGetDeviceInfo]);
-			DIDEVICEINSTANCE di{};
-			di.dwSize = sizeof(DIDEVICEINSTANCE);
-			if (getDeviceInfo && SUCCEEDED(getDeviceInfo(self, &di))) {
-				std::string name;
-				for (size_t i = 0; i < MAX_PATH - 1 && di.tszProductName[i] != L'\0'; ++i) {
-					name.push_back(static_cast<char>(di.tszProductName[i]));
-				}
-				spdlog::info("DirectInputHook: game joystick reads intercepted on {:p} (product \"{}\", devtype {:04X}, cbData {})",
-					static_cast<void*>(self), name, static_cast<unsigned>(di.dwDevType & 0xFFFF), cbData);
-			} else {
-				spdlog::info("DirectInputHook: game joystick reads intercepted on {:p} (devinfo unavailable, cbData {})",
-					static_cast<void*>(self), cbData);
-			}
-			spdlog::default_logger()->flush();
-		}
-
 		static HRESULT STDMETHODCALLTYPE HookedClassGetDeviceState(IDirectInputDevice8* self, DWORD cbData, LPVOID lpvData) {
 			void** selfVtbl = *reinterpret_cast<void***>(self);
 			GetDeviceState_t orig = reinterpret_cast<GetDeviceState_t>(g_classGetDeviceStateOrigins[selfVtbl[kSlotGetDeviceState]]);
 			HRESULT hr = orig ? orig(self, cbData, lpvData) : E_FAIL;
-			if (g_classGetDeviceStateHooked.load(std::memory_order_acquire) &&
-				SUCCEEDED(hr) && lpvData && cbData != 0 &&
-				RawInput::IsGamepadBlockedToGame() && !IsSelfOpenedDevice(self)) {
-				LogClassDeviceDiag(self, cbData);
-				SuppressGameJoystickRead(self, lpvData, cbData);
-			}
 			return hr;
 		}
 
@@ -914,12 +770,6 @@ namespace RadarKeys {
 			void** selfVtbl = *reinterpret_cast<void***>(self);
 			GetDeviceData_t orig = reinterpret_cast<GetDeviceData_t>(g_classGetDeviceDataOrigins[selfVtbl[kSlotGetDeviceData]]);
 			HRESULT hr = orig ? orig(self, cbObjectData, rgdod, pdwInOut, dwFlags) : E_FAIL;
-			if (g_classGetDeviceDataHooked.load(std::memory_order_acquire) &&
-				SUCCEEDED(hr) && pdwInOut && rgdod && *pdwInOut != 0 &&
-				RawInput::IsGamepadBlockedToGame() && !IsSelfOpenedDevice(self)) {
-				LogClassDeviceDiag(self, cbObjectData);
-				SuppressGameJoystickBuffered(self, rgdod, *pdwInOut);
-			}
 			return hr;
 		}
 
