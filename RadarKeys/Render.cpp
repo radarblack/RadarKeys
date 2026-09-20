@@ -213,16 +213,19 @@ namespace RadarKeys {
 				spdlog::info("Initializing ImGui Win32");
 				if (!ImGui_ImplWin32_Init(hwnd)) {
 					spdlog::error("Failed to initialize ImGui.");
+					context->Release();
 					return false;
 				}
 
 				spdlog::info("Initializing ImGui D3D11");
 				if (!ImGui_ImplDX11_Init(device, context)) {
 					spdlog::error("Failed to initialize ImGui.");
+					context->Release();
 					return false;
 				}
 				ImGuiInitialized = true;
 			}
+			context->Release();
 
 			ImGui::StyleColorsDark();
 
