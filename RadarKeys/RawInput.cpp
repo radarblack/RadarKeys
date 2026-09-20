@@ -646,7 +646,7 @@ namespace RadarKeys {
 			if (it != g_hidHandleTags.end()) {
 				return it->second == 1;
 			}
-			if (GetFileType(handle) != FILE_TYPE_DEVICE) {
+			if (GetFileType(handle) != FILE_TYPE_CHAR) {
 				if (g_hidHandleTags.size() > 65536) {
 					g_hidHandleTags.clear();
 				}
