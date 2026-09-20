@@ -660,6 +660,12 @@ namespace RadarKeys {
 		};
 		static std::unordered_map<LPOVERLAPPED, HidOverlappedRead> g_hidOverlappedReads;
 		static std::unordered_map<HANDLE, HidOverlappedRead> g_hidEventReads;
+
+				struct HidExWrap {
+					LPOVERLAPPED_COMPLETION_ROUTINE routine;
+					HidOverlappedRead rec;
+				};
+				static std::unordered_map<LPOVERLAPPED, HidExWrap> g_hidExRoutines;
 		typedef LONG(NTAPI* NtReadFile_t)(HANDLE, HANDLE, void*, void*, void*, void*, ULONG, void*, void*);
 		static NtReadFile_t g_origNtReadFile = nullptr;
 		typedef BOOL(WINAPI* ReadFileEx_t)(HANDLE, LPVOID, DWORD, LPOVERLAPPED, LPOVERLAPPED_COMPLETION_ROUTINE);
@@ -1212,11 +1218,6 @@ namespace RadarKeys {
 		}
 
 		static VOID CALLBACK WrappedExCompletion(DWORD dwErrorCode, DWORD dwNumberOfBytesTransfered, LPOVERLAPPED lpOverlapped);
-		struct HidExWrap {
-			LPOVERLAPPED_COMPLETION_ROUTINE routine;
-			HidOverlappedRead rec;
-		};
-		static std::unordered_map<LPOVERLAPPED, HidExWrap> g_hidExRoutines;
 
 		static VOID CALLBACK WrappedExCompletion(DWORD dwErrorCode, DWORD dwNumberOfBytesTransfered, LPOVERLAPPED lpOverlapped) {
 			HidExWrap wrap{};
@@ -1246,10 +1247,10 @@ namespace RadarKeys {
 			if ((status >= 0 || status == kStatusPending) && buffer && length > 0 && length <= 4096 &&
 				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(fileHandle)) {
 				if (status == kStatusPending) {
-					{
-						std::lock_guard<std::mutex> lock(g_hidMapMutex);
 						HidOverlappedRead displacedRead{};
 						bool hadDisplaced = false;
+					{
+						std::lock_guard<std::mutex> lock(g_hidMapMutex);
 						if (hEvent && g_hidEventReads.size() <= 4096) {
 						auto displacedIt = g_hidEventReads.find(hEvent);
 						if (displacedIt != g_hidEventReads.end()) {
