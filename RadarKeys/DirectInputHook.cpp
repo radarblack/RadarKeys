@@ -222,15 +222,15 @@ namespace RadarKeys {
 			case DI8DEVTYPE_MOUSE:    kind = DeviceKind::Mouse; break;
 			case DI8DEVTYPE_JOYSTICK:
 			case DI8DEVTYPE_GAMEPAD:
-			case DI8DEVTYPE_1STPERSON:
 			case DI8DEVTYPE_DRIVING:
 			case DI8DEVTYPE_FLIGHT:
+			case DI8DEVTYPE_1STPERSON:
 			case DI8DEVTYPE_SUPPLEMENTAL:
 			case 4:
 				kind = DeviceKind::Joystick;
 				break;
 			default:
-				kind = DeviceKind::Joystick;
+				kind = DeviceKind::Unknown;
 				break;
 			}
 			std::lock_guard<std::mutex> lock(g_mutex);
@@ -1550,25 +1550,24 @@ namespace RadarKeys {
 			if (got == static_cast<UINT>(-1) || got == 0) {
 				return false;
 			}
+			int sonyPadCount = 0;
 			for (UINT i = 0; i < got; ++i) {
 				if (list[i].dwType != RIM_TYPEHID) {
 					continue;
 				}
-				wchar_t name[256] = L"";
-				UINT size = static_cast<UINT>(sizeof(name));
-				if (GetRawInputDeviceInfoW(list[i].hDevice, RIDI_DEVICENAME, name, &size) == static_cast<UINT>(-1)) {
+				RID_DEVICE_INFO info{};
+				UINT infoSize = static_cast<UINT>(sizeof(info));
+				if (GetRawInputDeviceInfoW(list[i].hDevice, RIDI_DEVICEINFO, &info, &infoSize) == static_cast<UINT>(-1)) {
 					continue;
 				}
-				for (wchar_t* p = name; *p; ++p) {
-					if (*p >= L'a' && *p <= L'z') {
-						*p = static_cast<wchar_t>(*p - (L'a' - L'A'));
-					}
+				if (info.hid.dwVendorId != 0x054C) {
+					continue;
 				}
-				if (wcsstr(name, L"VID_054C") != nullptr || wcsstr(name, L"VID&0002054C") != nullptr) {
-					return true;
+				if (info.hid.usUsagePage == 0x01 && (info.hid.usUsage == 0x04 || info.hid.usUsage == 0x05)) {
+					++sonyPadCount;
 				}
 			}
-			return false;
+			return sonyPadCount == 1;
 		}
 
 		bool IsSonyGamepadAttachedToSystem() {
