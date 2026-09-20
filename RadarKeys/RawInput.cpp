@@ -1696,8 +1696,9 @@ namespace RadarKeys {
 			bool xinputConnected = false;
 			bool analogTaken = false;
 
+			const bool psGate = DirectInputHook::PlaystationVocabLatched() || DirectInputHook::HasPlaystationDevice();
 			const bool bridgeActive = g_psBridgeActive.load(std::memory_order_relaxed);
-			for (int m = 0; !bridgeActive && m < g_xinputModuleCount; ++m) {
+			for (int m = 0; !bridgeActive && !psGate && m < g_xinputModuleCount; ++m) {
 				for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
 					XINPUT_STATE s{};
 					XInputGetStateFunc orig = g_origXInputGetState[m];
@@ -1720,7 +1721,6 @@ namespace RadarKeys {
 			}
 
 			anyConnected = anyConnected || DirectInputHook::HasJoystickDevice();
-			const bool psGate = DirectInputHook::HasPlaystationDevice();
 			if (psGate) {
 				static std::atomic<bool> gpVocabGateLogged{ false };
 				bool expected = false;
