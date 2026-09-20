@@ -787,24 +787,18 @@ namespace RadarKeys {
 		}
 
 		static void SanitizeGamepadHidBuffer(LPVOID buf, DWORD bytesRead) {
+			if (bytesRead == 0) {
+				return;
+			}
 			unsigned char* bytes = static_cast<unsigned char*>(buf);
-			if (bytes[0] == 0x11) {
-				if (bytesRead < 8) {
-					return;
-				}
-				DWORD clear = bytesRead < 78 ? bytesRead : 78;
-				std::memset(buf, 0, clear);
+			std::memset(buf, 0, bytesRead);
+			if (bytes[0] == 0x11 && bytesRead >= 8) {
 				bytes[3] = 0x80;
 				bytes[4] = 0x80;
 				bytes[5] = 0x80;
 				bytes[6] = 0x80;
 				bytes[7] = 0x08;
-			} else if (bytes[0] == 0x01) {
-				if (bytesRead < 6) {
-					return;
-				}
-				DWORD clear = bytesRead < 64 ? bytesRead : 64;
-				std::memset(buf, 0, clear);
+			} else if (bytes[0] == 0x01 && bytesRead >= 6) {
 				bytes[1] = 0x80;
 				bytes[2] = 0x80;
 				bytes[3] = 0x80;
