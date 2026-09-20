@@ -48,7 +48,10 @@ namespace RadarKeys {
 		KeyBindMenu::InitDiagnostics();
 		spdlog::info("RadarKeys InitThread starting");
 
-		if (MH_Initialize() != MH_OK) {
+		MH_STATUS mhStatus = MH_Initialize();
+
+		DirectInputHook::InstallEarly();
+		if (mhStatus != MH_OK && mhStatus != MH_ERROR_ALREADY_INITIALIZED) {
 			spdlog::error("RadarKeys InitThread: MH_Initialize failed");
 			return;
 		}
@@ -60,6 +63,7 @@ namespace RadarKeys {
 		Render::CreateD3DHook();
 		InitCursorHook();
 		DirectInputHook::Install();
+		RawInput::StartWGIClassHookWorker();
 
 		spdlog::info("RadarKeys frame initialized");
 	}
@@ -311,7 +315,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		break;
 	case DLL_PROCESS_DETACH:
 		RadarKeys::KeyBindMenu::LogCleanShutdown();
-		spdlog::shutdown();
 		break;
 	}
 	return TRUE;
