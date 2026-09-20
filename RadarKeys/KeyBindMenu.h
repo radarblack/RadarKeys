@@ -58,6 +58,5 @@ namespace RadarKeys {
 		extern bool menuOpen;
 		extern bool captureSuppressKeyboard;
 		extern bool captureSuppressMouse;
-		extern bool captureSuppressGamepad;
 	}
 }
