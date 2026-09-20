@@ -346,15 +346,15 @@ namespace RadarKeys {
 		};
 
 		struct WGIGamepadReading {
-		ULONGLONG timestamp;
-		uint32_t buttons;
-		uint32_t buttonsPadding;
-		double leftTrigger;
-		double rightTrigger;
-		double leftThumbstickX;
-		double leftThumbstickY;
-		double rightThumbstickX;
-		double rightThumbstickY;
+			ULONGLONG timestamp;
+			uint32_t buttons;
+			uint32_t buttonsPadding;
+			double leftTrigger;
+			double rightTrigger;
+			double leftThumbstickX;
+			double leftThumbstickY;
+			double rightThumbstickX;
+			double rightThumbstickY;
 		};
 		static_assert(sizeof(WGIGamepadReading) == 64, "GamepadReading ABI size mismatch");
 		typedef HRESULT(__stdcall* WIGetCurrentReading_t)(void*, WGIGamepadReading*);
@@ -407,13 +407,13 @@ namespace RadarKeys {
 		typedef ULONG(__stdcall* WIRelease_t)(void*);
 
 		struct WGIWalkResult {
-		HRESULT factoryHr;
-		HRESULT gamepadsHr;
-		HRESULT getAtHr;
-		void* factory;
-		void* vectorView;
-		void* targets[kMaxWgiTargets];
-		int targetCount;
+			HRESULT factoryHr;
+			HRESULT gamepadsHr;
+			HRESULT getAtHr;
+			void* factory;
+			void* vectorView;
+			void* targets[kMaxWgiTargets];
+			int targetCount;
 		};
 
 		static WGIWalkResult WGIClassWalk(RoGetActivationFactory_t roGetActivationFactory,
@@ -661,11 +661,11 @@ namespace RadarKeys {
 		static std::unordered_map<LPOVERLAPPED, HidOverlappedRead> g_hidOverlappedReads;
 		static std::unordered_map<HANDLE, HidOverlappedRead> g_hidEventReads;
 
-				struct HidExWrap {
-					LPOVERLAPPED_COMPLETION_ROUTINE routine;
-					HidOverlappedRead rec;
-				};
-				static std::unordered_map<LPOVERLAPPED, HidExWrap> g_hidExRoutines;
+		struct HidExWrap {
+			LPOVERLAPPED_COMPLETION_ROUTINE routine;
+			HidOverlappedRead rec;
+		};
+		static std::unordered_map<LPOVERLAPPED, HidExWrap> g_hidExRoutines;
 		typedef LONG(NTAPI* NtReadFile_t)(HANDLE, HANDLE, void*, void*, void*, void*, ULONG, void*, void*);
 		static NtReadFile_t g_origNtReadFile = nullptr;
 		typedef BOOL(WINAPI* ReadFileEx_t)(HANDLE, LPVOID, DWORD, LPOVERLAPPED, LPOVERLAPPED_COMPLETION_ROUTINE);
@@ -791,23 +791,23 @@ namespace RadarKeys {
 			const bool usbReport = bytesRead == 64 && bytes[0] == 0x01;
 			const bool btReport = bytesRead == 78 && bytes[0] == 0x11;
 			if (!usbReport && !btReport) {
-			return;
+				return;
 			}
 			std::memset(buf, 0, bytesRead);
 			if (btReport) {
-			bytes[3] = 0x80;
-			bytes[4] = 0x80;
-			bytes[5] = 0x80;
-			bytes[6] = 0x80;
-			bytes[7] = 0x08;
+				bytes[3] = 0x80;
+				bytes[4] = 0x80;
+				bytes[5] = 0x80;
+				bytes[6] = 0x80;
+				bytes[7] = 0x08;
 			} else {
-			bytes[1] = 0x80;
-			bytes[2] = 0x80;
-			bytes[3] = 0x80;
-			bytes[4] = 0x80;
-			bytes[5] = 0x08;
+				bytes[1] = 0x80;
+				bytes[2] = 0x80;
+				bytes[3] = 0x80;
+				bytes[4] = 0x80;
+				bytes[5] = 0x08;
 			}
-		}
+			}
 
 		static void SanitizeCompletedHidRead(const HidOverlappedRead& rec, DWORD transferred) {
 			if (transferred == 0 || !rec.buffer) {
@@ -979,22 +979,22 @@ namespace RadarKeys {
 				HidOverlappedRead displacedRead{};
 				bool hadDisplaced = false;
 				{
-				std::lock_guard<std::mutex> lock(g_hidMapMutex);
-				HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
-				if (g_hidOverlappedReads.size() <= 4096) {
-				auto displacedIt = g_hidOverlappedReads.find(lpOverlapped);
-				if (displacedIt != g_hidOverlappedReads.end()) {
-				displacedRead = displacedIt->second;
-				hadDisplaced = true;
-				}
-				g_hidOverlappedReads[lpOverlapped] = record;
-				if (record.event && g_hidEventReads.size() <= 4096) {
-				g_hidEventReads[record.event] = record;
-				}
-				}
+					std::lock_guard<std::mutex> lock(g_hidMapMutex);
+					HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
+					if (g_hidOverlappedReads.size() <= 4096) {
+						auto displacedIt = g_hidOverlappedReads.find(lpOverlapped);
+						if (displacedIt != g_hidOverlappedReads.end()) {
+							displacedRead = displacedIt->second;
+							hadDisplaced = true;
+						}
+						g_hidOverlappedReads[lpOverlapped] = record;
+						if (record.event && g_hidEventReads.size() <= 4096) {
+							g_hidEventReads[record.event] = record;
+						}
+					}
 				}
 				if (hadDisplaced) {
-				SanitizeCompletedHidRead(displacedRead, displacedRead.size);
+					SanitizeCompletedHidRead(displacedRead, displacedRead.size);
 				}
 			}
 			if (ok && !lpOverlapped && lpNumberOfBytesRead && *lpNumberOfBytesRead > 0 && lpBuffer &&
@@ -1012,9 +1012,9 @@ namespace RadarKeys {
 		}
 
 		struct HidIocApcContext {
-		void* origRoutine;
-		void* origContext;
-		PendingHidIoctl rec;
+			void* origRoutine;
+			void* origContext;
+			PendingHidIoctl rec;
 		};
 		
 		static VOID NTAPI WrappedHidIocApc(void* apcContext, void* ioStatusBlock, ULONG reserved) {
@@ -1068,7 +1068,7 @@ namespace RadarKeys {
 			}
 			unsigned ioctlFunction = (ioControlCode >> 2) & 0xFF;
 			if (ioctlFunction != 0x64 && ioctlFunction != 0x6A) {
-			return status;
+				return status;
 			}
 			constexpr LONG kStatusPendingIoc = 0x00000103;
 			if (status == kStatusPendingIoc) {
@@ -1076,16 +1076,16 @@ namespace RadarKeys {
 					std::lock_guard<std::mutex> lock(g_hidMapMutex);
 					PendingHidIoctl record{ fileHandle, outputBuffer, outputBufferLength, apcRoutine };
 					if (g_pendingHidIoctlByIosb.size() <= 4096) {
-					g_pendingHidIoctlByIosb[ioStatusBlock] = record;
+						g_pendingHidIoctlByIosb[ioStatusBlock] = record;
 					}
 					HANDLE completionEvent = hEvent;
 					if (!completionEvent && !apcRoutine && apcContext) {
-					completionEvent = static_cast<HANDLE>(apcContext);
+						completionEvent = static_cast<HANDLE>(apcContext);
 					}
 					if (completionEvent && g_pendingHidIosbByEvent.size() <= 4096) {
-					g_pendingHidIosbByEvent[completionEvent] = ioStatusBlock;
+						g_pendingHidIosbByEvent[completionEvent] = ioStatusBlock;
 					}
-					}
+				}
 			} else if (status >= 0) {
 				NtIoStatusBlock* iosb = static_cast<NtIoStatusBlock*>(ioStatusBlock);
 				if (iosb && iosb->information > 0 && g_gamepadBlockedToGame.load() != false) {
@@ -1247,23 +1247,23 @@ namespace RadarKeys {
 			if ((status >= 0 || status == kStatusPending) && buffer && length > 0 && length <= 4096 &&
 				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(fileHandle)) {
 				if (status == kStatusPending) {
-						HidOverlappedRead displacedRead{};
-						bool hadDisplaced = false;
+					HidOverlappedRead displacedRead{};
+					bool hadDisplaced = false;
 					{
 						std::lock_guard<std::mutex> lock(g_hidMapMutex);
 						if (hEvent && g_hidEventReads.size() <= 4096) {
-						auto displacedIt = g_hidEventReads.find(hEvent);
-						if (displacedIt != g_hidEventReads.end()) {
-						displacedRead = displacedIt->second;
-						hadDisplaced = true;
+							auto displacedIt = g_hidEventReads.find(hEvent);
+							if (displacedIt != g_hidEventReads.end()) {
+								displacedRead = displacedIt->second;
+								hadDisplaced = true;
+							}
+							HidOverlappedRead record{ fileHandle, buffer, length, hEvent, nullptr };
+							g_hidEventReads[hEvent] = record;
 						}
-						HidOverlappedRead record{ fileHandle, buffer, length, hEvent, nullptr };
-						g_hidEventReads[hEvent] = record;
-						}
-						}
-						if (hadDisplaced) {
+					}
+					if (hadDisplaced) {
 						SanitizeCompletedHidRead(displacedRead, displacedRead.size);
-						}
+					}
 				} else if (ioStatusBlock) {
 					NtIoStatusBlock* iosb = static_cast<NtIoStatusBlock*>(ioStatusBlock);
 					DWORD transferred = static_cast<DWORD>(iosb->information);
@@ -1290,12 +1290,11 @@ namespace RadarKeys {
 				{
 					std::lock_guard<std::mutex> lock(g_hidMapMutex);
 					if (g_hidExRoutines.size() <= 4096) {
-					HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
-					g_hidExRoutines[lpOverlapped] = { lpCompletionRoutine, record };
-					routine = &WrappedExCompletion;
+						HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
+						g_hidExRoutines[lpOverlapped] = { lpCompletionRoutine, record };
+						routine = &WrappedExCompletion;
 					}
-					}
-				routine = &WrappedExCompletion;
+				}
 			}
 			return g_origReadFileEx(hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped, routine);
 		}
@@ -1315,17 +1314,17 @@ namespace RadarKeys {
 		static DWORD WINAPI HookedWaitForMultipleObjectsGamepad(DWORD nCount, const HANDLE* lpHandles, BOOL bWaitAll, DWORD dwMilliseconds) {
 			DWORD result = g_origWaitForMultipleObjects(nCount, lpHandles, bWaitAll, dwMilliseconds);
 			if (nCount > 0 && nCount <= MAXIMUM_WAIT_OBJECTS) {
-			if (bWaitAll) {
-			if (result == WAIT_OBJECT_0) {
-			for (DWORD i = 0; i < nCount; ++i) {
-			SanitizeHidEventReadsForHandle(lpHandles[i], WAIT_OBJECT_0);
-			}
-			}
-			} else if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + nCount) {
-			SanitizeHidEventReadsForHandle(lpHandles[result - WAIT_OBJECT_0], WAIT_OBJECT_0);
-			} else if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + nCount) {
-			SanitizeHidEventReadsForHandle(lpHandles[result - WAIT_ABANDONED_0], WAIT_ABANDONED);
-			}
+				if (bWaitAll) {
+					if (result == WAIT_OBJECT_0) {
+						for (DWORD i = 0; i < nCount; ++i) {
+							SanitizeHidEventReadsForHandle(lpHandles[i], WAIT_OBJECT_0);
+						}
+					}
+				} else if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + nCount) {
+					SanitizeHidEventReadsForHandle(lpHandles[result - WAIT_OBJECT_0], WAIT_OBJECT_0);
+				} else if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + nCount) {
+					SanitizeHidEventReadsForHandle(lpHandles[result - WAIT_ABANDONED_0], WAIT_ABANDONED);
+				}
 			}
 			return result;
 		}
@@ -1687,6 +1686,7 @@ namespace RadarKeys {
 		std::atomic<bool> g_anyGamepadConnected{ false };
 		std::atomic<bool> g_xinputGamepadConnected{ false };
 		std::atomic<bool> g_psBridgeActive{ false };
+				
 		void PollGamepad() {
 			EnsureXInputHook();
 
@@ -1705,18 +1705,20 @@ namespace RadarKeys {
 					if (!orig || orig(i, &s) != ERROR_SUCCESS) {
 						continue;
 					}
-				anyConnected = true;
-				xinputConnected = true;
-				buttons |= s.Gamepad.wButtons;
-				if (!analogTaken) {
-				analogTaken = true;
-				leftTrigger = s.Gamepad.bLeftTrigger;
-				rightTrigger = s.Gamepad.bRightTrigger;
-				lx = s.Gamepad.sThumbLX;
-				ly = s.Gamepad.sThumbLY;
-				rx = s.Gamepad.sThumbRX;
-				ry = s.Gamepad.sThumbRY;
-				}
+					
+					anyConnected = true;
+					xinputConnected = true;
+					buttons |= s.Gamepad.wButtons;
+					
+					if (!analogTaken) {
+						analogTaken = true;
+						leftTrigger = s.Gamepad.bLeftTrigger;
+						rightTrigger = s.Gamepad.bRightTrigger;
+						lx = s.Gamepad.sThumbLX;
+						ly = s.Gamepad.sThumbLY;
+						rx = s.Gamepad.sThumbRX;
+						ry = s.Gamepad.sThumbRY;
+					}
 				}
 			}
 
@@ -1725,31 +1727,32 @@ namespace RadarKeys {
 				if (!DirectInputHook::IsGamepadButtonHeld(gpKey)) {
 					continue;
 				}
+				
 				switch (gpKey) {
-				case VK_GAMEPAD_A:                       buttons |= XINPUT_GAMEPAD_A; break;
-				case VK_GAMEPAD_B:                       buttons |= XINPUT_GAMEPAD_B; break;
-				case VK_GAMEPAD_X:                       buttons |= XINPUT_GAMEPAD_X; break;
-				case VK_GAMEPAD_Y:                       buttons |= XINPUT_GAMEPAD_Y; break;
-				case VK_GAMEPAD_LEFT_SHOULDER:           buttons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
-				case VK_GAMEPAD_RIGHT_SHOULDER:          buttons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
-				case VK_GAMEPAD_DPAD_UP:                 buttons |= XINPUT_GAMEPAD_DPAD_UP; break;
-				case VK_GAMEPAD_DPAD_DOWN:               buttons |= XINPUT_GAMEPAD_DPAD_DOWN; break;
-				case VK_GAMEPAD_DPAD_LEFT:               buttons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
-				case VK_GAMEPAD_DPAD_RIGHT:              buttons |= XINPUT_GAMEPAD_DPAD_RIGHT; break;
-				case VK_GAMEPAD_MENU:                    buttons |= XINPUT_GAMEPAD_START; break;
-				case VK_GAMEPAD_VIEW:                    buttons |= XINPUT_GAMEPAD_BACK; break;
-				case VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON:  buttons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON: buttons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
-				case VK_GAMEPAD_LEFT_TRIGGER:            leftTrigger = (std::max)(leftTrigger, (BYTE)255); break;
-				case VK_GAMEPAD_RIGHT_TRIGGER:           rightTrigger = (std::max)(rightTrigger, (BYTE)255); break;
-				case VK_GAMEPAD_LEFT_THUMBSTICK_UP:      ly = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1; break;
-				case VK_GAMEPAD_LEFT_THUMBSTICK_DOWN:    ly = -(SHORT)(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1); break;
-				case VK_GAMEPAD_LEFT_THUMBSTICK_LEFT:    lx = -(SHORT)(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1); break;
-				case VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT:   lx = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1; break;
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_UP:     ry = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1; break;
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN:   ry = -(SHORT)(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1); break;
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT:   rx = -(SHORT)(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1); break;
-				case VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT:  rx = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1; break;
+					case VK_GAMEPAD_A:                       buttons |= XINPUT_GAMEPAD_A; break;
+					case VK_GAMEPAD_B:                       buttons |= XINPUT_GAMEPAD_B; break;
+					case VK_GAMEPAD_X:                       buttons |= XINPUT_GAMEPAD_X; break;
+					case VK_GAMEPAD_Y:                       buttons |= XINPUT_GAMEPAD_Y; break;
+					case VK_GAMEPAD_LEFT_SHOULDER:           buttons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
+					case VK_GAMEPAD_RIGHT_SHOULDER:          buttons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
+					case VK_GAMEPAD_DPAD_UP:                 buttons |= XINPUT_GAMEPAD_DPAD_UP; break;
+					case VK_GAMEPAD_DPAD_DOWN:               buttons |= XINPUT_GAMEPAD_DPAD_DOWN; break;
+					case VK_GAMEPAD_DPAD_LEFT:               buttons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
+					case VK_GAMEPAD_DPAD_RIGHT:              buttons |= XINPUT_GAMEPAD_DPAD_RIGHT; break;
+					case VK_GAMEPAD_MENU:                    buttons |= XINPUT_GAMEPAD_START; break;
+					case VK_GAMEPAD_VIEW:                    buttons |= XINPUT_GAMEPAD_BACK; break;
+					case VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON:  buttons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
+					case VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON: buttons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
+					case VK_GAMEPAD_LEFT_TRIGGER:            leftTrigger = (std::max)(leftTrigger, (BYTE)255); break;
+					case VK_GAMEPAD_RIGHT_TRIGGER:           rightTrigger = (std::max)(rightTrigger, (BYTE)255); break;
+					case VK_GAMEPAD_LEFT_THUMBSTICK_UP:      ly = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1; break;
+					case VK_GAMEPAD_LEFT_THUMBSTICK_DOWN:    ly = -(SHORT)(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1); break;
+					case VK_GAMEPAD_LEFT_THUMBSTICK_LEFT:    lx = -(SHORT)(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1); break;
+					case VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT:   lx = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1; break;
+					case VK_GAMEPAD_RIGHT_THUMBSTICK_UP:     ry = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1; break;
+					case VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN:   ry = -(SHORT)(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1); break;
+					case VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT:   rx = -(SHORT)(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1); break;
+					case VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT:  rx = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1; break;
 				}
 			}
 
@@ -1787,9 +1790,11 @@ namespace RadarKeys {
 				if (isDown == wasDown) {
 					continue;
 				}
+				
 				realStateHeld[vKey] = isDown;
 				currFlags[vKey].store(isDown ? RI_KEY_MAKE : RI_KEY_BREAK, std::memory_order_relaxed);
 				DoActions(vKey, isDown ? BUTTONEVENT::ONDOWN : BUTTONEVENT::ONUP);
+				
 				if (g_gamepadBlockedToGame.load() != false) {
 					spdlog::info("RawInput: GP key vKey={} {} (suppression active)", vKey, isDown ? "DOWN" : "UP");
 					spdlog::default_logger()->flush();
@@ -1824,13 +1829,13 @@ namespace RadarKeys {
 					}
 					buttons |= s.Gamepad.wButtons;
 					if (!analogTaken) {
-					analogTaken = true;
-					leftTrigger = s.Gamepad.bLeftTrigger;
-					rightTrigger = s.Gamepad.bRightTrigger;
-					lx = s.Gamepad.sThumbLX;
-					ly = s.Gamepad.sThumbLY;
-					rx = s.Gamepad.sThumbRX;
-					ry = s.Gamepad.sThumbRY;
+						analogTaken = true;
+						leftTrigger = s.Gamepad.bLeftTrigger;
+						rightTrigger = s.Gamepad.bRightTrigger;
+						lx = s.Gamepad.sThumbLX;
+						ly = s.Gamepad.sThumbLY;
+						rx = s.Gamepad.sThumbRX;
+						ry = s.Gamepad.sThumbRY;
 					}
 				}
 			}
