@@ -50,7 +50,7 @@ namespace RadarKeys {
 		static IDirectInput8* g_ownDI8 = nullptr;
 
 		static constexpr size_t kDirectInput8VTableSize = 11;
-		static constexpr size_t kDeviceVTableSize = 30;
+		static constexpr size_t kDeviceVTableSize = 32;
 		static constexpr size_t kSlotGetCapabilities = 3;
 		static constexpr size_t kSlotRelease = 2;
 		static constexpr size_t kSlotGetProperty = 5;
@@ -1162,7 +1162,7 @@ namespace RadarKeys {
 		}
 
 		static bool ButtonHeld(const DIJOYSTATE* js, int index) {
-			size_t count = 128;
+			size_t count = 32;
 			if (index < 0 || index >= (int)count) {
 				return false;
 			}
