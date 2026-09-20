@@ -646,6 +646,13 @@ namespace RadarKeys {
 			if (it != g_hidHandleTags.end()) {
 				return it->second == 1;
 			}
+			if (GetFileType(handle) != FILE_TYPE_DEVICE) {
+				if (g_hidHandleTags.size() > 65536) {
+					g_hidHandleTags.clear();
+				}
+				g_hidHandleTags[handle] = 2;
+				return false;
+			}
 			wchar_t path[512] = L"";
 			UINT n = GetFinalPathNameByHandleW(handle, path, 512, FILE_NAME_NORMALIZED | VOLUME_NAME_NT);
 			bool gamepad = false;
@@ -656,7 +663,7 @@ namespace RadarKeys {
 				}
 				gamepad = lower.find(L"hid") != std::wstring::npos && LowerContainsGamepadHidNeedle(lower);
 			}
-			if (g_hidHandleTags.size() > 8192) {
+			if (g_hidHandleTags.size() > 65536) {
 				g_hidHandleTags.clear();
 			}
 			g_hidHandleTags[handle] = gamepad ? 1 : 2;
@@ -823,7 +830,8 @@ namespace RadarKeys {
 		static BOOL WINAPI HookedReadFileGamepad(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead,
 			LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped) {
 			BOOL ok = g_origReadFile(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
-			if (lpOverlapped && lpBuffer && nNumberOfBytesToRead > 0 && HandleIsGamepadHid(hFile)) {
+			if (lpOverlapped && lpBuffer && nNumberOfBytesToRead > 0 && nNumberOfBytesToRead <= 4096 &&
+				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(hFile)) {
 				if (g_hidOverlappedReads.size() > 4096) {
 					g_hidOverlappedReads.clear();
 				}
@@ -874,7 +882,7 @@ namespace RadarKeys {
 			if (!ioStatusBlock || !outputBuffer || outputBufferLength == 0) {
 				return status;
 			}
-			if (!HandleIsGamepadHid(fileHandle)) {
+			if (g_gamepadBlockedToGame.load() == false || !HandleIsGamepadHid(fileHandle)) {
 				return status;
 			}
 			static std::atomic<ULONGLONG> lastIoctlLog{ 0 };
@@ -997,7 +1005,8 @@ namespace RadarKeys {
 			void* ioStatusBlock, void* buffer, ULONG length, void* byteOffset, void* key) {
 			LONG status = g_origNtReadFile(fileHandle, hEvent, apcRoutine, apcContext, ioStatusBlock, buffer, length, byteOffset, key);
 			constexpr LONG kStatusPending = 0x00000103;
-			if ((status >= 0 || status == kStatusPending) && buffer && length > 0 && HandleIsGamepadHid(fileHandle)) {
+			if ((status >= 0 || status == kStatusPending) && buffer && length > 0 && length <= 4096 &&
+				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(fileHandle)) {
 				if (status == kStatusPending) {
 					if (hEvent) {
 						if (g_hidEventReads.size() > 4096) {
@@ -1027,7 +1036,8 @@ namespace RadarKeys {
 		static BOOL WINAPI HookedReadFileExGamepad(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead,
 			LPOVERLAPPED lpOverlapped, LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine) {
 			LPOVERLAPPED_COMPLETION_ROUTINE routine = lpCompletionRoutine;
-			if (lpOverlapped && lpBuffer && nNumberOfBytesToRead > 0 && HandleIsGamepadHid(hFile)) {
+			if (lpOverlapped && lpBuffer && nNumberOfBytesToRead > 0 && nNumberOfBytesToRead <= 4096 &&
+				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(hFile)) {
 				if (g_hidExRoutines.size() > 4096) {
 					g_hidExRoutines.clear();
 				}
@@ -1072,24 +1082,6 @@ namespace RadarKeys {
 
 		static HANDLE WINAPI HookedCreateFileWGamepad(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
 			LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) {
-			if (g_gamepadBlockedToGame.load() != false && lpFileName) {
-				std::wstring lowerCheck;
-				for (LPCWSTR p = lpFileName; *p; ++p) {
-					lowerCheck.push_back((*p >= L'A' && *p <= L'Z') ? static_cast<wchar_t>((*p + 32)) : *p);
-				}
-				if (lowerCheck.find(L"hid") != std::wstring::npos && LowerContainsGamepadHidNeedle(lowerCheck)) {
-					static ULONGLONG lastRedirectLog = 0;
-					const ULONGLONG now = GetTickCount64();
-					if (now - lastRedirectLog >= 2000) {
-						lastRedirectLog = now;
-						spdlog::info("RawInput: blocked gamepad HID device open while suppression active ({})",
-							std::filesystem::path(lpFileName).string());
-						spdlog::default_logger()->flush();
-					}
-					SetLastError(ERROR_FILE_NOT_FOUND);
-					return INVALID_HANDLE_VALUE;
-				}
-			}
 			HANDLE handle = g_origCreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
 				dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 			if (handle != INVALID_HANDLE_VALUE && lpFileName) {
@@ -1098,7 +1090,7 @@ namespace RadarKeys {
 					lower.push_back((*p >= L'A' && *p <= L'Z') ? static_cast<wchar_t>((*p + 32)) : *p);
 				}
 				if (lower.find(L"hid") != std::wstring::npos && LowerContainsGamepadHidNeedle(lower)) {
-					if (g_hidHandleTags.size() > 8192) {
+					if (g_hidHandleTags.size() > 65536) {
 						g_hidHandleTags.clear();
 					}
 					g_hidHandleTags[handle] = 1;
@@ -1111,26 +1103,6 @@ namespace RadarKeys {
 
 		static HANDLE WINAPI HookedCreateFileAGamepad(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
 			LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) {
-			if (g_gamepadBlockedToGame.load() != false && lpFileName) {
-				std::string lowerCheck;
-				for (LPCSTR p = lpFileName; *p; ++p) {
-					lowerCheck.push_back((*p >= 'A' && *p <= 'Z') ? static_cast<char>((*p + 32)) : *p);
-				}
-				if (lowerCheck.find("hid") != std::string::npos &&
-					(lowerCheck.find("vid_054c") != std::string::npos || lowerCheck.find("pid_05c4") != std::string::npos ||
-						lowerCheck.find("00001124") != std::string::npos || lowerCheck.find("vid_1234") != std::string::npos ||
-						lowerCheck.find("vigem") != std::string::npos)) {
-					static ULONGLONG lastRedirectLogA = 0;
-					const ULONGLONG now = GetTickCount64();
-					if (now - lastRedirectLogA >= 2000) {
-						lastRedirectLogA = now;
-						spdlog::info("RawInput: blocked gamepad HID device open while suppression active ({})", lowerCheck);
-						spdlog::default_logger()->flush();
-					}
-					SetLastError(ERROR_FILE_NOT_FOUND);
-					return INVALID_HANDLE_VALUE;
-				}
-			}
 			HANDLE handle = g_origCreateFileA(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
 				dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
 			if (handle != INVALID_HANDLE_VALUE && lpFileName) {
@@ -1142,7 +1114,7 @@ namespace RadarKeys {
 					(lower.find("vid_054c") != std::string::npos || lower.find("pid_05c4") != std::string::npos ||
 						lower.find("00001124") != std::string::npos || lower.find("vid_1234") != std::string::npos ||
 						lower.find("vigem") != std::string::npos)) {
-					if (g_hidHandleTags.size() > 8192) {
+					if (g_hidHandleTags.size() > 65536) {
 						g_hidHandleTags.clear();
 					}
 					g_hidHandleTags[handle] = 1;
