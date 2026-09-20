@@ -788,26 +788,30 @@ namespace RadarKeys {
 
 		static void SanitizeGamepadHidBuffer(LPVOID buf, DWORD bytesRead) {
 			unsigned char* bytes = static_cast<unsigned char*>(buf);
-			const bool usbReport = bytesRead == 64 && bytes[0] == 0x01;
-			const bool btReport = bytesRead == 78 && bytes[0] == 0x11;
-			if (!usbReport && !btReport) {
-				return;
-			}
-			std::memset(buf, 0, bytesRead);
-			if (btReport) {
+			if (bytes[0] == 0x11) {
+				if (bytesRead < 8) {
+					return;
+				}
+				DWORD clear = bytesRead < 78 ? bytesRead : 78;
+				std::memset(buf, 0, clear);
 				bytes[3] = 0x80;
 				bytes[4] = 0x80;
 				bytes[5] = 0x80;
 				bytes[6] = 0x80;
 				bytes[7] = 0x08;
-			} else {
+			} else if (bytes[0] == 0x01) {
+				if (bytesRead < 6) {
+					return;
+				}
+				DWORD clear = bytesRead < 64 ? bytesRead : 64;
+				std::memset(buf, 0, clear);
 				bytes[1] = 0x80;
 				bytes[2] = 0x80;
 				bytes[3] = 0x80;
 				bytes[4] = 0x80;
 				bytes[5] = 0x08;
 			}
-			}
+		}
 
 		static void SanitizeCompletedHidRead(const HidOverlappedRead& rec, DWORD transferred) {
 			if (transferred == 0 || !rec.buffer) {
