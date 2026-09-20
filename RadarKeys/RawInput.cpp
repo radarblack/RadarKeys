@@ -336,12 +336,12 @@ namespace RadarKeys {
 		struct WGIGamepadReading {
 			ULONGLONG timestamp;
 			ULONGLONG buttons;
+			double leftTrigger;
+			double rightTrigger;
 			double leftThumbstickX;
 			double leftThumbstickY;
 			double rightThumbstickX;
 			double rightThumbstickY;
-			double leftTrigger;
-			double rightTrigger;
 		};
 		typedef HRESULT(__stdcall* WIGetCurrentReading_t)(void*, WGIGamepadReading*);
 		static WIGetCurrentReading_t g_origWIGetCurrentReading = nullptr;
@@ -620,6 +620,7 @@ namespace RadarKeys {
 		};
 		static std::unordered_map<void*, PendingHidIoctl> g_pendingHidIoctlByIosb;
 		static std::unordered_map<HANDLE, void*> g_pendingHidIosbByEvent;
+			static std::mutex g_hidMapMutex;
 		typedef BOOL(WINAPI* GetOverlappedResult_t)(HANDLE, LPOVERLAPPED, LPDWORD, BOOL);
 		typedef BOOL(WINAPI* GetOverlappedResultEx_t)(HANDLE, LPOVERLAPPED, LPDWORD, DWORD, BOOL);
 		static GetOverlappedResult_t g_origGetOverlappedResult = nullptr;
@@ -642,11 +643,15 @@ namespace RadarKeys {
 		}
 
 		static bool HandleIsGamepadHid(HANDLE handle) {
-			auto it = g_hidHandleTags.find(handle);
-			if (it != g_hidHandleTags.end()) {
-				return it->second == 1;
+			{
+				std::lock_guard<std::mutex> lock(g_hidMapMutex);
+				auto it = g_hidHandleTags.find(handle);
+				if (it != g_hidHandleTags.end()) {
+					return it->second == 1;
+				}
 			}
 			if (GetFileType(handle) != FILE_TYPE_CHAR) {
+				std::lock_guard<std::mutex> lock(g_hidMapMutex);
 				if (g_hidHandleTags.size() > 65536) {
 					g_hidHandleTags.clear();
 				}
@@ -663,10 +668,13 @@ namespace RadarKeys {
 				}
 				gamepad = lower.find(L"hid") != std::wstring::npos && LowerContainsGamepadHidNeedle(lower);
 			}
-			if (g_hidHandleTags.size() > 65536) {
-				g_hidHandleTags.clear();
+			{
+				std::lock_guard<std::mutex> lock(g_hidMapMutex);
+				if (g_hidHandleTags.size() > 65536) {
+					g_hidHandleTags.clear();
+				}
+				g_hidHandleTags[handle] = gamepad ? 1 : 2;
 			}
-			g_hidHandleTags[handle] = gamepad ? 1 : 2;
 			if (gamepad) {
 				spdlog::info("RawInput: tagged pre-opened gamepad HID handle {:p} ({})", static_cast<void*>(handle),
 					std::filesystem::path(path).string());
@@ -676,14 +684,23 @@ namespace RadarKeys {
 		}
 
 		static void SanitizeGamepadHidBuffer(LPVOID buf, DWORD bytesRead) {
-			std::memset(buf, 0, bytesRead);
 			unsigned char* bytes = static_cast<unsigned char*>(buf);
-			if (bytesRead > 5) {
-				bytes[1] = 0x80;
-				bytes[2] = 0x80;
-				bytes[3] = 0x80;
-				bytes[4] = 0x80;
-				bytes[5] = 0x80;
+			const bool btLayout = bytesRead > 0 && bytes[0] == 0x11;
+			std::memset(buf, 0, bytesRead);
+			if (btLayout) {
+			if (bytesRead > 7) {
+			bytes[3] = 0x80;
+			bytes[4] = 0x80;
+			bytes[5] = 0x80;
+			bytes[6] = 0x80;
+			bytes[7] = 0x08;
+			}
+			} else if (bytesRead > 5) {
+			bytes[1] = 0x80;
+			bytes[2] = 0x80;
+			bytes[3] = 0x80;
+			bytes[4] = 0x80;
+			bytes[5] = 0x08;
 			}
 		}
 
@@ -732,20 +749,36 @@ namespace RadarKeys {
 			if (waitResult != WAIT_OBJECT_0 && waitResult != WAIT_ABANDONED) {
 				return;
 			}
-			auto it = g_hidEventReads.find(hHandle);
-			if (it != g_hidEventReads.end()) {
-				SanitizeCompletedHidRead(it->second, it->second.size);
-				g_hidEventReads.erase(it);
-			}
-			auto iosbIt = g_pendingHidIosbByEvent.find(hHandle);
-			if (iosbIt != g_pendingHidIosbByEvent.end()) {
-				void* ioStatusBlock = iosbIt->second;
-				g_pendingHidIosbByEvent.erase(iosbIt);
-				auto recIt = g_pendingHidIoctlByIosb.find(ioStatusBlock);
-				if (recIt != g_pendingHidIoctlByIosb.end()) {
-					SanitizePendingHidIoctl(recIt->second, ioStatusBlock);
-					g_pendingHidIoctlByIosb.erase(recIt);
+			bool haveRead = false;
+			HidOverlappedRead drainedRead{};
+			bool haveIoc = false;
+			PendingHidIoctl drainedIoc{};
+			void* drainedIosb = nullptr;
+			{
+				std::lock_guard<std::mutex> lock(g_hidMapMutex);
+				auto it = g_hidEventReads.find(hHandle);
+				if (it != g_hidEventReads.end()) {
+					drainedRead = it->second;
+					haveRead = true;
+					g_hidEventReads.erase(it);
 				}
+				auto iosbIt = g_pendingHidIosbByEvent.find(hHandle);
+				if (iosbIt != g_pendingHidIosbByEvent.end()) {
+					drainedIosb = iosbIt->second;
+					g_pendingHidIosbByEvent.erase(iosbIt);
+					auto recIt = g_pendingHidIoctlByIosb.find(drainedIosb);
+					if (recIt != g_pendingHidIoctlByIosb.end()) {
+						drainedIoc = recIt->second;
+						haveIoc = true;
+						g_pendingHidIoctlByIosb.erase(recIt);
+					}
+				}
+			}
+			if (haveRead) {
+				SanitizeCompletedHidRead(drainedRead, drainedRead.size);
+			}
+			if (haveIoc) {
+				SanitizePendingHidIoctl(drainedIoc, drainedIosb);
 			}
 		}
 
@@ -769,17 +802,22 @@ namespace RadarKeys {
 		}
 
 		static void SanitizeHidOverlappedCompletion(HANDLE hFile, LPOVERLAPPED lpOverlapped, DWORD transferred) {
-			auto it = g_hidOverlappedReads.find(lpOverlapped);
-			if (it == g_hidOverlappedReads.end()) {
-				return;
-			}
-			if (it->second.handle != hFile || transferred == 0 || !it->second.buffer) {
+			HidOverlappedRead rec{};
+			{
+				std::lock_guard<std::mutex> lock(g_hidMapMutex);
+				auto it = g_hidOverlappedReads.find(lpOverlapped);
+				if (it == g_hidOverlappedReads.end()) {
+					return;
+				}
+				rec = it->second;
 				g_hidOverlappedReads.erase(it);
+			}
+			if (rec.handle != hFile || transferred == 0 || !rec.buffer) {
 				return;
 			}
 			if (g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(hFile)) {
-				DWORD toSanitize = transferred < it->second.size ? transferred : it->second.size;
-				SanitizeGamepadHidBuffer(it->second.buffer, toSanitize);
+				DWORD toSanitize = transferred < rec.size ? transferred : rec.size;
+				SanitizeGamepadHidBuffer(rec.buffer, toSanitize);
 				const ULONGLONG now = GetTickCount64();
 				ULONGLONG last = g_lastHidSanitizeLog.load(std::memory_order_relaxed);
 				if (now - last >= 1000 && g_lastHidSanitizeLog.compare_exchange_strong(last, now)) {
@@ -788,7 +826,6 @@ namespace RadarKeys {
 					spdlog::default_logger()->flush();
 				}
 			}
-			g_hidOverlappedReads.erase(it);
 		}
 
 		static BOOL WINAPI HookedGetOverlappedResultGamepad(HANDLE hFile, LPOVERLAPPED lpOverlapped,
@@ -796,15 +833,16 @@ namespace RadarKeys {
 			BOOL ok = g_origGetOverlappedResult(hFile, lpOverlapped, lpNumberOfBytesTransferred, bWait);
 			if (ok && lpNumberOfBytesTransferred) {
 				SanitizeHidOverlappedCompletion(hFile, lpOverlapped, *lpNumberOfBytesTransferred);
-				auto it = g_pendingHidIoctlByIosb.find(lpOverlapped);
-				if (it != g_pendingHidIoctlByIosb.end()) {
-					PendingHidIoctl rec = it->second;
-					rec.output = it->second.output;
-					rec.handle = it->second.handle;
-					DWORD transferred = *lpNumberOfBytesTransferred;
-					SanitizePendingHidIoctlBuffered(rec, transferred);
-					g_pendingHidIoctlByIosb.erase(it);
+				PendingHidIoctl rec{};
+				{
+					std::lock_guard<std::mutex> lock(g_hidMapMutex);
+					auto it = g_pendingHidIoctlByIosb.find(lpOverlapped);
+					if (it != g_pendingHidIoctlByIosb.end()) {
+						rec = it->second;
+						g_pendingHidIoctlByIosb.erase(it);
+					}
 				}
+				SanitizePendingHidIoctlBuffered(rec, *lpNumberOfBytesTransferred);
 			}
 			return ok;
 		}
@@ -814,15 +852,16 @@ namespace RadarKeys {
 			BOOL ok = g_origGetOverlappedResultEx(hFile, lpOverlapped, lpNumberOfBytesTransferred, dwMilliseconds, bAlertable);
 			if (ok && lpNumberOfBytesTransferred) {
 				SanitizeHidOverlappedCompletion(hFile, lpOverlapped, *lpNumberOfBytesTransferred);
-				auto it = g_pendingHidIoctlByIosb.find(lpOverlapped);
-				if (it != g_pendingHidIoctlByIosb.end()) {
-					PendingHidIoctl rec = it->second;
-					rec.output = it->second.output;
-					rec.handle = it->second.handle;
-					DWORD transferred = *lpNumberOfBytesTransferred;
-					SanitizePendingHidIoctlBuffered(rec, transferred);
-					g_pendingHidIoctlByIosb.erase(it);
+				PendingHidIoctl rec{};
+				{
+					std::lock_guard<std::mutex> lock(g_hidMapMutex);
+					auto it = g_pendingHidIoctlByIosb.find(lpOverlapped);
+					if (it != g_pendingHidIoctlByIosb.end()) {
+						rec = it->second;
+						g_pendingHidIoctlByIosb.erase(it);
+					}
 				}
+				SanitizePendingHidIoctlBuffered(rec, *lpNumberOfBytesTransferred);
 			}
 			return ok;
 		}
@@ -832,16 +871,19 @@ namespace RadarKeys {
 			BOOL ok = g_origReadFile(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
 			if (lpOverlapped && lpBuffer && nNumberOfBytesToRead > 0 && nNumberOfBytesToRead <= 4096 &&
 				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(hFile)) {
-				if (g_hidOverlappedReads.size() > 4096) {
-					g_hidOverlappedReads.clear();
-				}
-				HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
-				g_hidOverlappedReads[lpOverlapped] = record;
-				if (record.event) {
-					if (g_hidEventReads.size() > 4096) {
-						g_hidEventReads.clear();
+				{
+					std::lock_guard<std::mutex> lock(g_hidMapMutex);
+					if (g_hidOverlappedReads.size() > 4096) {
+						g_hidOverlappedReads.clear();
 					}
-					g_hidEventReads[record.event] = record;
+					HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
+					g_hidOverlappedReads[lpOverlapped] = record;
+					if (record.event) {
+						if (g_hidEventReads.size() > 4096) {
+							g_hidEventReads.clear();
+						}
+						g_hidEventReads[record.event] = record;
+					}
 				}
 			}
 			if (ok && !lpOverlapped && lpNumberOfBytesRead && *lpNumberOfBytesRead > 0 && lpBuffer &&
@@ -859,13 +901,18 @@ namespace RadarKeys {
 		}
 
 		static VOID NTAPI WrappedHidIocApc(void* apcContext, void* ioStatusBlock, ULONG reserved) {
-			auto it = g_pendingHidIoctlByIosb.find(ioStatusBlock);
-			if (it == g_pendingHidIoctlByIosb.end()) {
-				return;
+			PendingHidIoctl rec{};
+			void* origRoutine = nullptr;
+			{
+				std::lock_guard<std::mutex> lock(g_hidMapMutex);
+				auto it = g_pendingHidIoctlByIosb.find(ioStatusBlock);
+				if (it == g_pendingHidIoctlByIosb.end()) {
+					return;
+				}
+				rec = it->second;
+				origRoutine = it->second.origApcRoutine;
+				g_pendingHidIoctlByIosb.erase(it);
 			}
-			PendingHidIoctl rec = it->second;
-			void* origRoutine = it->second.origApcRoutine;
-			g_pendingHidIoctlByIosb.erase(it);
 			NtIoStatusBlock* iosb = static_cast<NtIoStatusBlock*>(ioStatusBlock);
 			if (iosb && iosb->status >= 0) {
 				SanitizePendingHidIoctlBuffered(rec, static_cast<DWORD>(iosb->information));
@@ -899,20 +946,23 @@ namespace RadarKeys {
 			}
 			constexpr LONG kStatusPendingIoc = 0x00000103;
 			if (status == kStatusPendingIoc) {
-				if (g_pendingHidIoctlByIosb.size() > 4096) {
-					g_pendingHidIoctlByIosb.clear();
-				}
-				PendingHidIoctl record{ fileHandle, outputBuffer, outputBufferLength, apcRoutine };
-				g_pendingHidIoctlByIosb[ioStatusBlock] = record;
-				HANDLE completionEvent = hEvent;
-				if (!completionEvent && !apcRoutine && apcContext) {
-					completionEvent = static_cast<HANDLE>(apcContext);
-				}
-				if (completionEvent) {
-					if (g_pendingHidIosbByEvent.size() > 4096) {
-						g_pendingHidIosbByEvent.clear();
+				{
+					std::lock_guard<std::mutex> lock(g_hidMapMutex);
+					if (g_pendingHidIoctlByIosb.size() > 4096) {
+						g_pendingHidIoctlByIosb.clear();
 					}
-					g_pendingHidIosbByEvent[completionEvent] = ioStatusBlock;
+					PendingHidIoctl record{ fileHandle, outputBuffer, outputBufferLength, apcRoutine };
+					g_pendingHidIoctlByIosb[ioStatusBlock] = record;
+					HANDLE completionEvent = hEvent;
+					if (!completionEvent && !apcRoutine && apcContext) {
+						completionEvent = static_cast<HANDLE>(apcContext);
+					}
+					if (completionEvent) {
+						if (g_pendingHidIosbByEvent.size() > 4096) {
+							g_pendingHidIosbByEvent.clear();
+						}
+						g_pendingHidIosbByEvent[completionEvent] = ioStatusBlock;
+					}
 				}
 			} else if (status >= 0) {
 				NtIoStatusBlock* iosb = static_cast<NtIoStatusBlock*>(ioStatusBlock);
@@ -987,15 +1037,21 @@ namespace RadarKeys {
 		static std::unordered_map<LPOVERLAPPED, HidExWrap> g_hidExRoutines;
 
 		static VOID CALLBACK WrappedExCompletion(DWORD dwErrorCode, DWORD dwNumberOfBytesTransfered, LPOVERLAPPED lpOverlapped) {
-			auto it = g_hidExRoutines.find(lpOverlapped);
-			if (it != g_hidExRoutines.end()) {
-				if (dwErrorCode == 0) {
-					SanitizeCompletedHidRead(it->second.rec, dwNumberOfBytesTransfered);
+			HidExWrap wrap{};
+			{
+				std::lock_guard<std::mutex> lock(g_hidMapMutex);
+				auto it = g_hidExRoutines.find(lpOverlapped);
+				if (it != g_hidExRoutines.end()) {
+					wrap = it->second;
+					g_hidExRoutines.erase(it);
 				}
-				LPOVERLAPPED_COMPLETION_ROUTINE routine = it->second.routine;
-				g_hidExRoutines.erase(it);
-				if (routine) {
-					routine(dwErrorCode, dwNumberOfBytesTransfered, lpOverlapped);
+			}
+			if (wrap.rec.buffer) {
+				if (dwErrorCode == 0) {
+					SanitizeCompletedHidRead(wrap.rec, dwNumberOfBytesTransfered);
+				}
+				if (wrap.routine) {
+					wrap.routine(dwErrorCode, dwNumberOfBytesTransfered, lpOverlapped);
 				}
 				return;
 			}
@@ -1008,12 +1064,15 @@ namespace RadarKeys {
 			if ((status >= 0 || status == kStatusPending) && buffer && length > 0 && length <= 4096 &&
 				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(fileHandle)) {
 				if (status == kStatusPending) {
-					if (hEvent) {
-						if (g_hidEventReads.size() > 4096) {
-							g_hidEventReads.clear();
+					{
+						std::lock_guard<std::mutex> lock(g_hidMapMutex);
+						if (hEvent) {
+							if (g_hidEventReads.size() > 4096) {
+								g_hidEventReads.clear();
+							}
+							HidOverlappedRead record{ fileHandle, buffer, length, hEvent, nullptr };
+							g_hidEventReads[hEvent] = record;
 						}
-						HidOverlappedRead record{ fileHandle, buffer, length, hEvent, nullptr };
-						g_hidEventReads[hEvent] = record;
 					}
 				} else if (ioStatusBlock) {
 					NtIoStatusBlock* iosb = static_cast<NtIoStatusBlock*>(ioStatusBlock);
@@ -1038,11 +1097,14 @@ namespace RadarKeys {
 			LPOVERLAPPED_COMPLETION_ROUTINE routine = lpCompletionRoutine;
 			if (lpOverlapped && lpBuffer && nNumberOfBytesToRead > 0 && nNumberOfBytesToRead <= 4096 &&
 				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(hFile)) {
-				if (g_hidExRoutines.size() > 4096) {
-					g_hidExRoutines.clear();
+				{
+					std::lock_guard<std::mutex> lock(g_hidMapMutex);
+					if (g_hidExRoutines.size() > 4096) {
+						g_hidExRoutines.clear();
+					}
+					HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
+					g_hidExRoutines[lpOverlapped] = { lpCompletionRoutine, record };
 				}
-				HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
-				g_hidExRoutines[lpOverlapped] = { lpCompletionRoutine, record };
 				routine = &WrappedExCompletion;
 			}
 			return g_origReadFileEx(hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped, routine);
@@ -1090,10 +1152,13 @@ namespace RadarKeys {
 					lower.push_back((*p >= L'A' && *p <= L'Z') ? static_cast<wchar_t>((*p + 32)) : *p);
 				}
 				if (lower.find(L"hid") != std::wstring::npos && LowerContainsGamepadHidNeedle(lower)) {
-					if (g_hidHandleTags.size() > 65536) {
-						g_hidHandleTags.clear();
+					{
+						std::lock_guard<std::mutex> lock(g_hidMapMutex);
+						if (g_hidHandleTags.size() > 65536) {
+							g_hidHandleTags.clear();
+						}
+						g_hidHandleTags[handle] = 1;
 					}
-					g_hidHandleTags[handle] = 1;
 					spdlog::info("RawInput: game opened a gamepad HID device ({})", std::filesystem::path(lpFileName).string());
 					spdlog::default_logger()->flush();
 				}
@@ -1114,10 +1179,13 @@ namespace RadarKeys {
 					(lower.find("vid_054c") != std::string::npos || lower.find("pid_05c4") != std::string::npos ||
 						lower.find("00001124") != std::string::npos || lower.find("vid_1234") != std::string::npos ||
 						lower.find("vigem") != std::string::npos)) {
-					if (g_hidHandleTags.size() > 65536) {
-						g_hidHandleTags.clear();
+					{
+						std::lock_guard<std::mutex> lock(g_hidMapMutex);
+						if (g_hidHandleTags.size() > 65536) {
+							g_hidHandleTags.clear();
+						}
+						g_hidHandleTags[handle] = 1;
 					}
-					g_hidHandleTags[handle] = 1;
 					spdlog::info("RawInput: game opened a gamepad HID device ({})", lower);
 					spdlog::default_logger()->flush();
 				}
