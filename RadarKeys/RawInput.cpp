@@ -9,6 +9,9 @@
 #include <tlhelp32.h>
 #include <cstdlib>
 #include <cstring>
+#include <cstdint>
+#include <new>
+#include <cstdint>
 #include <mmsystem.h>
 #include <algorithm>
 #include <utility>
@@ -25,8 +28,8 @@
 namespace RadarKeys {
 	namespace RawInput {
 		const USHORT vKeyMax = kMaxVKey;
-		USHORT currFlags[vKeyMax]; // indexed by Virtual Keycode
-		namespace { struct CurrFlagsFiller { CurrFlagsFiller() { std::fill_n(currFlags, vKeyMax, static_cast<USHORT>(RI_KEY_BREAK)); } }; }
+		std::atomic<USHORT> currFlags[vKeyMax];
+		namespace { struct CurrFlagsFiller { CurrFlagsFiller() { for (int i = 0; i < vKeyMax; ++i) { currFlags[i].store(static_cast<USHORT>(RI_KEY_BREAK), std::memory_order_relaxed); } } }; }
 		static CurrFlagsFiller g_currFlagsFiller;
 		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys (written once, before input starts)
 		std::atomic<unsigned char> blockGameKeys[vKeyMax]{}; // block game from recieving message
@@ -109,7 +112,7 @@ namespace RadarKeys {
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
 
 		typedef DWORD(WINAPI* XInputGetStateFunc)(DWORD, XINPUT_STATE*);
-		static constexpr int kMaxXInputModules = 5;
+		static constexpr int kMaxXInputModules = 6;
 		static XInputGetStateFunc g_origXInputGetState[kMaxXInputModules] = {};
 		static XInputGetStateFunc g_origXInputGetStateEx[kMaxXInputModules] = {};
 		static int g_xinputModuleCount = 0;
@@ -178,7 +181,10 @@ namespace RadarKeys {
 			IMAGE_IMPORT_DESCRIPTOR* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + importDir.VirtualAddress);
 			for (; desc->Name != 0; ++desc) {
 				const char* dllName = reinterpret_cast<const char*>(base + desc->Name);
-				if (!EqualsIgnoreCaseAscii(dllName, "xinput1_3.dll")) {
+				bool isXinputImport = EqualsIgnoreCaseAscii(dllName, "xinput1_3.dll") ||
+					EqualsIgnoreCaseAscii(dllName, "xinput1_4.dll") ||
+					EqualsIgnoreCaseAscii(dllName, "xinput9_1_0.dll");
+				if (!isXinputImport) {
 					continue;
 				}
 				IMAGE_THUNK_DATA* nameThunks = desc->OriginalFirstThunk != 0
@@ -228,6 +234,12 @@ namespace RadarKeys {
 
 		static void EnsureXInput13IatFallback() {
 			HMODULE x13 = GetModuleHandleW(L"xinput1_3.dll");
+			if (!x13) {
+				x13 = GetModuleHandleW(L"xinput1_4.dll");
+			}
+			if (!x13) {
+				x13 = GetModuleHandleW(L"xinput9_1_0.dll");
+			}
 			if (!x13) {
 				return;
 			}
@@ -324,52 +336,62 @@ namespace RadarKeys {
 		static XInputGetStateFunc g_xinputDetours[kMaxXInputModules] = {
 			&HookedXInputGetState<0>, &HookedXInputGetState<1>,
 			&HookedXInputGetState<2>, &HookedXInputGetState<3>,
-			&HookedXInputGetState<4>,
+			&HookedXInputGetState<4>, &HookedXInputGetState<5>,
 		};
 
 		static XInputGetStateFunc g_xinputExDetours[kMaxXInputModules] = {
 			&HookedXInputGetStateEx<0>, &HookedXInputGetStateEx<1>,
 			&HookedXInputGetStateEx<2>, &HookedXInputGetStateEx<3>,
-			&HookedXInputGetStateEx<4>,
+			&HookedXInputGetStateEx<4>, &HookedXInputGetStateEx<5>,
 		};
 
 		struct WGIGamepadReading {
-			ULONGLONG timestamp;
-			ULONGLONG buttons;
-			double leftTrigger;
-			double rightTrigger;
-			double leftThumbstickX;
-			double leftThumbstickY;
-			double rightThumbstickX;
-			double rightThumbstickY;
+		ULONGLONG timestamp;
+		uint32_t buttons;
+		uint32_t buttonsPadding;
+		double leftTrigger;
+		double rightTrigger;
+		double leftThumbstickX;
+		double leftThumbstickY;
+		double rightThumbstickX;
+		double rightThumbstickY;
 		};
+		static_assert(sizeof(WGIGamepadReading) == 64, "GamepadReading ABI size mismatch");
 		typedef HRESULT(__stdcall* WIGetCurrentReading_t)(void*, WGIGamepadReading*);
-		static WIGetCurrentReading_t g_origWIGetCurrentReading = nullptr;
+		static constexpr int kMaxWgiTargets = 4;
+		static WIGetCurrentReading_t g_origWIGetCurrentReading[kMaxWgiTargets] = {};
+		static void* g_wgiSlotTargets[kMaxWgiTargets] = {};
 		static std::atomic<bool> g_wiGetCurrentReadingHooked{ false };
+		static std::atomic<bool> g_wgiWorkerShutdown{ false };
 		static std::atomic<ULONGLONG> g_lastWGISuppressLog{ 0 };
 
-		static HRESULT __stdcall HookedWIGetCurrentReading(void* self, WGIGamepadReading* reading) {
-			HRESULT hr = g_origWIGetCurrentReading ? g_origWIGetCurrentReading(self, reading) : E_POINTER;
-			if (SUCCEEDED(hr) && reading && g_gamepadBlockedToGame.load() != false) {
-				if (reading->buttons != 0 || reading->leftThumbstickX != 0 || reading->leftThumbstickY != 0 ||
-					reading->rightThumbstickX != 0 || reading->rightThumbstickY != 0 ||
-					reading->leftTrigger != 0 || reading->rightTrigger != 0) {
-					const ULONGLONG now = GetTickCount64();
-					ULONGLONG last = g_lastWGISuppressLog.load(std::memory_order_relaxed);
-					if (now - last >= 1000 && g_lastWGISuppressLog.compare_exchange_strong(last, now)) {
-						spdlog::info("RawInput: WGI gamepad reading intercepted (buttons {:016X}, lx {:.2f} ly {:.2f} rx {:.2f} ry {:.2f}) - suppressed",
-							reading->buttons, reading->leftThumbstickX, reading->leftThumbstickY,
-							reading->rightThumbstickX, reading->rightThumbstickY);
-						spdlog::default_logger()->flush();
-					}
+		static void SuppressWgiReading(WGIGamepadReading* reading) {
+			if (reading->buttons != 0 || reading->leftThumbstickX != 0 || reading->leftThumbstickY != 0 ||
+				reading->rightThumbstickX != 0 || reading->rightThumbstickY != 0 ||
+				reading->leftTrigger != 0 || reading->rightTrigger != 0) {
+				const ULONGLONG now = GetTickCount64();
+				ULONGLONG last = g_lastWGISuppressLog.load(std::memory_order_relaxed);
+				if (now - last >= 1000 && g_lastWGISuppressLog.compare_exchange_strong(last, now)) {
+					spdlog::info("RawInput: WGI gamepad reading intercepted (buttons {:08X}, lx {:.2f} ly {:.2f} rx {:.2f} ry {:.2f}) - suppressed",
+						reading->buttons, reading->leftThumbstickX, reading->leftThumbstickY,
+						reading->rightThumbstickX, reading->rightThumbstickY);
+					spdlog::default_logger()->flush();
 				}
-				reading->buttons = 0;
-				reading->leftThumbstickX = 0;
-				reading->leftThumbstickY = 0;
-				reading->rightThumbstickX = 0;
-				reading->rightThumbstickY = 0;
-				reading->leftTrigger = 0;
-				reading->rightTrigger = 0;
+			}
+			reading->buttons = 0;
+			reading->leftThumbstickX = 0;
+			reading->leftThumbstickY = 0;
+			reading->rightThumbstickX = 0;
+			reading->rightThumbstickY = 0;
+			reading->leftTrigger = 0;
+			reading->rightTrigger = 0;
+		}
+		
+		template <int N>
+		static HRESULT __stdcall HookedWIGetCurrentReading(void* self, WGIGamepadReading* reading) {
+			HRESULT hr = g_origWIGetCurrentReading[N] ? g_origWIGetCurrentReading[N](self, reading) : E_POINTER;
+			if (SUCCEEDED(hr) && reading && g_gamepadBlockedToGame.load() != false) {
+				SuppressWgiReading(reading);
 			}
 			return hr;
 		}
@@ -385,13 +407,13 @@ namespace RadarKeys {
 		typedef ULONG(__stdcall* WIRelease_t)(void*);
 
 		struct WGIWalkResult {
-			HRESULT factoryHr;
-			HRESULT gamepadsHr;
-			HRESULT getAtHr;
-			void* factory;
-			void* vectorView;
-			void* gamepad;
-			void* getCurrentReadingTarget;
+		HRESULT factoryHr;
+		HRESULT gamepadsHr;
+		HRESULT getAtHr;
+		void* factory;
+		void* vectorView;
+		void* targets[kMaxWgiTargets];
+		int targetCount;
 		};
 
 		static WGIWalkResult WGIClassWalk(RoGetActivationFactory_t roGetActivationFactory,
@@ -425,10 +447,25 @@ namespace RadarKeys {
 					result.getAtHr = E_POINTER;
 					return result;
 				}
-				result.getAtHr = getAt(result.vectorView, 0, &result.gamepad);
-				if (SUCCEEDED(result.getAtHr) && result.gamepad) {
-					void** padVtbl = *reinterpret_cast<void***>(result.gamepad);
-					result.getCurrentReadingTarget = padVtbl[6];
+				for (UINT32 idx = 0; idx < 16 && result.targetCount < kMaxWgiTargets; ++idx) {
+					void* gamepad = nullptr;
+					result.getAtHr = getAt(result.vectorView, idx, &gamepad);
+					if (FAILED(result.getAtHr) || !gamepad) {
+						break;
+					}
+					void** padVtbl = *reinterpret_cast<void***>(gamepad);
+					void* target = padVtbl[6];
+					reinterpret_cast<WIRelease_t>(padVtbl[2])(gamepad);
+					bool known = false;
+					for (int t = 0; t < result.targetCount; ++t) {
+						if (result.targets[t] == target) {
+							known = true;
+							break;
+						}
+					}
+					if (!known) {
+						result.targets[result.targetCount++] = target;
+					}
 				}
 			}
 			__except (EXCEPTION_EXECUTE_HANDLER) {
@@ -437,9 +474,23 @@ namespace RadarKeys {
 			return result;
 		}
 
+		template <int N>
+		static bool InstallWgiHookAt(void* target) {
+			void* trampoline = nullptr;
+			if (MH_CreateHook(target, reinterpret_cast<LPVOID>(&HookedWIGetCurrentReading<N>),
+				reinterpret_cast<LPVOID*>(&g_origWIGetCurrentReading[N])) == MH_OK &&
+				MH_EnableHook(target) == MH_OK) {
+				g_wgiSlotTargets[N] = target;
+				return true;
+			}
+			MH_RemoveHook(target);
+			return false;
+		}
+		
 		static void WGIClassHookWorker() {
 			EnsureWinmmHook();
 			EnsureHidReadHook();
+			bool roInitialized = false;
 			{
 				HMODULE combase = GetModuleHandleW(L"combase.dll");
 				if (!combase) {
@@ -448,21 +499,20 @@ namespace RadarKeys {
 				if (combase) {
 					typedef HRESULT(__stdcall* RoInitialize_t)(UINT);
 					auto roInitialize = reinterpret_cast<RoInitialize_t>(GetProcAddress(combase, "RoInitialize"));
-					if (roInitialize) {
-						roInitialize(1);
+					if (roInitialize && SUCCEEDED(roInitialize(1))) {
+						roInitialized = true;
 					}
 				}
 			}
-			for (int attempt = 1; attempt <= 150; ++attempt) {
-				if (g_wiGetCurrentReadingHooked.load(std::memory_order_acquire)) {
-					return;
-				}
+			bool loggedProbe = false;
+			while (!g_wgiWorkerShutdown.load(std::memory_order_relaxed)) {
 				HMODULE combase = GetModuleHandleW(L"combase.dll");
 				if (!combase) {
 					combase = LoadLibraryW(L"combase.dll");
 				}
 				if (!combase) {
-					return;
+					Sleep(2000);
+					continue;
 				}
 				RoGetActivationFactory_t roGetActivationFactory =
 					reinterpret_cast<RoGetActivationFactory_t>(GetProcAddress(combase, "RoGetActivationFactory"));
@@ -471,23 +521,44 @@ namespace RadarKeys {
 				WindowsDeleteString_t windowsDeleteString =
 					reinterpret_cast<WindowsDeleteString_t>(GetProcAddress(combase, "WindowsDeleteString"));
 				if (!roGetActivationFactory || !windowsCreateString || !windowsDeleteString) {
-					return;
+					Sleep(2000);
+					continue;
 				}
 				WGIWalkResult walk = WGIClassWalk(roGetActivationFactory, windowsCreateString, windowsDeleteString);
-				if (SUCCEEDED(walk.factoryHr) && walk.factory && walk.getCurrentReadingTarget) {
-					void* trampoline = nullptr;
-					if (MH_CreateHook(walk.getCurrentReadingTarget,
-						reinterpret_cast<LPVOID>(&HookedWIGetCurrentReading),
-						reinterpret_cast<LPVOID*>(&g_origWIGetCurrentReading)) == MH_OK &&
-						MH_EnableHook(walk.getCurrentReadingTarget) == MH_OK) {
-						g_wiGetCurrentReadingHooked.store(true, std::memory_order_release);
-						spdlog::info("RawInput: WGI GetCurrentReading class hook active at {:p} (covers every Windows.Gaming.Input gamepad in the process)",
-							walk.getCurrentReadingTarget);
-					} else {
-						MH_RemoveHook(walk.getCurrentReadingTarget);
-						spdlog::warn("RawInput: WGI GetCurrentReading hook failed - will retry");
+				bool anyTarget = false;
+				if (SUCCEEDED(walk.factoryHr) && walk.factory && walk.targetCount > 0) {
+					anyTarget = true;
+					for (int t = 0; t < walk.targetCount; ++t) {
+						void* target = walk.targets[t];
+						int freeSlot = -1;
+						bool known = false;
+						for (int s = 0; s < kMaxWgiTargets; ++s) {
+							if (g_wgiSlotTargets[s] == target) {
+								known = true;
+								break;
+							}
+							if (g_wgiSlotTargets[s] == nullptr && freeSlot < 0) {
+								freeSlot = s;
+							}
+						}
+						if (known || freeSlot < 0) {
+							continue;
+						}
+						bool installed = false;
+						switch (freeSlot) {
+						case 0: installed = InstallWgiHookAt<0>(target); break;
+						case 1: installed = InstallWgiHookAt<1>(target); break;
+						case 2: installed = InstallWgiHookAt<2>(target); break;
+						case 3: installed = InstallWgiHookAt<3>(target); break;
+						}
+						if (installed) {
+							g_wiGetCurrentReadingHooked.store(true, std::memory_order_release);
+							spdlog::info("RawInput: WGI GetCurrentReading hook active at {:p}", target);
+							spdlog::default_logger()->flush();
+						}
 					}
-				} else if (attempt == 1) {
+				} else if (!loggedProbe) {
+					loggedProbe = true;
 					spdlog::info("RawInput: WGI gamepad factory probe (factoryHr={:08X}, gamepadsHr={:08X}, getAtHr={:08X})",
 						static_cast<unsigned>(walk.factoryHr), static_cast<unsigned>(walk.gamepadsHr),
 						static_cast<unsigned>(walk.getAtHr));
@@ -500,14 +571,17 @@ namespace RadarKeys {
 					void** viewVtbl = *reinterpret_cast<void***>(walk.vectorView);
 					reinterpret_cast<WIRelease_t>(viewVtbl[2])(walk.vectorView);
 				}
-				if (walk.gamepad) {
-					void** padVtbl = *reinterpret_cast<void***>(walk.gamepad);
-					reinterpret_cast<WIRelease_t>(padVtbl[2])(walk.gamepad);
+				Sleep(anyTarget ? 10000 : 2000);
+			}
+			if (roInitialized) {
+				HMODULE combase = GetModuleHandleW(L"combase.dll");
+				if (combase) {
+					typedef void(__stdcall* RoUninitialize_t)();
+					auto roUninitialize = reinterpret_cast<RoUninitialize_t>(GetProcAddress(combase, "RoUninitialize"));
+					if (roUninitialize) {
+						roUninitialize();
+					}
 				}
-				if (g_wiGetCurrentReadingHooked.load(std::memory_order_acquire)) {
-					return;
-				}
-				Sleep(2000);
 			}
 		}
 
@@ -611,7 +685,6 @@ namespace RadarKeys {
 		static NtWaitForMultipleObjects_t g_origNtWaitForMultipleObjects = nullptr;
 		typedef BOOLEAN(__stdcall* HidDGetReport_t)(HANDLE, void*, ULONG);
 		static HidDGetReport_t g_origHidDGetInputReport = nullptr;
-		static HidDGetReport_t g_origHidDGetFeature = nullptr;
 		struct PendingHidIoctl {
 			HANDLE handle;
 			void* output;
@@ -642,6 +715,14 @@ namespace RadarKeys {
 				lowerPath.find(L"vigem") != std::wstring::npos;
 		}
 
+		typedef BOOLEAN(__stdcall* HidDGetPreparsedData_t)(HANDLE, void**);
+		typedef BOOLEAN(__stdcall* HidDFreePreparsedData_t)(void*);
+		typedef LONG(__stdcall* HidPGetCaps_t)(void*, void*);
+		static HidDGetPreparsedData_t g_hidDGetPreparsedData = nullptr;
+		static HidDFreePreparsedData_t g_hidDFreePreparsedData = nullptr;
+		static HidPGetCaps_t g_hidPGetCaps = nullptr;
+		static thread_local bool classifyingHidHandle = false;
+		
 		static bool HandleIsGamepadHid(HANDLE handle) {
 			{
 				std::lock_guard<std::mutex> lock(g_hidMapMutex);
@@ -667,7 +748,23 @@ namespace RadarKeys {
 					lower.push_back((*p >= L'A' && *p <= L'Z') ? static_cast<wchar_t>((*p + 32)) : *p);
 				}
 				gamepad = lower.find(L"hid") != std::wstring::npos && LowerContainsGamepadHidNeedle(lower);
-			}
+				}
+				if (!classifyingHidHandle && g_hidDGetPreparsedData && g_hidDFreePreparsedData && g_hidPGetCaps) {
+					classifyingHidHandle = true;
+					void* preparsed = nullptr;
+					if (g_hidDGetPreparsedData(handle, &preparsed) && preparsed) {
+						unsigned char capsBuf[128] = {};
+						if (g_hidPGetCaps(preparsed, capsBuf) >= 0) {
+							USHORT usagePage = *reinterpret_cast<USHORT*>(capsBuf);
+							USHORT usage = *reinterpret_cast<USHORT*>(capsBuf + 2);
+							if (usagePage == 0x01) {
+								gamepad = (usage == 0x04 || usage == 0x05);
+							}
+						}
+						g_hidDFreePreparsedData(preparsed);
+					}
+					classifyingHidHandle = false;
+				}
 			{
 				std::lock_guard<std::mutex> lock(g_hidMapMutex);
 				if (g_hidHandleTags.size() > 65536) {
@@ -685,17 +782,19 @@ namespace RadarKeys {
 
 		static void SanitizeGamepadHidBuffer(LPVOID buf, DWORD bytesRead) {
 			unsigned char* bytes = static_cast<unsigned char*>(buf);
-			const bool btLayout = bytesRead > 0 && bytes[0] == 0x11;
+			const bool usbReport = bytesRead == 64 && bytes[0] == 0x01;
+			const bool btReport = bytesRead == 78 && bytes[0] == 0x11;
+			if (!usbReport && !btReport) {
+			return;
+			}
 			std::memset(buf, 0, bytesRead);
-			if (btLayout) {
-			if (bytesRead > 7) {
+			if (btReport) {
 			bytes[3] = 0x80;
 			bytes[4] = 0x80;
 			bytes[5] = 0x80;
 			bytes[6] = 0x80;
 			bytes[7] = 0x08;
-			}
-			} else if (bytesRead > 5) {
+			} else {
 			bytes[1] = 0x80;
 			bytes[2] = 0x80;
 			bytes[3] = 0x80;
@@ -871,19 +970,25 @@ namespace RadarKeys {
 			BOOL ok = g_origReadFile(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
 			if (lpOverlapped && lpBuffer && nNumberOfBytesToRead > 0 && nNumberOfBytesToRead <= 4096 &&
 				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(hFile)) {
+				HidOverlappedRead displacedRead{};
+				bool hadDisplaced = false;
 				{
-					std::lock_guard<std::mutex> lock(g_hidMapMutex);
-					if (g_hidOverlappedReads.size() > 4096) {
-						g_hidOverlappedReads.clear();
-					}
-					HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
-					g_hidOverlappedReads[lpOverlapped] = record;
-					if (record.event) {
-						if (g_hidEventReads.size() > 4096) {
-							g_hidEventReads.clear();
-						}
-						g_hidEventReads[record.event] = record;
-					}
+				std::lock_guard<std::mutex> lock(g_hidMapMutex);
+				HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
+				if (g_hidOverlappedReads.size() <= 4096) {
+				auto displacedIt = g_hidOverlappedReads.find(lpOverlapped);
+				if (displacedIt != g_hidOverlappedReads.end()) {
+				displacedRead = displacedIt->second;
+				hadDisplaced = true;
+				}
+				g_hidOverlappedReads[lpOverlapped] = record;
+				if (record.event && g_hidEventReads.size() <= 4096) {
+				g_hidEventReads[record.event] = record;
+				}
+				}
+				}
+				if (hadDisplaced) {
+				SanitizeCompletedHidRead(displacedRead, displacedRead.size);
 				}
 			}
 			if (ok && !lpOverlapped && lpNumberOfBytesRead && *lpNumberOfBytesRead > 0 && lpBuffer &&
@@ -900,32 +1005,43 @@ namespace RadarKeys {
 			return ok;
 		}
 
+		struct HidIocApcContext {
+		void* origRoutine;
+		void* origContext;
+		PendingHidIoctl rec;
+		};
+		
 		static VOID NTAPI WrappedHidIocApc(void* apcContext, void* ioStatusBlock, ULONG reserved) {
-			PendingHidIoctl rec{};
-			void* origRoutine = nullptr;
-			{
-				std::lock_guard<std::mutex> lock(g_hidMapMutex);
-				auto it = g_pendingHidIoctlByIosb.find(ioStatusBlock);
-				if (it == g_pendingHidIoctlByIosb.end()) {
-					return;
-				}
-				rec = it->second;
-				origRoutine = it->second.origApcRoutine;
-				g_pendingHidIoctlByIosb.erase(it);
+			HidIocApcContext* ctx = static_cast<HidIocApcContext*>(apcContext);
+			if (!ctx) {
+			return;
 			}
 			NtIoStatusBlock* iosb = static_cast<NtIoStatusBlock*>(ioStatusBlock);
 			if (iosb && iosb->status >= 0) {
-				SanitizePendingHidIoctlBuffered(rec, static_cast<DWORD>(iosb->information));
+			SanitizePendingHidIoctlBuffered(ctx->rec, static_cast<DWORD>(iosb->information));
 			}
-			if (origRoutine) {
-				reinterpret_cast<HidApcRoutine_t>(origRoutine)(apcContext, ioStatusBlock, reserved);
+			if (ctx->origRoutine) {
+			reinterpret_cast<HidApcRoutine_t>(ctx->origRoutine)(ctx->origContext, ioStatusBlock, reserved);
 			}
+			delete ctx;
 		}
 
 		static LONG NTAPI HookedNtDeviceIoControlFileGamepad(HANDLE fileHandle, HANDLE hEvent, void* apcRoutine, void* apcContext,
 			void* ioStatusBlock, ULONG ioControlCode, void* inputBuffer, ULONG inputBufferLength, void* outputBuffer, ULONG outputBufferLength) {
-			LONG status = g_origNtDeviceIoControlFile(fileHandle, hEvent, apcRoutine, apcContext, ioStatusBlock,
+			HidIocApcContext* apcCtx = nullptr;
+			if (apcRoutine && ioStatusBlock && outputBuffer && outputBufferLength > 0 && outputBufferLength <= 4096 &&
+				g_gamepadBlockedToGame.load() != false && (ioControlCode & 0xFFFF0000) == 0x000B0000 &&
+				(((ioControlCode >> 2) & 0xFF) == 0x64 || ((ioControlCode >> 2) & 0xFF) == 0x6A)) {
+				apcCtx = new (std::nothrow) HidIocApcContext{ apcRoutine, apcContext,
+					PendingHidIoctl{ fileHandle, outputBuffer, outputBufferLength, apcRoutine } };
+			}
+			LONG status = g_origNtDeviceIoControlFile(fileHandle, hEvent,
+				apcCtx ? reinterpret_cast<void*>(&WrappedHidIocApc) : apcRoutine,
+				apcCtx ? static_cast<void*>(apcCtx) : apcContext, ioStatusBlock,
 				ioControlCode, inputBuffer, inputBufferLength, outputBuffer, outputBufferLength);
+			if (apcCtx && status != 0x00000103) {
+				delete apcCtx;
+			}
 			if (!ioStatusBlock || !outputBuffer || outputBufferLength == 0) {
 				return status;
 			}
@@ -944,26 +1060,26 @@ namespace RadarKeys {
 			if ((ioControlCode & 0xFFFF0000) != 0x000B0000) {
 				return status;
 			}
+			unsigned ioctlFunction = (ioControlCode >> 2) & 0xFF;
+			if (ioctlFunction != 0x64 && ioctlFunction != 0x6A) {
+			return status;
+			}
 			constexpr LONG kStatusPendingIoc = 0x00000103;
 			if (status == kStatusPendingIoc) {
 				{
 					std::lock_guard<std::mutex> lock(g_hidMapMutex);
-					if (g_pendingHidIoctlByIosb.size() > 4096) {
-						g_pendingHidIoctlByIosb.clear();
-					}
 					PendingHidIoctl record{ fileHandle, outputBuffer, outputBufferLength, apcRoutine };
+					if (g_pendingHidIoctlByIosb.size() <= 4096) {
 					g_pendingHidIoctlByIosb[ioStatusBlock] = record;
+					}
 					HANDLE completionEvent = hEvent;
 					if (!completionEvent && !apcRoutine && apcContext) {
-						completionEvent = static_cast<HANDLE>(apcContext);
+					completionEvent = static_cast<HANDLE>(apcContext);
 					}
-					if (completionEvent) {
-						if (g_pendingHidIosbByEvent.size() > 4096) {
-							g_pendingHidIosbByEvent.clear();
-						}
-						g_pendingHidIosbByEvent[completionEvent] = ioStatusBlock;
+					if (completionEvent && g_pendingHidIosbByEvent.size() <= 4096) {
+					g_pendingHidIosbByEvent[completionEvent] = ioStatusBlock;
 					}
-				}
+					}
 			} else if (status >= 0) {
 				NtIoStatusBlock* iosb = static_cast<NtIoStatusBlock*>(ioStatusBlock);
 				if (iosb && iosb->information > 0 && g_gamepadBlockedToGame.load() != false) {
@@ -984,6 +1100,80 @@ namespace RadarKeys {
 			return status;
 		}
 
+		typedef LONG(NTAPI* NtClose_t)(HANDLE);
+		static NtClose_t g_origNtClose = nullptr;
+		typedef BOOL(WINAPI* CancelIoEx_t)(HANDLE, LPOVERLAPPED);
+		static CancelIoEx_t g_origCancelIoEx = nullptr;
+		static void RetireHidRecordsForHandle(HANDLE handle, bool clearTag) {
+			std::lock_guard<std::mutex> lock(g_hidMapMutex);
+			if (clearTag) {
+				g_hidHandleTags.erase(handle);
+			}
+			for (auto it = g_hidOverlappedReads.begin(); it != g_hidOverlappedReads.end();) {
+				if (it->second.handle == handle) {
+					it = g_hidOverlappedReads.erase(it);
+				} else {
+					++it;
+				}
+			}
+			for (auto it = g_hidEventReads.begin(); it != g_hidEventReads.end();) {
+				if (it->first == handle || it->second.handle == handle) {
+					it = g_hidEventReads.erase(it);
+				} else {
+					++it;
+				}
+			}
+			for (auto it = g_hidExRoutines.begin(); it != g_hidExRoutines.end();) {
+				if (it->second.rec.handle == handle) {
+					it = g_hidExRoutines.erase(it);
+				} else {
+					++it;
+				}
+			}
+			for (auto it = g_pendingHidIoctlByIosb.begin(); it != g_pendingHidIoctlByIosb.end();) {
+				if (it->second.handle == handle) {
+					for (auto e = g_pendingHidIosbByEvent.begin(); e != g_pendingHidIosbByEvent.end();) {
+						if (e->second == it->first) {
+							e = g_pendingHidIosbByEvent.erase(e);
+						} else {
+							++e;
+						}
+					}
+					it = g_pendingHidIoctlByIosb.erase(it);
+				} else {
+					++it;
+				}
+			}
+			for (auto it = g_pendingHidIosbByEvent.begin(); it != g_pendingHidIosbByEvent.end();) {
+				if (it->first == handle) {
+					it = g_pendingHidIosbByEvent.erase(it);
+				} else {
+					++it;
+				}
+			}
+		}
+		static LONG NTAPI HookedNtCloseGamepad(HANDLE handle) {
+			LONG status = g_origNtClose(handle);
+			if (status >= 0 && handle != nullptr) {
+				RetireHidRecordsForHandle(handle, true);
+			}
+			return status;
+		}
+		static BOOL WINAPI HookedCancelIoExGamepad(HANDLE hFile, LPOVERLAPPED lpOverlapped) {
+			BOOL ok = g_origCancelIoEx(hFile, lpOverlapped);
+			if (ok && hFile) {
+				if (lpOverlapped) {
+					std::lock_guard<std::mutex> lock(g_hidMapMutex);
+					g_hidOverlappedReads.erase(lpOverlapped);
+					g_hidExRoutines.erase(lpOverlapped);
+					g_pendingHidIoctlByIosb.erase(lpOverlapped);
+				} else {
+					RetireHidRecordsForHandle(hFile, false);
+				}
+			}
+			return ok;
+		}
+		
 		static LONG NTAPI HookedNtWaitForSingleObjectGamepad(HANDLE hHandle, BOOLEAN bAlertable, void* timeout) {
 			LONG status = g_origNtWaitForSingleObject(hHandle, bAlertable, timeout);
 			if (status == 0) {
@@ -1017,14 +1207,6 @@ namespace RadarKeys {
 						static_cast<void*>(hFile));
 					spdlog::default_logger()->flush();
 				}
-			}
-			return ok;
-		}
-
-		static BOOLEAN __stdcall HookedHidDGetFeatureGamepad(HANDLE hFile, void* reportBuffer, ULONG bufferSize) {
-			BOOLEAN ok = g_origHidDGetFeature(hFile, reportBuffer, bufferSize);
-			if (ok && reportBuffer && bufferSize > 0 && g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(hFile)) {
-				SanitizeGamepadHidBuffer(reportBuffer, bufferSize);
 			}
 			return ok;
 		}
@@ -1066,14 +1248,21 @@ namespace RadarKeys {
 				if (status == kStatusPending) {
 					{
 						std::lock_guard<std::mutex> lock(g_hidMapMutex);
-						if (hEvent) {
-							if (g_hidEventReads.size() > 4096) {
-								g_hidEventReads.clear();
-							}
-							HidOverlappedRead record{ fileHandle, buffer, length, hEvent, nullptr };
-							g_hidEventReads[hEvent] = record;
+						HidOverlappedRead displacedRead{};
+						bool hadDisplaced = false;
+						if (hEvent && g_hidEventReads.size() <= 4096) {
+						auto displacedIt = g_hidEventReads.find(hEvent);
+						if (displacedIt != g_hidEventReads.end()) {
+						displacedRead = displacedIt->second;
+						hadDisplaced = true;
 						}
-					}
+						HidOverlappedRead record{ fileHandle, buffer, length, hEvent, nullptr };
+						g_hidEventReads[hEvent] = record;
+						}
+						}
+						if (hadDisplaced) {
+						SanitizeCompletedHidRead(displacedRead, displacedRead.size);
+						}
 				} else if (ioStatusBlock) {
 					NtIoStatusBlock* iosb = static_cast<NtIoStatusBlock*>(ioStatusBlock);
 					DWORD transferred = static_cast<DWORD>(iosb->information);
@@ -1099,12 +1288,12 @@ namespace RadarKeys {
 				g_gamepadBlockedToGame.load() != false && HandleIsGamepadHid(hFile)) {
 				{
 					std::lock_guard<std::mutex> lock(g_hidMapMutex);
-					if (g_hidExRoutines.size() > 4096) {
-						g_hidExRoutines.clear();
-					}
+					if (g_hidExRoutines.size() <= 4096) {
 					HidOverlappedRead record{ hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped->hEvent, nullptr };
 					g_hidExRoutines[lpOverlapped] = { lpCompletionRoutine, record };
-				}
+					routine = &WrappedExCompletion;
+					}
+					}
 				routine = &WrappedExCompletion;
 			}
 			return g_origReadFileEx(hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped, routine);
@@ -1124,20 +1313,36 @@ namespace RadarKeys {
 
 		static DWORD WINAPI HookedWaitForMultipleObjectsGamepad(DWORD nCount, const HANDLE* lpHandles, BOOL bWaitAll, DWORD dwMilliseconds) {
 			DWORD result = g_origWaitForMultipleObjects(nCount, lpHandles, bWaitAll, dwMilliseconds);
-			if (nCount > 0 && nCount <= MAXIMUM_WAIT_OBJECTS && result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + nCount) {
-				for (DWORD i = 0; i < nCount; ++i) {
-					SanitizeHidEventReadsForHandle(lpHandles[i], WAIT_OBJECT_0);
-				}
+			if (nCount > 0 && nCount <= MAXIMUM_WAIT_OBJECTS) {
+			if (bWaitAll) {
+			if (result == WAIT_OBJECT_0) {
+			for (DWORD i = 0; i < nCount; ++i) {
+			SanitizeHidEventReadsForHandle(lpHandles[i], WAIT_OBJECT_0);
+			}
+			}
+			} else if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + nCount) {
+			SanitizeHidEventReadsForHandle(lpHandles[result - WAIT_OBJECT_0], WAIT_OBJECT_0);
+			} else if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + nCount) {
+			SanitizeHidEventReadsForHandle(lpHandles[result - WAIT_ABANDONED_0], WAIT_ABANDONED);
+			}
 			}
 			return result;
 		}
 
 		static DWORD WINAPI HookedWaitForMultipleObjectsExGamepad(DWORD nCount, const HANDLE* lpHandles, BOOL bWaitAll, DWORD dwMilliseconds, BOOL bAlertable) {
 			DWORD result = g_origWaitForMultipleObjectsEx(nCount, lpHandles, bWaitAll, dwMilliseconds, bAlertable);
-			if (nCount > 0 && nCount <= MAXIMUM_WAIT_OBJECTS && result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + nCount) {
-				for (DWORD i = 0; i < nCount; ++i) {
-					SanitizeHidEventReadsForHandle(lpHandles[i], WAIT_OBJECT_0);
-				}
+			if (nCount > 0 && nCount <= MAXIMUM_WAIT_OBJECTS) {
+			if (bWaitAll) {
+			if (result == WAIT_OBJECT_0) {
+			for (DWORD i = 0; i < nCount; ++i) {
+			SanitizeHidEventReadsForHandle(lpHandles[i], WAIT_OBJECT_0);
+			}
+			}
+			} else if (result >= WAIT_OBJECT_0 && result < WAIT_OBJECT_0 + nCount) {
+			SanitizeHidEventReadsForHandle(lpHandles[result - WAIT_OBJECT_0], WAIT_OBJECT_0);
+			} else if (result >= WAIT_ABANDONED_0 && result < WAIT_ABANDONED_0 + nCount) {
+			SanitizeHidEventReadsForHandle(lpHandles[result - WAIT_ABANDONED_0], WAIT_ABANDONED);
+			}
 			}
 			return result;
 		}
@@ -1285,6 +1490,9 @@ namespace RadarKeys {
 			if (!hidDll) {
 				hidDll = LoadLibraryW(L"hid.dll");
 			}
+			g_hidDGetPreparsedData = reinterpret_cast<HidDGetPreparsedData_t>(GetProcAddress(hidDll, "HidD_GetPreparsedData"));
+			g_hidDFreePreparsedData = reinterpret_cast<HidDFreePreparsedData_t>(GetProcAddress(hidDll, "HidD_FreePreparsedData"));
+			g_hidPGetCaps = reinterpret_cast<HidPGetCaps_t>(GetProcAddress(hidDll, "HidP_GetCaps"));
 			if (hidDll) {
 				void* getInputReport = reinterpret_cast<void*>(GetProcAddress(hidDll, "HidD_GetInputReport"));
 				if (getInputReport && g_origHidDGetInputReport == nullptr &&
@@ -1292,13 +1500,6 @@ namespace RadarKeys {
 						reinterpret_cast<LPVOID*>(&g_origHidDGetInputReport)) == MH_OK &&
 						MH_EnableHook(getInputReport) == MH_OK) {
 					spdlog::info("RawInput: hooked HidD_GetInputReport (hid.dll)");
-				}
-				void* getFeature = reinterpret_cast<void*>(GetProcAddress(hidDll, "HidD_GetFeature"));
-				if (getFeature && g_origHidDGetFeature == nullptr &&
-					MH_CreateHook(getFeature, reinterpret_cast<LPVOID>(&HookedHidDGetFeatureGamepad),
-						reinterpret_cast<LPVOID*>(&g_origHidDGetFeature)) == MH_OK &&
-						MH_EnableHook(getFeature) == MH_OK) {
-					spdlog::info("RawInput: hooked HidD_GetFeature (hid.dll)");
 				}
 			}
 			HMODULE ntdllHook = GetModuleHandleW(L"ntdll.dll");
@@ -1328,6 +1529,24 @@ namespace RadarKeys {
 						MH_EnableHook(ntWaitMultiple) == MH_OK) {
 					spdlog::info("RawInput: hooked NtWaitForMultipleObjects (ntdll)");
 				}
+			void* ntClose = reinterpret_cast<void*>(GetProcAddress(ntdllHook, "NtClose"));
+			if (ntClose && g_origNtClose == nullptr &&
+				MH_CreateHook(ntClose, reinterpret_cast<LPVOID>(&HookedNtCloseGamepad),
+					reinterpret_cast<LPVOID*>(&g_origNtClose)) == MH_OK &&
+				MH_EnableHook(ntClose) == MH_OK) {
+				spdlog::info("RawInput: hooked NtClose (ntdll) - stale classifications retired on close");
+			}
+			HMODULE kernel32Cancel = GetModuleHandleW(L"kernel32.dll");
+			if (kernel32Cancel) {
+				void* cancelIoEx = reinterpret_cast<void*>(GetProcAddress(kernel32Cancel, "CancelIoEx"));
+				if (cancelIoEx && g_origCancelIoEx == nullptr &&
+					MH_CreateHook(cancelIoEx, reinterpret_cast<LPVOID>(&HookedCancelIoExGamepad),
+						reinterpret_cast<LPVOID*>(&g_origCancelIoEx)) == MH_OK &&
+					MH_EnableHook(cancelIoEx) == MH_OK) {
+					spdlog::info("RawInput: hooked CancelIoEx (kernel32) - canceled operations retire cleanly");
+				}
+			}
+			
 			}
 			g_hidFileHooksInstalled.store(allOk, std::memory_order_release);
 			spdlog::info("RawInput: HID handle/read suppression {} (gamepad device opens are tagged, reads sanitized while Gamepad suppression is active)",
@@ -1337,10 +1556,10 @@ namespace RadarKeys {
 
 		void EnsureXInputHook() {
 			static const wchar_t* kModuleNames[] = {
-				L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll", L"xinput1_2.dll", L"xinput1_1.dll"
+				L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll", L"xinput1_2.dll", L"xinput1_1.dll", L"xinputuap.dll"
 			};
 			static const char* kModuleNamesNarrow[] = {
-				"xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll", "xinput1_2.dll", "xinput1_1.dll"
+				"xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll", "xinput1_2.dll", "xinput1_1.dll", "xinputuap.dll"
 			};
 			static bool loadAttemptedFor[kMaxXInputModules] = {};
 
@@ -1475,6 +1694,7 @@ namespace RadarKeys {
 			SHORT lx = 0, ly = 0, rx = 0, ry = 0;
 			bool anyConnected = false;
 			bool xinputConnected = false;
+			bool analogTaken = false;
 
 			const bool bridgeActive = g_psBridgeActive.load(std::memory_order_relaxed);
 			for (int m = 0; !bridgeActive && m < g_xinputModuleCount; ++m) {
@@ -1487,12 +1707,15 @@ namespace RadarKeys {
 				anyConnected = true;
 				xinputConnected = true;
 				buttons |= s.Gamepad.wButtons;
-				leftTrigger = (std::max)(leftTrigger, s.Gamepad.bLeftTrigger);
-				rightTrigger = (std::max)(rightTrigger, s.Gamepad.bRightTrigger);
-				if (abs((int)s.Gamepad.sThumbLX) > abs((int)lx)) lx = s.Gamepad.sThumbLX;
-				if (abs((int)s.Gamepad.sThumbLY) > abs((int)ly)) ly = s.Gamepad.sThumbLY;
-				if (abs((int)s.Gamepad.sThumbRX) > abs((int)rx)) rx = s.Gamepad.sThumbRX;
-				if (abs((int)s.Gamepad.sThumbRY) > abs((int)ry)) ry = s.Gamepad.sThumbRY;
+				if (!analogTaken) {
+				analogTaken = true;
+				leftTrigger = s.Gamepad.bLeftTrigger;
+				rightTrigger = s.Gamepad.bRightTrigger;
+				lx = s.Gamepad.sThumbLX;
+				ly = s.Gamepad.sThumbLY;
+				rx = s.Gamepad.sThumbRX;
+				ry = s.Gamepad.sThumbRY;
+				}
 				}
 			}
 
@@ -1564,7 +1787,7 @@ namespace RadarKeys {
 					continue;
 				}
 				realStateHeld[vKey] = isDown;
-				currFlags[vKey] = isDown ? RI_KEY_MAKE : RI_KEY_BREAK;
+				currFlags[vKey].store(isDown ? RI_KEY_MAKE : RI_KEY_BREAK, std::memory_order_relaxed);
 				DoActions(vKey, isDown ? BUTTONEVENT::ONDOWN : BUTTONEVENT::ONUP);
 				if (g_gamepadBlockedToGame.load() != false) {
 					spdlog::info("RawInput: GP key vKey={} {} (suppression active)", vKey, isDown ? "DOWN" : "UP");
@@ -1584,6 +1807,7 @@ namespace RadarKeys {
 			SHORT lx = 0, ly = 0, rx = 0, ry = 0;
 			int connectedSlots = 0;
 			bool slotSeen[XUSER_MAX_COUNT] = {};
+			bool analogTaken = false;
 
 			EnsureXInputHook();
 			for (int m = 0; m < g_xinputModuleCount; ++m) {
@@ -1598,12 +1822,15 @@ namespace RadarKeys {
 						++connectedSlots;
 					}
 					buttons |= s.Gamepad.wButtons;
-					leftTrigger = (std::max)(leftTrigger, s.Gamepad.bLeftTrigger);
-					rightTrigger = (std::max)(rightTrigger, s.Gamepad.bRightTrigger);
-					if (abs((int)s.Gamepad.sThumbLX) > abs((int)lx)) lx = s.Gamepad.sThumbLX;
-					if (abs((int)s.Gamepad.sThumbLY) > abs((int)ly)) ly = s.Gamepad.sThumbLY;
-					if (abs((int)s.Gamepad.sThumbRX) > abs((int)rx)) rx = s.Gamepad.sThumbRX;
-					if (abs((int)s.Gamepad.sThumbRY) > abs((int)ry)) ry = s.Gamepad.sThumbRY;
+					if (!analogTaken) {
+					analogTaken = true;
+					leftTrigger = s.Gamepad.bLeftTrigger;
+					rightTrigger = s.Gamepad.bRightTrigger;
+					lx = s.Gamepad.sThumbLX;
+					ly = s.Gamepad.sThumbLY;
+					rx = s.Gamepad.sThumbRX;
+					ry = s.Gamepad.sThumbRY;
+					}
 				}
 			}
 
@@ -1662,7 +1889,7 @@ namespace RadarKeys {
 					continue;
 				}
 				realStateHeld[psKey] = isDown;
-				currFlags[psKey] = isDown ? RI_KEY_MAKE : RI_KEY_BREAK;
+				currFlags[psKey].store(isDown ? RI_KEY_MAKE : RI_KEY_BREAK, std::memory_order_relaxed);
 				DoActions(psKey, isDown ? BUTTONEVENT::ONDOWN : BUTTONEVENT::ONUP);
 				if (g_gamepadBlockedToGame.load() != false) {
 					spdlog::info("RawInput: PS key vKey={} {} (suppression active)", psKey, isDown ? "DOWN" : "UP");
@@ -1690,7 +1917,7 @@ namespace RadarKeys {
 			}
 
 			USHORT flags = pRaw->data.keyboard.Flags;
-			USHORT oldFlags = currFlags[vKey];
+			USHORT oldFlags = currFlags[vKey].load(std::memory_order_relaxed);
 			const bool isBreak = (flags & RI_KEY_BREAK) != 0;
 			const bool wasBreak = (oldFlags & RI_KEY_BREAK) != 0;
 
@@ -1708,7 +1935,7 @@ namespace RadarKeys {
 			}
 			//else up, which you shouldnt hit
 
-			currFlags[vKey] = flags;
+			currFlags[vKey].store(flags, std::memory_order_relaxed);
 
 			DoActions(vKey, buttonEvent);
 
@@ -1753,17 +1980,17 @@ namespace RadarKeys {
 			USHORT oldFlagsB[vKeyMax];
 			for (UINT i = 0; i < numButtons; ++i) {
 				USHORT vKey = k[i].vk;
-				oldFlagsB[vKey] = currFlags[vKey];
+				oldFlagsB[vKey] = currFlags[vKey].load(std::memory_order_relaxed);
 			}
 
 			for (UINT i = 0; i < numButtons; ++i) {
 				USHORT vKey = k[i].vk;
 				if (usButtonFlags & k[i].downflag) {
-					currFlags[vKey] = RI_KEY_MAKE;
+					currFlags[vKey].store(RI_KEY_MAKE, std::memory_order_relaxed);
 					realStateHeld[vKey] = true;
 				}
 				if (usButtonFlags & k[i].upflag) {
-					currFlags[vKey] = RI_KEY_BREAK;
+					currFlags[vKey].store(RI_KEY_BREAK, std::memory_order_relaxed);
 					realStateHeld[vKey] = false;
 				}
 			}
@@ -1772,7 +1999,7 @@ namespace RadarKeys {
 
 			for (UINT i = 0; i < numButtons; ++i) {
 				USHORT vKey = k[i].vk;
-				USHORT flags = currFlags[vKey];
+				USHORT flags = currFlags[vKey].load(std::memory_order_relaxed);
 				USHORT oldFlags = oldFlagsB[vKey];
 
 				BUTTONEVENT buttonEvent = BUTTONEVENT::UP;
@@ -1899,7 +2126,7 @@ namespace RadarKeys {
 		}//UnRegisterAction (handle)
 
 		bool IsKeyDown(USHORT vKey) {
-			return vKey < vKeyMax && !((currFlags[vKey] & RI_KEY_BREAK) != 0);
+			return vKey < vKeyMax && !((currFlags[vKey].load(std::memory_order_relaxed) & RI_KEY_BREAK) != 0);
 		}//IsKeyDown
 
 		//DEBUG
@@ -1973,7 +2200,9 @@ namespace RadarKeys {
 		void InitializeInput() {
 			spdlog::debug("Rawinput InitializeInput");
 
-			std::fill_n(currFlags, vKeyMax, static_cast<USHORT>(RI_KEY_BREAK));
+			for (int i = 0; i < vKeyMax; ++i) {
+			currFlags[i].store(static_cast<USHORT>(RI_KEY_BREAK), std::memory_order_relaxed);
+			}
 
 			InitIgnoreKeys();
 		}
@@ -2083,10 +2312,10 @@ namespace RadarKeys {
 		void OnFocusLost() {
 			for (int i = 0; i < vKeyMax; ++i) {
 				if (realStateHeld[i].exchange(0)) {
-					currFlags[i] = RI_KEY_BREAK;
+					currFlags[i].store(RI_KEY_BREAK, std::memory_order_relaxed);
 					DoActions((USHORT)i, BUTTONEVENT::ONUP);
 				} else {
-					currFlags[i] = RI_KEY_BREAK;
+					currFlags[i].store(RI_KEY_BREAK, std::memory_order_relaxed);
 				}
 			}
 		}
