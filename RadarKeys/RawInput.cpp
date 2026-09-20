@@ -210,9 +210,10 @@ namespace RadarKeys {
 				{ VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT,  rx >  XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE },
 			};
 
+			const bool suppressGenericForPlaystation = DirectInputHook::HasPlaystationDevice();
 			for (const auto& entry : nowState) {
 				USHORT vKey = entry.first;
-				bool isDown = entry.second;
+				bool isDown = suppressGenericForPlaystation ? false : entry.second;
 				bool wasDown = realStateHeld[vKey];
 				if (isDown == wasDown) {
 					continue;
