@@ -235,9 +235,9 @@ namespace RadarKeys {
 			}
 			std::lock_guard<std::mutex> lock(g_mutex);
 			auto it = g_deviceInfo.find(self);
-			if (it != g_deviceInfo.end()) {
-				it->second.kind = kind;
-				it->second.kindFromCapabilities = true;
+			if (it != g_deviceInfo.end() && !it->second.selfOpened) {
+			it->second.kind = kind;
+			it->second.kindFromCapabilities = true;
 			}
 		}
 
@@ -1274,7 +1274,8 @@ namespace RadarKeys {
 			std::lock_guard<std::mutex> lock(g_mutex);
 			for (const auto& entry : g_deviceInfo) {
 				if (entry.second.kind == DeviceKind::Joystick && entry.second.isPlaystation) {
-					return false;
+				g_psVocabLatch.store(true, std::memory_order_relaxed);
+				return false;
 				}
 			}
 			for (const auto& entry : g_deviceInfo) {
@@ -1379,14 +1380,20 @@ namespace RadarKeys {
 			return false;
 		}
 
+		static std::atomic<bool> g_psVocabLatch{ false };
 		bool HasPlaystationDevice() {
-			std::lock_guard<std::mutex> lock(g_mutex);
-			for (const auto& entry : g_deviceInfo) {
-				if (entry.second.kind == DeviceKind::Joystick && entry.second.isPlaystation) {
-					return true;
-				}
-			}
-			return false;
+		std::lock_guard<std::mutex> lock(g_mutex);
+		for (const auto& entry : g_deviceInfo) {
+		if (entry.second.kind == DeviceKind::Joystick && entry.second.isPlaystation) {
+		g_psVocabLatch.store(true, std::memory_order_relaxed);
+		return true;
+		}
+		}
+		return false;
+		}
+		
+		bool PlaystationVocabLatched() {
+		return g_psVocabLatch.load(std::memory_order_relaxed);
 		}
 
 		static bool g_directInput8CreateHooked = false;
