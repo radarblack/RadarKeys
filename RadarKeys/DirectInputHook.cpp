@@ -1273,6 +1273,11 @@ namespace RadarKeys {
 		bool IsGamepadButtonHeld(USHORT vKey) {
 			std::lock_guard<std::mutex> lock(g_mutex);
 			for (const auto& entry : g_deviceInfo) {
+				if (entry.second.kind == DeviceKind::Joystick && entry.second.isPlaystation) {
+					return false;
+				}
+			}
+			for (const auto& entry : g_deviceInfo) {
 				const DeviceInfo& info = entry.second;
 				if (info.selfOpened || info.isPlaystation) {
 					continue;
