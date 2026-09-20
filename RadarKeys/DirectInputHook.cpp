@@ -89,6 +89,7 @@ namespace RadarKeys {
 		static std::unordered_map<IDirectInputDevice8*, DeviceInfo> g_deviceInfo;
 		static std::unordered_set<void*> g_selfDevicePointers;
 		static std::vector<std::pair<GUID, IDirectInputDevice8*>> g_ownedDevices;
+		static std::atomic<bool> g_psVocabLatch{ false };
 
 		// GUIDs
 		static const GUID kGuidSysMouse =
@@ -1380,7 +1381,6 @@ namespace RadarKeys {
 			return false;
 		}
 
-		static std::atomic<bool> g_psVocabLatch{ false };
 		bool HasPlaystationDevice() {
 		std::lock_guard<std::mutex> lock(g_mutex);
 		for (const auto& entry : g_deviceInfo) {
