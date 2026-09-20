@@ -158,9 +158,8 @@ namespace RadarKeys {
 			bool xinputConnected = false;
 			bool analogTaken = false;
 
-			const bool psGate = DirectInputHook::PlaystationVocabLatched() || DirectInputHook::HasPlaystationDevice();
 			const bool bridgeActive = g_psBridgeActive.load(std::memory_order_relaxed);
-			for (int m = 0; !bridgeActive && !psGate && m < g_xinputModuleCount; ++m) {
+			for (int m = 0; !bridgeActive && m < g_xinputModuleCount; ++m) {
 				for (DWORD i = 0; i < XUSER_MAX_COUNT; i++) {
 					XINPUT_STATE s{};
 					XInputGetStateFunc orig = g_origXInputGetState[m];
@@ -183,16 +182,8 @@ namespace RadarKeys {
 			}
 
 			anyConnected = anyConnected || DirectInputHook::HasJoystickDevice();
-			if (psGate) {
-				static std::atomic<bool> gpVocabGateLogged{ false };
-				bool expected = false;
-				if (gpVocabGateLogged.compare_exchange_strong(expected, true)) {
-					spdlog::info("RawInput: DInput gamepad vocabulary gated (PlayStation device connected)");
-					spdlog::default_logger()->flush();
-				}
-			}
 			for (USHORT gpKey : GamepadVKeys()) {
-				if (psGate || !DirectInputHook::IsGamepadButtonHeld(gpKey)) {
+				if (!DirectInputHook::IsGamepadButtonHeld(gpKey)) {
 					continue;
 				}
 				switch (gpKey) {
