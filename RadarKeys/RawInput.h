@@ -60,11 +60,8 @@ namespace RadarKeys {
 		bool HasXInputGamepad();
 		const std::vector<USHORT>& GamepadVKeys();
 		const std::vector<USHORT>& PlaystationVKeys();
-		void SetGamepadBlockedToGame(bool blocked);
-		bool IsGamepadBlockedToGame();
 		bool IsKeyboardBlockedToGame();
 		bool IsMouseBlockedToGame();
 		void OnFocusLost();
-		void StartWGIClassHookWorker();
 	}
 }
