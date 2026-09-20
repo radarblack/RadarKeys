@@ -89,7 +89,6 @@ namespace RadarKeys {
 		static std::unordered_map<IDirectInputDevice8*, DeviceInfo> g_deviceInfo;
 		static std::unordered_set<void*> g_selfDevicePointers;
 		static std::vector<std::pair<GUID, IDirectInputDevice8*>> g_ownedDevices;
-		static std::atomic<bool> g_psVocabLatch{ false };
 
 		// GUIDs
 		static const GUID kGuidSysMouse =
@@ -850,12 +849,6 @@ namespace RadarKeys {
 		bool IsGamepadButtonHeld(USHORT vKey) {
 			std::lock_guard<std::mutex> lock(g_mutex);
 			for (const auto& entry : g_deviceInfo) {
-				if (entry.second.kind == DeviceKind::Joystick && entry.second.isPlaystation) {
-				g_psVocabLatch.store(true, std::memory_order_relaxed);
-				return false;
-				}
-			}
-			for (const auto& entry : g_deviceInfo) {
 				const DeviceInfo& info = entry.second;
 				if (info.selfOpened || info.isPlaystation) {
 					continue;
@@ -961,17 +954,12 @@ namespace RadarKeys {
 		std::lock_guard<std::mutex> lock(g_mutex);
 		for (const auto& entry : g_deviceInfo) {
 		if (entry.second.kind == DeviceKind::Joystick && entry.second.isPlaystation) {
-		g_psVocabLatch.store(true, std::memory_order_relaxed);
 		return true;
 		}
 		}
 		return false;
 		}
 		
-		bool PlaystationVocabLatched() {
-		return g_psVocabLatch.load(std::memory_order_relaxed);
-		}
-
 		static bool g_directInput8CreateHooked = false;
 		static bool warnedInstallFailure = false;
 
