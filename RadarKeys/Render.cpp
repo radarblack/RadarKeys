@@ -248,7 +248,6 @@ namespace RadarKeys {
 			bool unlock = IsUnlockCursor();
 			const bool blockMouse = unlock && KeyBindMenu::captureSuppressMouse;
 			const bool blockKeyboard = unlock && KeyBindMenu::captureSuppressKeyboard;
-			const bool blockGamepad = unlock && KeyBindMenu::captureSuppressGamepad;
 
 			if (blockMouse) {
 				RawInput::BlockMouseClick();
@@ -264,11 +263,8 @@ namespace RadarKeys {
 				RawInput::UnBlockKeyboard();
 			}
 
-			RawInput::SetGamepadBlockedToGame(blockGamepad);
-
 			static bool lastBlockKeyboard = false;
 			static bool lastBlockMouse = false;
-			static bool lastBlockGamepad = false;
 			static bool lastUnlock = false;
 			if (unlock != lastUnlock) {
 				spdlog::info("Input unlock: {} (mainMenu={}, debugger={})",
@@ -286,12 +282,6 @@ namespace RadarKeys {
 					blockMouse ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressMouse,
 					KeyBindMenu::menuOpen, DebuggerMenu::menuOpen);
 				lastBlockMouse = blockMouse;
-			}
-			if (blockGamepad != lastBlockGamepad) {
-				spdlog::info("Gamepad block-to-game: {} (unlock={}, captureSuppressGamepad={}, mainMenu={}, debugger={})",
-					blockGamepad ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressGamepad,
-					KeyBindMenu::menuOpen, DebuggerMenu::menuOpen);
-				lastBlockGamepad = blockGamepad;
 			}
 
 			io.MouseDrawCursor = unlock;
