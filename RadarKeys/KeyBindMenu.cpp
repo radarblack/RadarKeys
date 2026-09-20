@@ -2544,7 +2544,7 @@ namespace RadarKeys {
 					std::string finalFuncTap = (!capturedToggleMode && capturedHasFuncOn) ? capturedFuncTapBuffer : "";
 
 					if (captureIsCombo) {
-						if (editingBindingIndex != -1) {
+						if (editingBindingIndex != -1 && editingBindingIndex < (int)bindings.size()) {
 							KeyBind editedBind{};
 							editedBind.comboKeys = capturedComboKeys;
 							editedBind.isToggle = capturedToggleMode;
@@ -2568,7 +2568,7 @@ namespace RadarKeys {
 							AddComboBinding(capturedComboKeys, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap, finalHoldSeconds, capturedInstantMode, capturedInstantTriggerType, capturedRepeatAccelMult);
 						}
 					}
-					else if (editingBindingIndex != -1) {
+					else if (editingBindingIndex != -1 && editingBindingIndex < (int)bindings.size()) {
 						USHORT oldVKey = bindings[editingBindingIndex].vKey;
 						KeyBind editedBind{ capturedVKey, capturedCtrl, capturedShift, capturedAlt, NameForVKey(capturedVKey), capturedToggleMode, finalPathOn, finalPathOff, false, finalHoldSeconds };
 						editedBind.isInstant = capturedInstantMode;
