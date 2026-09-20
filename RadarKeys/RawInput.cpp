@@ -1686,7 +1686,6 @@ namespace RadarKeys {
 		std::atomic<bool> g_anyGamepadConnected{ false };
 		std::atomic<bool> g_xinputGamepadConnected{ false };
 		std::atomic<bool> g_psBridgeActive{ false };
-				
 		void PollGamepad() {
 			EnsureXInputHook();
 
@@ -1705,54 +1704,60 @@ namespace RadarKeys {
 					if (!orig || orig(i, &s) != ERROR_SUCCESS) {
 						continue;
 					}
-					
-					anyConnected = true;
-					xinputConnected = true;
-					buttons |= s.Gamepad.wButtons;
-					
-					if (!analogTaken) {
-						analogTaken = true;
-						leftTrigger = s.Gamepad.bLeftTrigger;
-						rightTrigger = s.Gamepad.bRightTrigger;
-						lx = s.Gamepad.sThumbLX;
-						ly = s.Gamepad.sThumbLY;
-						rx = s.Gamepad.sThumbRX;
-						ry = s.Gamepad.sThumbRY;
-					}
+				anyConnected = true;
+				xinputConnected = true;
+				buttons |= s.Gamepad.wButtons;
+				if (!analogTaken) {
+				analogTaken = true;
+				leftTrigger = s.Gamepad.bLeftTrigger;
+				rightTrigger = s.Gamepad.bRightTrigger;
+				lx = s.Gamepad.sThumbLX;
+				ly = s.Gamepad.sThumbLY;
+				rx = s.Gamepad.sThumbRX;
+				ry = s.Gamepad.sThumbRY;
+				}
 				}
 			}
 
 			anyConnected = anyConnected || DirectInputHook::HasJoystickDevice();
+			const bool psGate = DirectInputHook::HasPlaystationDevice();
+			if (psGate) {
+				static std::atomic<bool> gpVocabGateLogged{ false };
+				bool expected = false;
+				if (gpVocabGateLogged.compare_exchange_strong(expected, true)) {
+					spdlog::info("RawInput: DInput gamepad vocabulary gated (PlayStation device connected)");
+					spdlog::default_logger()->flush();
+				}
+			}
 			for (USHORT gpKey : GamepadVKeys()) {
-				if (!DirectInputHook::IsGamepadButtonHeld(gpKey)) {
+				if (psGate || !DirectInputHook::IsGamepadButtonHeld(gpKey)) {
 					continue;
 				}
-				
 				switch (gpKey) {
-					case VK_GAMEPAD_A:                       buttons |= XINPUT_GAMEPAD_A; break;
-					case VK_GAMEPAD_B:                       buttons |= XINPUT_GAMEPAD_B; break;
-					case VK_GAMEPAD_X:                       buttons |= XINPUT_GAMEPAD_X; break;
-					case VK_GAMEPAD_Y:                       buttons |= XINPUT_GAMEPAD_Y; break;
-					case VK_GAMEPAD_LEFT_SHOULDER:           buttons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
-					case VK_GAMEPAD_RIGHT_SHOULDER:          buttons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
-					case VK_GAMEPAD_DPAD_UP:                 buttons |= XINPUT_GAMEPAD_DPAD_UP; break;
-					case VK_GAMEPAD_DPAD_DOWN:               buttons |= XINPUT_GAMEPAD_DPAD_DOWN; break;
-					case VK_GAMEPAD_DPAD_LEFT:               buttons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
-					case VK_GAMEPAD_DPAD_RIGHT:              buttons |= XINPUT_GAMEPAD_DPAD_RIGHT; break;
-					case VK_GAMEPAD_MENU:                    buttons |= XINPUT_GAMEPAD_START; break;
-					case VK_GAMEPAD_VIEW:                    buttons |= XINPUT_GAMEPAD_BACK; break;
-					case VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON:  buttons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
-					case VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON: buttons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
-					case VK_GAMEPAD_LEFT_TRIGGER:            leftTrigger = (std::max)(leftTrigger, (BYTE)255); break;
-					case VK_GAMEPAD_RIGHT_TRIGGER:           rightTrigger = (std::max)(rightTrigger, (BYTE)255); break;
-					case VK_GAMEPAD_LEFT_THUMBSTICK_UP:      ly = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1; break;
-					case VK_GAMEPAD_LEFT_THUMBSTICK_DOWN:    ly = -(SHORT)(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1); break;
-					case VK_GAMEPAD_LEFT_THUMBSTICK_LEFT:    lx = -(SHORT)(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1); break;
-					case VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT:   lx = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1; break;
-					case VK_GAMEPAD_RIGHT_THUMBSTICK_UP:     ry = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1; break;
-					case VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN:   ry = -(SHORT)(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1); break;
-					case VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT:   rx = -(SHORT)(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1); break;
-					case VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT:  rx = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1; break;
+				case VK_GAMEPAD_A:                       buttons |= XINPUT_GAMEPAD_A; break;
+				case VK_GAMEPAD_B:                       buttons |= XINPUT_GAMEPAD_B; break;
+				case VK_GAMEPAD_X:                       buttons |= XINPUT_GAMEPAD_X; break;
+				case VK_GAMEPAD_Y:                       buttons |= XINPUT_GAMEPAD_Y; break;
+				case VK_GAMEPAD_LEFT_SHOULDER:           buttons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
+				case VK_GAMEPAD_RIGHT_SHOULDER:          buttons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
+				case VK_GAMEPAD_DPAD_UP:                 buttons |= XINPUT_GAMEPAD_DPAD_UP; break;
+				case VK_GAMEPAD_DPAD_DOWN:               buttons |= XINPUT_GAMEPAD_DPAD_DOWN; break;
+				case VK_GAMEPAD_DPAD_LEFT:               buttons |= XINPUT_GAMEPAD_DPAD_LEFT; break;
+				case VK_GAMEPAD_DPAD_RIGHT:              buttons |= XINPUT_GAMEPAD_DPAD_RIGHT; break;
+				case VK_GAMEPAD_MENU:                    buttons |= XINPUT_GAMEPAD_START; break;
+				case VK_GAMEPAD_VIEW:                    buttons |= XINPUT_GAMEPAD_BACK; break;
+				case VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON:  buttons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON: buttons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
+				case VK_GAMEPAD_LEFT_TRIGGER:            leftTrigger = (std::max)(leftTrigger, (BYTE)255); break;
+				case VK_GAMEPAD_RIGHT_TRIGGER:           rightTrigger = (std::max)(rightTrigger, (BYTE)255); break;
+				case VK_GAMEPAD_LEFT_THUMBSTICK_UP:      ly = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1; break;
+				case VK_GAMEPAD_LEFT_THUMBSTICK_DOWN:    ly = -(SHORT)(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1); break;
+				case VK_GAMEPAD_LEFT_THUMBSTICK_LEFT:    lx = -(SHORT)(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1); break;
+				case VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT:   lx = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE + 1; break;
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_UP:     ry = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1; break;
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN:   ry = -(SHORT)(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1); break;
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT:   rx = -(SHORT)(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1); break;
+				case VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT:  rx = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE + 1; break;
 				}
 			}
 
@@ -1790,11 +1795,9 @@ namespace RadarKeys {
 				if (isDown == wasDown) {
 					continue;
 				}
-				
 				realStateHeld[vKey] = isDown;
 				currFlags[vKey].store(isDown ? RI_KEY_MAKE : RI_KEY_BREAK, std::memory_order_relaxed);
 				DoActions(vKey, isDown ? BUTTONEVENT::ONDOWN : BUTTONEVENT::ONUP);
-				
 				if (g_gamepadBlockedToGame.load() != false) {
 					spdlog::info("RawInput: GP key vKey={} {} (suppression active)", vKey, isDown ? "DOWN" : "UP");
 					spdlog::default_logger()->flush();
@@ -1829,13 +1832,13 @@ namespace RadarKeys {
 					}
 					buttons |= s.Gamepad.wButtons;
 					if (!analogTaken) {
-						analogTaken = true;
-						leftTrigger = s.Gamepad.bLeftTrigger;
-						rightTrigger = s.Gamepad.bRightTrigger;
-						lx = s.Gamepad.sThumbLX;
-						ly = s.Gamepad.sThumbLY;
-						rx = s.Gamepad.sThumbRX;
-						ry = s.Gamepad.sThumbRY;
+					analogTaken = true;
+					leftTrigger = s.Gamepad.bLeftTrigger;
+					rightTrigger = s.Gamepad.bRightTrigger;
+					lx = s.Gamepad.sThumbLX;
+					ly = s.Gamepad.sThumbLY;
+					rx = s.Gamepad.sThumbRX;
+					ry = s.Gamepad.sThumbRY;
 					}
 				}
 			}
