@@ -810,56 +810,6 @@ namespace RadarKeys {
 			return value >= 20000;
 		}
 
-		static bool IsGamepadButtonHeldLocked(USHORT vKey, const DeviceInfo& info) {
-			if (!info.hasRealState || info.realStateSize < sizeof(DIJOYSTATE) ||
-				info.kind != DeviceKind::Joystick) {
-				return false;
-			}
-			const DIJOYSTATE* js = reinterpret_cast<const DIJOYSTATE*>(info.realState);
-
-			switch (vKey) {
-			case VK_GAMEPAD_A:                       return ButtonHeld(js, 0);
-			case VK_GAMEPAD_B:                       return ButtonHeld(js, 1);
-			case VK_GAMEPAD_X:                       return ButtonHeld(js, 2);
-			case VK_GAMEPAD_Y:                       return ButtonHeld(js, 3);
-			case VK_GAMEPAD_RIGHT_SHOULDER:          return ButtonHeld(js, 5);
-			case VK_GAMEPAD_LEFT_SHOULDER:           return ButtonHeld(js, 4);
-			case VK_GAMEPAD_LEFT_TRIGGER:            return TriggerHeld(info, js, 0);
-			case VK_GAMEPAD_RIGHT_TRIGGER:           return TriggerHeld(info, js, 1);
-			case VK_GAMEPAD_DPAD_UP:                 return PovHeld(js, 0, 0);
-			case VK_GAMEPAD_DPAD_DOWN:               return PovHeld(js, 0, 1);
-			case VK_GAMEPAD_DPAD_LEFT:               return PovHeld(js, 0, 2);
-			case VK_GAMEPAD_DPAD_RIGHT:              return PovHeld(js, 0, 3);
-			case VK_GAMEPAD_MENU:                    return ButtonHeld(js, 7);
-			case VK_GAMEPAD_VIEW:                    return ButtonHeld(js, 6);
-			case VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON:  return ButtonHeld(js, 8);
-			case VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON: return ButtonHeld(js, 9);
-			case VK_GAMEPAD_LEFT_THUMBSTICK_UP:      return AxisPast(info, js, 1, DIJOFS_Y, -1);
-			case VK_GAMEPAD_LEFT_THUMBSTICK_DOWN:    return AxisPast(info, js, 1, DIJOFS_Y, +1);
-			case VK_GAMEPAD_LEFT_THUMBSTICK_LEFT:    return AxisPast(info, js, 0, DIJOFS_X, -1);
-			case VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT:   return AxisPast(info, js, 0, DIJOFS_X, +1);
-			case VK_GAMEPAD_RIGHT_THUMBSTICK_UP:     return AxisPast(info, js, 4, DIJOFS_RY, -1);
-			case VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN:   return AxisPast(info, js, 4, DIJOFS_RY, +1);
-			case VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT:   return AxisPast(info, js, 3, DIJOFS_RX, -1);
-			case VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT:  return AxisPast(info, js, 3, DIJOFS_RX, +1);
-			default: return false;
-			}
-		}
-
-		bool IsGamepadButtonHeld(USHORT vKey) {
-			std::lock_guard<std::mutex> lock(g_mutex);
-			for (const auto& entry : g_deviceInfo) {
-				const DeviceInfo& info = entry.second;
-				if (info.selfOpened || info.isPlaystation) {
-					continue;
-				}
-				if (IsGamepadButtonHeldLocked(vKey, info)) {
-					return true;
-				}
-			}
-			return false;
-		}
-
 		static bool IsPlaystationControlHeldLocked(USHORT vKey, const DeviceInfo& info) {
 			if (!info.hasRealState || info.realStateSize < sizeof(DIJOYSTATE) ||
 				info.kind != DeviceKind::Joystick) {
