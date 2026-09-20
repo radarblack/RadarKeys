@@ -406,23 +406,6 @@ namespace RadarKeys {
 			return false;
 		}
 
-		static void NeutralizeJoystick(LPVOID data, DWORD cbData, const DeviceInfo& info) {
-			std::memset(data, 0, cbData);
-
-			if (cbData >= offsetof(DIJOYSTATE, rgbButtons)) {
-				LONG* axes = static_cast<LONG*>(data);
-				for (size_t axisIndex = 0; axisIndex < 8; ++axisIndex) {
-					DWORD offsetBytes = static_cast<DWORD>(axisIndex * sizeof(LONG));
-					axes[axisIndex] = AxisNeutral(info, offsetBytes, IsStickAxisOffset(offsetBytes, info.isPlaystation));
-				}
-
-				DWORD* pov = reinterpret_cast<DWORD*>(static_cast<unsigned char*>(data) + 32);
-				for (int i = 0; i < 4; ++i) {
-					pov[i] = 0xFFFFFFFF;
-				}
-			}
-		}
-
 		static HRESULT STDMETHODCALLTYPE Hooked_GetDeviceState(IDirectInputDevice8* self,
 			DWORD cbData, LPVOID lpvData) {
 			GetDeviceState_t origGetDeviceState = OrigGetDeviceState(self);
@@ -508,18 +491,6 @@ namespace RadarKeys {
 			case DeviceKind::Mouse:
 				std::memset(lpvData, 0, cbData);
 				break;
-			case DeviceKind::Joystick: {
-				DeviceInfo info;
-				{
-					std::lock_guard<std::mutex> lock(g_mutex);
-					auto it = g_deviceInfo.find(self);
-					if (it != g_deviceInfo.end()) {
-						info = it->second;
-					}
-				}
-				NeutralizeJoystick(lpvData, cbData, info);
-				break;
-			}
 			default:
 				break;
 			}
@@ -548,29 +519,7 @@ namespace RadarKeys {
 				return hr;
 			}
 
-			const DWORD povOffsets[] = { DIJOFS_POV(0), DIJOFS_POV(1), DIJOFS_POV(2), DIJOFS_POV(3) };
-			DeviceInfo info;
-			if (kind == DeviceKind::Joystick) {
-				std::lock_guard<std::mutex> lock(g_mutex);
-				auto it = g_deviceInfo.find(self);
-				if (it != g_deviceInfo.end()) {
-					info = it->second;
-				}
-			}
 			for (DWORD i = 0; i < *pdwInOut; ++i) {
-			    bool isPov = false;
-			    for (DWORD pov : povOffsets) {
-			        if (rgdod[i].dwOfs == pov) { isPov = true; break; }
-			    }
-			    if (isPov) {
-			        rgdod[i].dwData = 0xFFFFFFFFu;
-			        continue;
-			    }
-			    if (kind == DeviceKind::Joystick && rgdod[i].dwOfs < 32 && (rgdod[i].dwOfs % 4) == 0) {
-			        LONG neutral = AxisNeutral(info, rgdod[i].dwOfs, IsStickAxisOffset(rgdod[i].dwOfs, info.isPlaystation));
-			        rgdod[i].dwData = static_cast<DWORD>(neutral);
-			        continue;
-			    }
 			    if (rgdod[i].dwData == 0) {
 			        continue;
 			    }
@@ -578,21 +527,6 @@ namespace RadarKeys {
 			}								
 			return hr;
 		}
-
-		static std::unordered_map<void*, void*> g_classGetDeviceStateOrigins;
-		static std::unordered_map<void*, void*> g_classGetDeviceDataOrigins;
-		static std::atomic<bool> g_classGetDeviceStateHooked{ false };
-		static std::atomic<bool> g_classGetDeviceDataHooked{ false };
-		static std::unordered_map<void*, ULONGLONG> g_lastSuppressedJoystickLog;
-		struct GameDeviceFormat {
-			bool valid = false;
-			bool buildAttempted = false;
-			std::vector<std::pair<DWORD, LONG>> axisNeutrals;
-			std::vector<DWORD> povOfs;
-			std::vector<DWORD> buttonOfs;
-		};
-		static std::unordered_map<void*, GameDeviceFormat> g_gameDeviceFormats;
-		static std::unordered_set<void*> g_classHookTargets;
 
 		static bool IsSelfOpenedDevice(IDirectInputDevice8* self) {
 			std::lock_guard<std::mutex> lock(g_mutex);
@@ -672,216 +606,8 @@ namespace RadarKeys {
 			return false;
 		}
 
-		static void LogSuppressedJoystick(IDirectInputDevice8* self, LPVOID lpvData, DWORD cbData, const GameDeviceFormat* fmt) {
-			const ULONGLONG now = GetTickCount64();
-			ULONGLONG& last = g_lastSuppressedJoystickLog[self];
-			if (now - last < 1000) {
-				return;
-			}
-			last = now;
-			if (fmt && lpvData) {
-				std::string axisText;
-				char valueText[40];
-				size_t printed = 0;
-				for (const auto& axis : fmt->axisNeutrals) {
-					if (axis.first + sizeof(LONG) <= cbData) {
-						if (printed > 0) {
-							axisText.push_back(' ');
-						}
-						sprintf_s(valueText, sizeof(valueText), "@%u=%d",
-							static_cast<unsigned>(axis.first),
-							static_cast<int>(*reinterpret_cast<const LONG*>(static_cast<const unsigned char*>(lpvData) + axis.first)));
-						axisText += valueText;
-						++printed;
-						if (printed >= 8) {
-							break;
-						}
-					}
-				}
-				spdlog::info("DirectInputHook: suppressed game joystick {:p} pre-neutral [{}]",
-					static_cast<void*>(self), axisText);
-				spdlog::default_logger()->flush();
-				return;
-			}
-			if (lpvData && cbData >= 8 * sizeof(LONG)) {
-				const LONG* axes = static_cast<const LONG*>(lpvData);
-				const unsigned char* bytes = static_cast<const unsigned char*>(lpvData);
-				if (cbData >= offsetof(DIJOYSTATE, rgbButtons) + 4) {
-					spdlog::info("DirectInputHook: suppressed game joystick {:p} input (buttons {:02X} {:02X} {:02X} {:02X}, x {} y {} z {} rx {} ry {} rz {})",
-						static_cast<void*>(self),
-						bytes[offsetof(DIJOYSTATE, rgbButtons)], bytes[offsetof(DIJOYSTATE, rgbButtons) + 1],
-						bytes[offsetof(DIJOYSTATE, rgbButtons) + 2], bytes[offsetof(DIJOYSTATE, rgbButtons) + 3],
-						axes[0], axes[1], axes[2], axes[3], axes[4], axes[5]);
-					spdlog::default_logger()->flush();
-					return;
-				}
-			}
-			spdlog::info("DirectInputHook: suppressed game joystick {:p} buffered input", static_cast<void*>(self));
-			spdlog::default_logger()->flush();
-		}
-
 		typedef HRESULT(STDMETHODCALLTYPE* DiEnumObjects_t)(IDirectInputDevice8*, void*, void*, DWORD);
 
-
-		struct FormatBuildContext {
-			IDirectInputDevice8* device;
-			GetProperty_t getProperty;
-			GameDeviceFormat* format;
-			int axisCount;
-		};
-
-		static BOOL CALLBACK GameFormatObjectCallback(const DIDEVICEOBJECTINSTANCEW* pdidoi, void* pContext) {
-			FormatBuildContext* ctx = reinterpret_cast<FormatBuildContext*>(pContext);
-			if (!pdidoi || (pdidoi->dwType & DIDFT_NODATA) != 0) {
-				return DIENUM_CONTINUE;
-			}
-			if ((pdidoi->dwType & DIDFT_POV) != 0) {
-				ctx->format->povOfs.push_back(pdidoi->dwOfs);
-				return DIENUM_CONTINUE;
-			}
-			if ((pdidoi->dwType & DIDFT_BUTTON) != 0) {
-				ctx->format->buttonOfs.push_back(pdidoi->dwOfs);
-				return DIENUM_CONTINUE;
-			}
-			if ((pdidoi->dwType & DIDFT_AXIS) != 0) {
-				DIPROPRANGE range{};
-				range.diph.dwSize = sizeof(DIPROPRANGE);
-				range.diph.dwHeaderSize = sizeof(DIPROPHEADER);
-				range.diph.dwObj = pdidoi->dwOfs;
-				range.diph.dwHow = DIPH_BYOFFSET;
-				if (SUCCEEDED(ctx->getProperty(ctx->device, DIPROP_RANGE, &range.diph)) &&
-					range.lMax > range.lMin) {
-					ctx->format->axisNeutrals.push_back({ pdidoi->dwOfs, range.lMin + (range.lMax - range.lMin) / 2 });
-					++ctx->axisCount;
-				}
-			}
-			return DIENUM_CONTINUE;
-		}
-
-		static HRESULT STDMETHODCALLTYPE HookedClassGetDeviceState(IDirectInputDevice8* self, DWORD cbData, LPVOID lpvData) {
-			void** selfVtbl = *reinterpret_cast<void***>(self);
-			GetDeviceState_t orig = reinterpret_cast<GetDeviceState_t>(g_classGetDeviceStateOrigins[selfVtbl[kSlotGetDeviceState]]);
-			HRESULT hr = orig ? orig(self, cbData, lpvData) : E_FAIL;
-			return hr;
-		}
-
-		static HRESULT STDMETHODCALLTYPE HookedClassGetDeviceData(IDirectInputDevice8* self,
-			DWORD cbObjectData, DIDEVICEOBJECTDATA* rgdod, LPDWORD pdwInOut, DWORD dwFlags) {
-			void** selfVtbl = *reinterpret_cast<void***>(self);
-			GetDeviceData_t orig = reinterpret_cast<GetDeviceData_t>(g_classGetDeviceDataOrigins[selfVtbl[kSlotGetDeviceData]]);
-			HRESULT hr = orig ? orig(self, cbObjectData, rgdod, pdwInOut, dwFlags) : E_FAIL;
-			return hr;
-		}
-
-		typedef HRESULT(STDMETHODCALLTYPE* DiCreateDeviceGeneric_t)(void*, REFGUID, void**, LPUNKNOWN);
-		typedef ULONG(STDMETHODCALLTYPE* DiReleaseGeneric_t)(void*);
-		typedef HRESULT(STDMETHODCALLTYPE* DiEnumDevicesGeneric_t)(void*, DWORD, void*, void*, DWORD);
-
-		struct ClassProbeContext {
-			DiCreateDeviceGeneric_t createDevice;
-			void* di8;
-			void* device;
-		};
-
-		static bool ClassProbeEnumDevice(REFGUID guidInstance, void* pContext) {
-			ClassProbeContext* ctx = reinterpret_cast<ClassProbeContext*>(pContext);
-			void* device = nullptr;
-			if (ctx->createDevice && SUCCEEDED(ctx->createDevice(ctx->di8, guidInstance, &device, nullptr)) && device) {
-				ctx->device = device;
-				return DIENUM_STOP;
-			}
-			return DIENUM_CONTINUE;
-		}
-
-		static BOOL CALLBACK ClassProbeEnumCallbackA(const DIDEVICEINSTANCEA* pdidInstance, void* pContext) {
-			return pdidInstance ? ClassProbeEnumDevice(pdidInstance->guidInstance, pContext) : DIENUM_CONTINUE;
-		}
-
-		static BOOL CALLBACK ClassProbeEnumCallbackW(const DIDEVICEINSTANCEW* pdidInstance, void* pContext) {
-			return pdidInstance ? ClassProbeEnumDevice(pdidInstance->guidInstance, pContext) : DIENUM_CONTINUE;
-		}
-
-		static bool HookClassFunction(void* target, void* detour, std::unordered_map<void*, void*>& origins, const char* label) {
-			if (!target) {
-				return false;
-			}
-			if (g_classHookTargets.find(target) != g_classHookTargets.end()) {
-				return true;
-			}
-			void* trampoline = nullptr;
-			if (MH_CreateHook(target, detour, &trampoline) != MH_OK) {
-				spdlog::warn("DirectInputHook: class hook create failed for {} (MinHook trampoline unavailable)", label);
-				return false;
-			}
-			if (MH_EnableHook(target) != MH_OK) {
-				MH_RemoveHook(target);
-				spdlog::warn("DirectInputHook: class hook enable failed for {}", label);
-				return false;
-			}
-			origins[target] = trampoline;
-			g_classHookTargets.insert(target);
-			spdlog::info("DirectInputHook: class hook active for {} at {:p} (covers every DirectInput joystick device in the process)", label, target);
-			spdlog::default_logger()->flush();
-			return true;
-		}
-
-		static void InstallClassHooks() {
-			static bool attempted = false;
-			if (attempted || g_ownedDevices.empty()) {
-				return;
-			}
-			attempted = true;
-			std::vector<void*> stateTargets;
-			std::vector<void*> dataTargets;
-			void** ownVTable = *reinterpret_cast<void***>(g_ownedDevices.front().second);
-			stateTargets.push_back(ownVTable[kSlotGetDeviceState]);
-			dataTargets.push_back(ownVTable[kSlotGetDeviceData]);
-
-			void* di8A = nullptr;
-			if (g_origDirectInput8Create &&
-				SUCCEEDED(g_origDirectInput8Create(GetModuleHandleW(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8A, &di8A, nullptr)) && di8A) {
-				void** aVtbl = *reinterpret_cast<void***>(di8A);
-				DiCreateDeviceGeneric_t createDeviceA = reinterpret_cast<DiCreateDeviceGeneric_t>(aVtbl[kSlotCreateDevice]);
-				DiEnumDevicesGeneric_t enumDevicesA = reinterpret_cast<DiEnumDevicesGeneric_t>(aVtbl[4]);
-				DiReleaseGeneric_t releaseA = reinterpret_cast<DiReleaseGeneric_t>(aVtbl[kSlotRelease]);
-				ClassProbeContext ctx{ createDeviceA, di8A, nullptr };
-				enumDevicesA(di8A, DI8DEVCLASS_GAMECTRL, reinterpret_cast<void*>(&ClassProbeEnumCallbackA), &ctx, DIEDFL_ATTACHEDONLY);
-				if (ctx.device) {
-					void** deviceVtbl = *reinterpret_cast<void***>(ctx.device);
-					stateTargets.push_back(deviceVtbl[kSlotGetDeviceState]);
-					dataTargets.push_back(deviceVtbl[kSlotGetDeviceData]);
-					void** probeVtbl = *reinterpret_cast<void***>(ctx.device);
-					reinterpret_cast<DiReleaseGeneric_t>(probeVtbl[kSlotRelease])(ctx.device);
-				}
-				releaseA(di8A);
-			} else {
-				spdlog::warn("DirectInputHook: ANSI interface probe unavailable - class hooks cover the Unicode device class only");
-			}
-
-			bool anyState = false;
-			bool anyData = false;
-			for (void* target : stateTargets) {
-				anyState = HookClassFunction(target, reinterpret_cast<void*>(&HookedClassGetDeviceState),
-					g_classGetDeviceStateOrigins, "GetDeviceState(joystick)") || anyState;
-			}
-			for (void* target : dataTargets) {
-				anyData = HookClassFunction(target, reinterpret_cast<void*>(&HookedClassGetDeviceData),
-					g_classGetDeviceDataOrigins, "GetDeviceData(joystick)") || anyData;
-			}
-			g_classGetDeviceStateHooked.store(anyState, std::memory_order_release);
-			g_classGetDeviceDataHooked.store(anyData, std::memory_order_release);
-		}
-
-		static void RemoveClassHooks() {
-			g_classGetDeviceStateHooked.store(false, std::memory_order_release);
-			g_classGetDeviceDataHooked.store(false, std::memory_order_release);
-			for (void* target : g_classHookTargets) {
-				MH_RemoveHook(target);
-			}
-			g_classHookTargets.clear();
-			g_classGetDeviceStateOrigins.clear();
-			g_classGetDeviceDataOrigins.clear();
-		}
 
 		static ULONG STDMETHODCALLTYPE Hooked_Release(IDirectInputDevice8* self) {
 			void** vtableCopy = nullptr;
@@ -1265,7 +991,7 @@ namespace RadarKeys {
 			if (!target) {
 				if (!warnedInstallFailure) {
 					warnedInstallFailure = true;
-					spdlog::warn("DirectInputHook: DirectInput8Create export not found - suppression disabled");
+					spdlog::warn("DirectInputHook: DirectInput8Create export not found - capture disabled");
 				}
 				return false;
 			}
@@ -1710,8 +1436,6 @@ namespace RadarKeys {
 				}
 			}
 
-			InstallClassHooks();
-
 			for (auto& owned : g_ownedDevices) {
 				IDirectInputDevice8* device = owned.second;
 				device->Poll();
@@ -1757,7 +1481,6 @@ namespace RadarKeys {
 		}
 
 		void Shutdown() {
-			RemoveClassHooks();
 			for (auto& owned : g_ownedDevices) {
 				owned.second->Unacquire();
 				owned.second->Release();
