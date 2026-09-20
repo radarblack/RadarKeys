@@ -49,12 +49,11 @@ namespace RadarKeys {
 		spdlog::info("RadarKeys InitThread starting");
 
 		MH_STATUS mhStatus = MH_Initialize();
-
-		DirectInputHook::InstallEarly();
 		if (mhStatus != MH_OK && mhStatus != MH_ERROR_ALREADY_INITIALIZED) {
 			spdlog::error("RadarKeys InitThread: MH_Initialize failed");
 			return;
 		}
+		DirectInputHook::InstallEarly();
 
 		if (!ResolveLuaApi()) {
 			spdlog::error("RadarKeys InitThread: ResolveLuaApi failed - Lua bindings will not work");
