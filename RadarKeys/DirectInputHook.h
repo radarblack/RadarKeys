@@ -11,6 +11,7 @@ namespace RadarKeys {
 		bool IsPlaystationControlHeld(USHORT vKey);
 		bool HasJoystickDevice();
 		bool HasPlaystationDevice();
+		bool PlaystationVocabLatched();
 		bool IsSonyGamepadAttachedToSystem();
 	}
 }
