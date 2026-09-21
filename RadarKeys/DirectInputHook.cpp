@@ -47,7 +47,7 @@ namespace RadarKeys {
 		static GetDeviceState_t g_origGetDeviceState = nullptr;
 		static GetDeviceData_t g_origGetDeviceData = nullptr;
 
-		static IDirectInput8* g_ownDI8 = nullptr;
+		static std::atomic<IDirectInput8*> g_ownDI8{ nullptr };
 
 		static constexpr size_t kDirectInput8VTableSize = 11;
 		static constexpr size_t kDeviceVTableSize = 32;
@@ -673,7 +673,7 @@ namespace RadarKeys {
 			}
 
 			IDirectInputDevice8* device = *lplpDevice;
-			if (self == g_ownDI8) {
+			if (g_ownDI8.load(std::memory_order_acquire) == self) {
 				return hr;
 			}
 			DeviceKind kind;
@@ -1006,7 +1006,9 @@ namespace RadarKeys {
 		}
 
 		static ULONGLONG g_lastEnumTick = 0;
-		static std::atomic<bool> g_deviceListDirty{ false };
+		static std::atomic<uint32_t> g_deviceListEpoch{ 0 };
+		static uint32_t g_seenDeviceListEpoch = 0;
+		static std::atomic<uint32_t> g_enumRunCounter{ 0 };
 		static int g_enumCallbackSeen = 0;
 
 		static bool EnumWarnOnceForGuid(int category, REFGUID guid) {
@@ -1133,7 +1135,11 @@ namespace RadarKeys {
 		}
 
 		void NotifyDeviceListChanged() {
-			g_deviceListDirty.store(true, std::memory_order_release);
+			g_deviceListEpoch.fetch_add(1, std::memory_order_release);
+		}
+
+		uint32_t GetDeviceListSweepCount() {
+			return g_enumRunCounter.load(std::memory_order_acquire);
 		}
 
 		bool IsSonyGamepadAttachedToSystem() {
@@ -1261,7 +1267,11 @@ namespace RadarKeys {
 			};
 
 			IDirectInputDevice8* device = nullptr;
-			HRESULT hrCreate = g_ownDI8->CreateDevice(pdidInstance->guidInstance, &device, nullptr);
+			IDirectInput8* ownDI8 = g_ownDI8.load(std::memory_order_acquire);
+			if (!ownDI8) {
+				return DIENUM_CONTINUE;
+			}
+			HRESULT hrCreate = ownDI8->CreateDevice(pdidInstance->guidInstance, &device, nullptr);
 			if (FAILED(hrCreate) || !device) {
 				if (device) {
 					device->Release();
@@ -1320,7 +1330,7 @@ namespace RadarKeys {
 		}
 
 		static void EnsureOwnDirectInput() {
-			if (g_ownDI8) {
+			if (g_ownDI8.load(std::memory_order_acquire)) {
 				return;
 			}
 			HMODULE module = GetModuleHandleW(L"dinput8.dll");
@@ -1354,13 +1364,13 @@ namespace RadarKeys {
 				}
 				return;
 			}
-			g_ownDI8 = static_cast<IDirectInput8*>(out);
+			g_ownDI8.store(static_cast<IDirectInput8*>(out), std::memory_order_release);
 			spdlog::info(LOG_DIRECTINPUTHOOK_OPENED_INDEPENDENT_IDIRECTINPUT8_INS);
 		}
 
 		void Poll(HWND hwnd) {
 			EnsureOwnDirectInput();
-			if (!g_ownDI8) {
+			if (!g_ownDI8.load(std::memory_order_acquire)) {
 				return;
 			}
 			if (!hwnd) {
@@ -1374,13 +1384,14 @@ namespace RadarKeys {
 			}
 
 			ULONGLONG now = GetTickCount64();
-			const bool deviceListDirty = g_deviceListDirty.load(std::memory_order_acquire);
-			if (deviceListDirty ? (now - g_lastEnumTick >= 1000) : (now - g_lastEnumTick >= 15000)) {
-				g_deviceListDirty.store(false, std::memory_order_release);
+			const uint32_t deviceListEpoch = g_deviceListEpoch.load(std::memory_order_acquire);
+			if ((deviceListEpoch != g_seenDeviceListEpoch) ? (now - g_lastEnumTick >= 1000) : (now - g_lastEnumTick >= 15000)) {
+				g_seenDeviceListEpoch = deviceListEpoch;
+				g_enumRunCounter.fetch_add(1, std::memory_order_release);
 				g_lastEnumTick = now;
 				HWND ctxHwnd = hwnd;
 				g_enumCallbackSeen = 0;
-				HRESULT hrEnum = g_ownDI8->EnumDevices(DI8DEVCLASS_GAMECTRL, &EnumJoysticksCallback, &ctxHwnd, DIEDFL_ATTACHEDONLY);
+				HRESULT hrEnum = g_ownDI8.load(std::memory_order_acquire)->EnumDevices(DI8DEVCLASS_GAMECTRL, &EnumJoysticksCallback, &ctxHwnd, DIEDFL_ATTACHEDONLY);
 				if (FAILED(hrEnum)) {
 					static bool warnedEnum = false;
 					if (!warnedEnum) {
@@ -1466,10 +1477,11 @@ namespace RadarKeys {
 				owned.second->Release();
 			}
 			g_ownedDevices.clear();
-			if (g_ownDI8) {
-				g_ownDI8->Release();
-				g_ownDI8 = nullptr;
+			IDirectInput8* di8 = g_ownDI8.load(std::memory_order_acquire);
+			if (di8) {
+				di8->Release();
 			}
+			g_ownDI8.store(nullptr, std::memory_order_release);
 		}
 	}
 }
