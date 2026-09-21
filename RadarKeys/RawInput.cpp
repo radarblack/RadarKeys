@@ -53,6 +53,8 @@ namespace RadarKeys {
 		static const char* LOG_RAWINPUT_UNREGISTERACTION_HANDLE_FMT_NOT_FOUND = "RawInput UnRegisterAction: handle {} not found for vKey {}";
 		static const char* LOG_RAWINPUT_INITIALIZEINPUT = "Rawinput InitializeInput";
 		static const char* LOG_RAWINPUT_PLAYSTATION_TRIGGER_FEED_ENGAGED = "RawInput: PlayStation trigger feed ENGAGED (L2/R2 to XInput)";
+		static const char* LOG_RAWINPUT_HOOKED_XINPUTGETSTATE_IAT_TRIGGER_FEED = "RawInput: hooked XInputGetState IAT in the game import table for PlayStation trigger feed";
+		static const char* LOG_RAWINPUT_FAILED_HOOK_XINPUTGETSTATE_IAT_TRIGGER_FEED = "RawInput: failed to hook XInputGetState IAT for PlayStation trigger feed";
 
 		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys (written once, before input starts)
 		std::atomic<unsigned char> blockGameKeys[vKeyMax]{}; // block game from recieving message
@@ -136,6 +138,7 @@ namespace RadarKeys {
 		static constexpr int kMaxXInputModules = 6;
 		static XInputGetStateFunc g_origXInputGetState[kMaxXInputModules] = {};
 		static int g_xinputModuleCount = 0;
+		static void* g_xinputHookTargets[kMaxXInputModules] = {};
 		static const char* g_xinputSlotNames[kMaxXInputModules] = {};
 
 		static void ApplyPlaystationTriggerFeed(DWORD result, XINPUT_STATE* pState) {
@@ -186,6 +189,80 @@ namespace RadarKeys {
 			&HookedXInputGetState3, &HookedXInputGetState4, &HookedXInputGetState5,
 		};
 
+		static XInputGetStateFunc g_origXInputGetStateIatFeed = nullptr;
+
+		static DWORD WINAPI HookedXInputGetStateIatFeed(DWORD dwUserIndex, XINPUT_STATE* pState) {
+			DWORD result = g_origXInputGetStateIatFeed ? g_origXInputGetStateIatFeed(dwUserIndex, pState) : ERROR_DEVICE_NOT_CONNECTED;
+			ApplyPlaystationTriggerFeed(result, pState);
+			return result;
+		}
+
+		static void TryHookXInputIATForTriggerFeed() {
+			if (g_origXInputGetStateIatFeed) {
+				return;
+			}
+			HMODULE exe = GetModuleHandleW(nullptr);
+			if (!exe) {
+				return;
+			}
+			BYTE* base = reinterpret_cast<BYTE*>(exe);
+			IMAGE_DOS_HEADER* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+			if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+				return;
+			}
+			IMAGE_NT_HEADERS* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+			if (nt->Signature != IMAGE_NT_SIGNATURE) {
+				return;
+			}
+			const IMAGE_DATA_DIRECTORY& importDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+			if (importDir.VirtualAddress == 0) {
+				return;
+			}
+			IMAGE_IMPORT_DESCRIPTOR* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + importDir.VirtualAddress);
+			for (; desc->Name != 0; ++desc) {
+				const char* dllName = reinterpret_cast<const char*>(base + desc->Name);
+				if (_strnicmp(dllName, "xinput", 6) != 0) {
+					continue;
+				}
+				IMAGE_THUNK_DATA* names = desc->OriginalFirstThunk ? reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->OriginalFirstThunk) : nullptr;
+				IMAGE_THUNK_DATA* thunks = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->FirstThunk);
+				for (int idx = 0; thunks[idx].u1.Function != 0; ++idx) {
+					if (!names || (names[idx].u1.Ordinal & IMAGE_ORDINAL_FLAG) != 0) {
+						continue;
+					}
+					IMAGE_IMPORT_BY_NAME* byName = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(base + names[idx].u1.AddressOfData);
+					if (strcmp(reinterpret_cast<const char*>(byName->Name), "XInputGetState") != 0) {
+						continue;
+					}
+					void* current = reinterpret_cast<void*>(thunks[idx].u1.Function);
+					if (current == reinterpret_cast<void*>(&HookedXInputGetStateIatFeed)) {
+						continue;
+					}
+					bool coveredByMinHook = false;
+					for (int s = 0; s < kMaxXInputModules; ++s) {
+						if (g_xinputHookTargets[s] == current) {
+							coveredByMinHook = true;
+							break;
+						}
+					}
+					if (coveredByMinHook) {
+						continue;
+					}
+					if (!g_origXInputGetStateIatFeed) {
+						g_origXInputGetStateIatFeed = reinterpret_cast<XInputGetStateFunc>(current);
+					}
+					DWORD oldProtect = 0;
+					if (VirtualProtect(&thunks[idx].u1.Function, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+						thunks[idx].u1.Function = reinterpret_cast<ULONG_PTR>(&HookedXInputGetStateIatFeed);
+						VirtualProtect(&thunks[idx].u1.Function, sizeof(void*), oldProtect, &oldProtect);
+						spdlog::info(LOG_RAWINPUT_HOOKED_XINPUTGETSTATE_IAT_TRIGGER_FEED);
+					} else {
+						spdlog::warn(LOG_RAWINPUT_FAILED_HOOK_XINPUTGETSTATE_IAT_TRIGGER_FEED);
+					}
+				}
+			}
+		}
+
 		void EnsureXInputHook() {
 			static ULONGLONG lastModuleScanTick = 0;
 			const ULONGLONG moduleScanNow = GetTickCount64();
@@ -219,6 +296,9 @@ namespace RadarKeys {
 				bool hooked = MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
 					reinterpret_cast<LPVOID*>(&g_origXInputGetState[slot])) == MH_OK &&
 					MH_EnableHook(target) == MH_OK;
+				if (hooked) {
+					g_xinputHookTargets[slot] = target;
+				}
 				if (!hooked) {
 					MH_RemoveHook(target);
 					g_origXInputGetState[slot] = reinterpret_cast<XInputGetStateFunc>(target);
@@ -229,6 +309,7 @@ namespace RadarKeys {
 					kModuleNamesNarrow[nameIndex], slot, hooked ? "hooked for gamepad suppression" : "recognition polling only");
 				spdlog::default_logger()->flush();
 			}
+		TryHookXInputIATForTriggerFeed();
 		}
 
 		std::atomic<bool> g_anyGamepadConnected{ false };
