@@ -210,7 +210,7 @@ namespace RadarKeys {
 			public:
 			explicit BootStampSink(spdlog::sink_ptr downstream)
 			: downstream_(std::move(downstream)) {
-				downstream_->set_pattern("%v");
+				downstream_->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
 			}
 			protected:
 			void sink_it_(const spdlog::details::log_msg& msg) override {
@@ -259,12 +259,18 @@ namespace RadarKeys {
 				auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
 				auto sink = std::make_shared<BootStampSink>(fileSink);
 				auto logger = std::make_shared<spdlog::logger>("radarkeys", sink);
-				logger->set_level(spdlog::level::debug);
+				std::error_code verboseEc;
+				const bool verboseRequested = std::filesystem::exists(
+					logPath.parent_path() / "radarkeys_verbose_log.txt", verboseEc);
+				logger->set_level(verboseRequested ? spdlog::level::trace : spdlog::level::debug);
 				logger->flush_on(spdlog::level::info);
 				spdlog::set_default_logger(logger);
 				spdlog::flush_every(std::chrono::seconds(5));
 				if (!wasClean) {
 					spdlog::warn(LOG_WARNING_PREVIOUS_SESSION_DID_NOT_CLOSE);
+				}
+				if (verboseRequested) {
+					spdlog::info("Verbose (trace-level) logging ENABLED (marker file: mod/radarKeys/radarkeys_verbose_log.txt)");
 				}
 				spdlog::info(LOG_RADARKEYS_DIAGNOSTICS_SINGLE_LOG_FMT_PREVIOUS,
 				logPath.string(), prevPath.string());
