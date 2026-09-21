@@ -411,35 +411,6 @@ namespace RadarKeys {
 			return nullptr;
 		}
 
-		static LONG AxisNeutral(const DeviceInfo& info, size_t offsetBytes, bool stickAxis) {
-			size_t idx = offsetBytes / 4;
-			const AxisRange* r = ResolveAxisRange(info, idx);
-			if (r) {
-				if (stickAxis) {
-					return r->minV + (r->maxV - r->minV) / 2;
-				}
-				return r->minV;
-			}
-			if (idx < 32 && info.observed[idx].known) {
-				const AxisRange& obs = info.observed[idx];
-				return stickAxis ? obs.minV + (obs.maxV - obs.minV) / 2 : obs.minV;
-			}
-			return 0;
-		}
-
-		static bool IsStickAxisOffset(DWORD offsetBytes, bool isPlaystation) {
-			if (offsetBytes == DIJOFS_X || offsetBytes == DIJOFS_Y) {
-				return true;
-			}
-			if (offsetBytes == DIJOFS_Z || offsetBytes == DIJOFS_RZ) {
-				return isPlaystation;
-			}
-			if (offsetBytes == DIJOFS_RX || offsetBytes == DIJOFS_RY) {
-				return !isPlaystation;
-			}
-			return false;
-		}
-
 		static HRESULT STDMETHODCALLTYPE Hooked_GetDeviceState(IDirectInputDevice8* self,
 			DWORD cbData, LPVOID lpvData) {
 			GetDeviceState_t origGetDeviceState = OrigGetDeviceState(self);
@@ -560,84 +531,6 @@ namespace RadarKeys {
 			    rgdod[i].dwData = 0;
 			}								
 			return hr;
-		}
-
-		static bool IsSelfOpenedDevice(IDirectInputDevice8* self) {
-			std::lock_guard<std::mutex> lock(g_mutex);
-			return g_selfDevicePointers.find(self) != g_selfDevicePointers.end();
-		}
-
-		static DeviceInfo AcquireGameJoystickInfo(IDirectInputDevice8* self, const LPVOID lpvData, DWORD cbData) {
-			DeviceInfo info;
-			std::lock_guard<std::mutex> lock(g_mutex);
-			DeviceInfo& stored = g_deviceInfo[self];
-			if (stored.kind == DeviceKind::Unknown) {
-				stored.kind = DeviceKind::Joystick;
-				const DeviceInfo* firstSelf = nullptr;
-				const DeviceInfo* psSelf = nullptr;
-				for (const auto& entry : g_deviceInfo) {
-					if (entry.first == self || !entry.second.selfOpened) {
-						continue;
-					}
-					if (!firstSelf) {
-						firstSelf = &entry.second;
-					}
-					if (entry.second.isPlaystation) {
-						psSelf = &entry.second;
-						break;
-					}
-				}
-				const DeviceInfo* seed = psSelf ? psSelf : firstSelf;
-				if (seed) {
-					for (size_t a = 0; a < 8; ++a) {
-						stored.observed[a] = seed->observed[a];
-					}
-					stored.isPlaystation = seed->isPlaystation;
-				}
-			}
-			if (lpvData && cbData >= 8 * sizeof(LONG)) {
-				const LONG* axes = static_cast<const LONG*>(lpvData);
-				for (size_t a = 0; a < 8; ++a) {
-					AxisRange& obs = stored.observed[a];
-					if (!obs.known) {
-						obs.known = true;
-						obs.minV = axes[a];
-						obs.maxV = axes[a];
-					} else {
-						if (axes[a] < obs.minV) obs.minV = axes[a];
-						if (axes[a] > obs.maxV) obs.maxV = axes[a];
-					}
-				}
-			}
-			info = stored;
-			return info;
-		}
-
-		static bool JoystickStateActive(const DeviceInfo& info, LPVOID lpvData, DWORD cbData) {
-			const unsigned char* bytes = static_cast<const unsigned char*>(lpvData);
-			if (cbData >= offsetof(DIJOYSTATE, rgbButtons) + 4) {
-				for (size_t i = 0; i < 4; ++i) {
-					if (bytes[offsetof(DIJOYSTATE, rgbButtons) + i] & 0x80) {
-						return true;
-					}
-				}
-			}
-			if (cbData >= 8 * sizeof(LONG)) {
-				const LONG* axes = static_cast<const LONG*>(lpvData);
-				for (size_t a = 0; a < 8; ++a) {
-					DWORD offsetBytes = static_cast<DWORD>(a * sizeof(LONG));
-					if (axes[a] != AxisNeutral(info, offsetBytes, IsStickAxisOffset(offsetBytes, info.isPlaystation))) {
-						return true;
-					}
-				}
-			}
-			if (cbData >= offsetof(DIJOYSTATE, rgdwPOV) + sizeof(DWORD)) {
-				const DWORD* pov = reinterpret_cast<const DWORD*>(bytes + offsetof(DIJOYSTATE, rgdwPOV));
-				if (pov[0] <= 35999) {
-					return true;
-				}
-			}
-			return false;
 		}
 
 		typedef HRESULT(STDMETHODCALLTYPE* DiEnumObjects_t)(IDirectInputDevice8*, void*, void*, DWORD);
@@ -1471,17 +1364,5 @@ namespace RadarKeys {
 			}
 		}
 
-		void Shutdown() {
-			for (auto& owned : g_ownedDevices) {
-				owned.second->Unacquire();
-				owned.second->Release();
-			}
-			g_ownedDevices.clear();
-			IDirectInput8* di8 = g_ownDI8.load(std::memory_order_acquire);
-			if (di8) {
-				di8->Release();
-			}
-			g_ownDI8.store(nullptr, std::memory_order_release);
-		}
 	}
 }
