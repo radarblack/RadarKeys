@@ -12,6 +12,7 @@
 #include <new>
 #include <cstdint>
 #include <mmsystem.h>
+		#include <Dbt.h>
 #include <algorithm>
 #include <utility>
 #include <mutex>
