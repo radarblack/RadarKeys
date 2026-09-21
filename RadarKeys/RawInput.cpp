@@ -52,6 +52,7 @@ namespace RadarKeys {
 		static const char* LOG_RAWINPUT_UNREGISTERACTION_REMOVED_HANDLE_FMT_FROM = "RawInput UnRegisterAction: removed handle {} from vKey {}";
 		static const char* LOG_RAWINPUT_UNREGISTERACTION_HANDLE_FMT_NOT_FOUND = "RawInput UnRegisterAction: handle {} not found for vKey {}";
 		static const char* LOG_RAWINPUT_INITIALIZEINPUT = "Rawinput InitializeInput";
+		static const char* LOG_RAWINPUT_PLAYSTATION_TRIGGER_FEED_ENGAGED = "RawInput: PlayStation trigger feed ENGAGED (L2/R2 to XInput)";
 
 		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys (written once, before input starts)
 		std::atomic<unsigned char> blockGameKeys[vKeyMax]{}; // block game from recieving message
@@ -137,6 +138,27 @@ namespace RadarKeys {
 		static int g_xinputModuleCount = 0;
 		static const char* g_xinputSlotNames[kMaxXInputModules] = {};
 
+		static void ApplyPlaystationTriggerFeed(DWORD result, XINPUT_STATE* pState) {
+			if (result != ERROR_SUCCESS || !pState) {
+				return;
+			}
+			const bool l2 = realStateHeld[VK_PS_L2].load(std::memory_order_relaxed) != 0;
+			const bool r2 = realStateHeld[VK_PS_R2].load(std::memory_order_relaxed) != 0;
+			if (l2) {
+				pState->Gamepad.bLeftTrigger = 255;
+			}
+			if (r2) {
+				pState->Gamepad.bRightTrigger = 255;
+			}
+			static std::atomic<unsigned char> feedLogged{ 0 };
+			if ((l2 || r2) && feedLogged.load(std::memory_order_relaxed) == 0) {
+				unsigned char expected = 0;
+				if (feedLogged.compare_exchange_strong(expected, 1)) {
+					spdlog::info(LOG_RAWINPUT_PLAYSTATION_TRIGGER_FEED_ENGAGED);
+				}
+			}
+		}
+
 		static void SuppressXInputStateIfBlocked(DWORD result, XINPUT_STATE* pState) {
 			if (result == ERROR_SUCCESS && pState && g_gamepadBlockedToGame.load() != false) {
 				std::memset(&pState->Gamepad, 0, sizeof(pState->Gamepad));
@@ -146,6 +168,7 @@ namespace RadarKeys {
 #define RADARKEYS_DEFINE_XINPUT_DETOUR(N) \
 		static DWORD WINAPI HookedXInputGetState##N(DWORD dwUserIndex, XINPUT_STATE* pState) { \
 			DWORD result = g_origXInputGetState[N] ? g_origXInputGetState[N](dwUserIndex, pState) : ERROR_DEVICE_NOT_CONNECTED; \
+			ApplyPlaystationTriggerFeed(result, pState); \
 			SuppressXInputStateIfBlocked(result, pState); \
 			return result; \
 		}
