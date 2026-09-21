@@ -12,7 +12,7 @@
 #include <new>
 #include <cstdint>
 #include <mmsystem.h>
-		#include <Dbt.h>
+#include <Dbt.h>
 #include <algorithm>
 #include <utility>
 #include <mutex>
@@ -33,6 +33,22 @@ namespace RadarKeys {
 		std::atomic<USHORT> currFlags[vKeyMax];
 		namespace { struct CurrFlagsFiller { CurrFlagsFiller() { for (int i = 0; i < vKeyMax; ++i) { currFlags[i].store(static_cast<USHORT>(RI_KEY_BREAK), std::memory_order_relaxed); } } }; }
 		static CurrFlagsFiller g_currFlagsFiller;
+		static const char* LOG_RAWINPUT_XINPUTGETSTATE_FMT_SLOT_FMT_FMT = "RawInput: XInputGetState in {} (slot {}) - {}";
+		static const char* LOG_RAWINPUT_HOOKED_CREATEFILEW_GAMEPAD_HID_SUPPRESSION = "RawInput: hooked CreateFileW for gamepad HID suppression";
+		static const char* LOG_RAWINPUT_FAILED_HOOK_CREATEFILEW_GAMEPAD_HID = "RawInput: failed to hook CreateFileW for gamepad HID suppression";
+		static const char* LOG_RAWINPUT_HOOKED_READFILE_GAMEPAD_HID_SUPPRESSION = "RawInput: hooked ReadFile for gamepad HID suppression";
+		static const char* LOG_RAWINPUT_FAILED_HOOK_READFILE_GAMEPAD_HID = "RawInput: failed to hook ReadFile for gamepad HID suppression";
+		static const char* LOG_RAWINPUT_HOOKED_CLOSEHANDLE_GAMEPAD_HID_SUPPRESSION = "RawInput: hooked CloseHandle for gamepad HID suppression";
+		static const char* LOG_RAWINPUT_FAILED_HOOK_CLOSEHANDLE_GAMEPAD_HID = "RawInput: failed to hook CloseHandle for gamepad HID suppression";
+		static const char* LOG_RAWINPUT_PLAYSTATION_XINPUT_BRIDGE_FMT_XINPUTSLOTS = "RawInput: PlayStation XInput bridge {} (xinputSlots={}, directInputPlaystationDevice={}, sonyGamepadInSystem={})";
+		static const char* LOG_RAWINPUT_PROCESSKEY_IGNORING_OUT_RANGE_VKEY = "RawInput::ProcessKey: ignoring out-of-range VKey {}";
+		static const char* LOG_RAWINPUT_REGISTERACTION_INVALID_VKEY_FMT = "RawInput::RegisterAction: invalid VKey {}";
+		static const char* LOG_RAWINPUT_REGISTERACTION_VKEY_FMT = "RawInput RegisterAction for vKey:{}";
+		static const char* LOG_RAWINPUT_UNREGISTERACTION_NO_ACTIONS_VKEY_FMT = "RawInput UnRegisterAction: No actions for vKey {}";
+		static const char* LOG_RAWINPUT_UNREGISTERACTION_REMOVED_HANDLE_FMT_FROM = "RawInput UnRegisterAction: removed handle {} from vKey {}";
+		static const char* LOG_RAWINPUT_UNREGISTERACTION_HANDLE_FMT_NOT_FOUND = "RawInput UnRegisterAction: handle {} not found for vKey {}";
+		static const char* LOG_RAWINPUT_INITIALIZEINPUT = "Rawinput InitializeInput";
+
 		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys (written once, before input starts)
 		std::atomic<unsigned char> blockGameKeys[vKeyMax]{}; // block game from recieving message
 		std::atomic<unsigned char> realStateHeld[vKeyMax]{};
@@ -183,7 +199,7 @@ namespace RadarKeys {
 				}
 				g_xinputSlotNames[slot] = kModuleNamesNarrow[nameIndex];
 				++g_xinputModuleCount;
-				spdlog::info("RawInput: XInputGetState in {} (slot {}) - {}",
+				spdlog::info(LOG_RAWINPUT_XINPUTGETSTATE_FMT_SLOT_FMT_FMT,
 					kModuleNamesNarrow[nameIndex], slot, hooked ? "hooked for gamepad suppression" : "recognition polling only");
 				spdlog::default_logger()->flush();
 			}
@@ -279,33 +295,33 @@ namespace RadarKeys {
 			if (createFileTarget && MH_CreateHook(createFileTarget, reinterpret_cast<LPVOID>(&HookedCreateFileWGamepad),
 				reinterpret_cast<LPVOID*>(&g_origCreateFileW)) == MH_OK &&
 				MH_EnableHook(createFileTarget) == MH_OK) {
-				spdlog::info("RawInput: hooked CreateFileW for gamepad HID suppression");
+				spdlog::info(LOG_RAWINPUT_HOOKED_CREATEFILEW_GAMEPAD_HID_SUPPRESSION);
 			} else {
 				MH_RemoveHook(createFileTarget);
 				g_origCreateFileW = nullptr;
-				spdlog::warn("RawInput: failed to hook CreateFileW for gamepad HID suppression");
+				spdlog::warn(LOG_RAWINPUT_FAILED_HOOK_CREATEFILEW_GAMEPAD_HID);
 			}
 
 			void* readFileTarget = reinterpret_cast<void*>(GetProcAddress(kernel32, "ReadFile"));
 			if (readFileTarget && MH_CreateHook(readFileTarget, reinterpret_cast<LPVOID>(&HookedReadFileGamepad),
 				reinterpret_cast<LPVOID*>(&g_origReadFile)) == MH_OK &&
 				MH_EnableHook(readFileTarget) == MH_OK) {
-				spdlog::info("RawInput: hooked ReadFile for gamepad HID suppression");
+				spdlog::info(LOG_RAWINPUT_HOOKED_READFILE_GAMEPAD_HID_SUPPRESSION);
 			} else {
 				MH_RemoveHook(readFileTarget);
 				g_origReadFile = nullptr;
-				spdlog::warn("RawInput: failed to hook ReadFile for gamepad HID suppression");
+				spdlog::warn(LOG_RAWINPUT_FAILED_HOOK_READFILE_GAMEPAD_HID);
 			}
 
 			void* closeHandleTarget = reinterpret_cast<void*>(GetProcAddress(kernel32, "CloseHandle"));
 			if (closeHandleTarget && MH_CreateHook(closeHandleTarget, reinterpret_cast<LPVOID>(&HookedCloseHandleGamepad),
 				reinterpret_cast<LPVOID*>(&g_origCloseHandle)) == MH_OK &&
 				MH_EnableHook(closeHandleTarget) == MH_OK) {
-				spdlog::info("RawInput: hooked CloseHandle for gamepad HID suppression");
+				spdlog::info(LOG_RAWINPUT_HOOKED_CLOSEHANDLE_GAMEPAD_HID_SUPPRESSION);
 			} else {
 				MH_RemoveHook(closeHandleTarget);
 				g_origCloseHandle = nullptr;
-				spdlog::warn("RawInput: failed to hook CloseHandle for gamepad HID suppression");
+				spdlog::warn(LOG_RAWINPUT_FAILED_HOOK_CLOSEHANDLE_GAMEPAD_HID);
 			}
 			spdlog::default_logger()->flush();
 		}
@@ -436,7 +452,7 @@ namespace RadarKeys {
 				if (wantBridge != bridgeActive) {
 					bridgeActive = wantBridge;
 					g_psBridgeActive.store(bridgeActive, std::memory_order_relaxed);
-					spdlog::info("RawInput: PlayStation XInput bridge {} (xinputSlots={}, directInputPlaystationDevice={}, sonyGamepadInSystem={})",
+					spdlog::info(LOG_RAWINPUT_PLAYSTATION_XINPUT_BRIDGE_FMT_XINPUTSLOTS,
 						bridgeActive ? "ENGAGED" : "released", connectedSlots,
 						DirectInputHook::HasPlaystationDevice(),
 						DirectInputHook::IsSonyGamepadAttachedToSystem());
@@ -499,7 +515,7 @@ namespace RadarKeys {
 			//spdlog::trace("ProcessKey");//DEBUG
 			USHORT vKey = pRaw->data.keyboard.VKey;
 			if (vKey >= vKeyMax) {
-				spdlog::warn("RawInput::ProcessKey: ignoring out-of-range VKey {}", vKey);
+				spdlog::warn(LOG_RAWINPUT_PROCESSKEY_IGNORING_OUT_RANGE_VKEY, vKey);
 				return;
 			}
 
@@ -658,10 +674,10 @@ namespace RadarKeys {
 
 		ActionHandle RegisterAction(USHORT vKey, ButtonAction action) {
 			if (vKey == 0 || vKey >= vKeyMax || !action) {
-				spdlog::warn("RawInput::RegisterAction: invalid VKey {}", vKey);
+				spdlog::warn(LOG_RAWINPUT_REGISTERACTION_INVALID_VKEY_FMT, vKey);
 				return 0;
 			}
-			spdlog::debug("RawInput RegisterAction for vKey:{}", vKey);
+			spdlog::debug(LOG_RAWINPUT_REGISTERACTION_VKEY_FMT, vKey);
 			std::lock_guard<std::recursive_mutex> lock(g_actionMutex);
 			if (buttonActions[vKey] == nullptr) {
 				buttonActions[vKey] = new std::list<std::pair<ActionHandle, ButtonAction>>();
@@ -678,7 +694,7 @@ namespace RadarKeys {
 			}
 			std::lock_guard<std::recursive_mutex> lock(g_actionMutex);
 			if (buttonActions[vKey] == nullptr) {
-				spdlog::warn("RawInput UnRegisterAction: No actions for vKey {}", vKey);
+				spdlog::warn(LOG_RAWINPUT_UNREGISTERACTION_NO_ACTIONS_VKEY_FMT, vKey);
 				return;
 			}
 			else {
@@ -695,13 +711,13 @@ namespace RadarKeys {
 			std::lock_guard<std::recursive_mutex> lock(g_actionMutex);
 			std::list<std::pair<ActionHandle, ButtonAction>>* actions = buttonActions[vKey];
 			if (actions == nullptr) {
-				spdlog::warn("RawInput UnRegisterAction: No actions for vKey {}", vKey);
+				spdlog::warn(LOG_RAWINPUT_UNREGISTERACTION_NO_ACTIONS_VKEY_FMT, vKey);
 				return;
 			}
 			for (auto it = actions->begin(); it != actions->end(); ++it) {
 				if (it->first == handle) {
 					actions->erase(it);
-					spdlog::debug("RawInput UnRegisterAction: removed handle {} from vKey {}", handle, vKey);
+					spdlog::debug(LOG_RAWINPUT_UNREGISTERACTION_REMOVED_HANDLE_FMT_FROM, handle, vKey);
 					if (actions->empty()) {
 						delete buttonActions[vKey];
 						buttonActions[vKey] = nullptr;
@@ -709,7 +725,7 @@ namespace RadarKeys {
 					return;
 				}
 			}
-			spdlog::warn("RawInput UnRegisterAction: handle {} not found for vKey {}", handle, vKey);
+			spdlog::warn(LOG_RAWINPUT_UNREGISTERACTION_HANDLE_FMT_NOT_FOUND, handle, vKey);
 		}//UnRegisterAction (handle)
 
 		bool IsKeyDown(USHORT vKey) {
@@ -785,7 +801,7 @@ namespace RadarKeys {
 		}//InitIgnoreKeys
 
 		void InitializeInput() {
-			spdlog::debug("Rawinput InitializeInput");
+			spdlog::debug(LOG_RAWINPUT_INITIALIZEINPUT);
 
 			for (int i = 0; i < vKeyMax; ++i) {
 			currFlags[i].store(static_cast<USHORT>(RI_KEY_BREAK), std::memory_order_relaxed);
