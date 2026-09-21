@@ -11,6 +11,9 @@
 
 namespace RadarKeys {
 	namespace ModKeyBindings {
+		static const char* LOG_MODKEYBINDINGS_MIGRATED_FMT_SCRIPT_S_WORTH = "ModKeyBindings: migrated {} script(s) worth of overrides from legacy {}";
+		static const char* LOG_MODKEYBINDINGS_LOADFROMENTRIES_LOADED_OVERRIDES_FMT_ = "ModKeyBindings::LoadFromEntries: loaded overrides for {} script(s){}";
+
 		static std::map<std::string, std::map<std::string, std::string>> overrides;
 		static std::map<std::string, std::map<std::string, bool>> disabledMap;
 		static bool loaded = false;
@@ -57,7 +60,7 @@ namespace RadarKeys {
 			}
 
 			if (foundAny) {
-				spdlog::info("ModKeyBindings: migrated {} script(s) worth of overrides from legacy {}", overrides.size(), legacyPath.string());
+				spdlog::info(LOG_MODKEYBINDINGS_MIGRATED_FMT_SCRIPT_S_WORTH, overrides.size(), legacyPath.string());
 			}
 			return foundAny;
 		}
@@ -117,7 +120,7 @@ namespace RadarKeys {
 			}
 
 			loaded = true;
-			spdlog::debug("ModKeyBindings::LoadFromEntries: loaded overrides for {} script(s){}",
+			spdlog::debug(LOG_MODKEYBINDINGS_LOADFROMENTRIES_LOADED_OVERRIDES_FMT_,
 				overrides.size(), migrated ? " (migrated from legacy file)" : "");
 
 			if (migrated) {
