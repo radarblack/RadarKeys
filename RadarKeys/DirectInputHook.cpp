@@ -51,6 +51,31 @@ namespace RadarKeys {
 
 		static constexpr size_t kDirectInput8VTableSize = 11;
 		static constexpr size_t kDeviceVTableSize = 32;
+		static const char* LOG_DIRECTINPUTHOOK_DEVICE_P_PLAYSTATION_BUTTON_MAPPING = "DirectInputHook: device {:p} PlayStation button mapping {} (product:\"{}\", instance:\"{}\", vid:{:04X}, pid:{:04X})";
+		static const char* LOG_DIRECTINPUTHOOK_WRAPPED_DEVICE_P_INITIAL_KIND = "DirectInputHook: wrapped device {:p} initial kind:{} ({})";
+		static const char* LOG_DIRECTINPUTHOOK_DIRECTINPUT8CREATE_CALLED_DWVERSION_ = "DirectInputHook: DirectInput8Create called (dwVersion={:08X}, riid={:08X}, hr={:08X}, wrapping={})";
+		static const char* LOG_DIRECTINPUTHOOK_WRAPPED_IDIRECTINPUT8_INSTANCE_P = "DirectInputHook: wrapped IDirectInput8 instance {:p}";
+		static const char* LOG_DIRECTINPUTHOOK_DIRECTINPUT8CREATE_EXPORT_NOT_FOUND_ = "DirectInputHook: DirectInput8Create export not found - capture disabled";
+		static const char* LOG_DIRECTINPUTHOOK_FAILED_HOOK_DIRECTINPUT8CREATE_MH_FM = "DirectInputHook: failed to hook DirectInput8Create (mh={}) - will retry";
+		static const char* LOG_DIRECTINPUTHOOK_FAILED_ENABLE_DIRECTINPUT8CREATE_HOO = "DirectInputHook: failed to enable DirectInput8Create hook (mh={}) - will retry";
+		static const char* LOG_DIRECTINPUTHOOK_HOOKED_DIRECTINPUT8CREATE_LOADED_DIN = "DirectInputHook: hooked DirectInput8Create in the loaded dinput8.dll (chains through any proxy such as IHHook's)";
+		static const char* LOG_DIRECTINPUTHOOK_PASSIVE_VTABLE_WRAPPING_FMT_KILL = "DirectInputHook: passive vtable wrapping {} (kill switch: mod/radarKeys/di_vtable_wrap_off.txt)";
+		static const char* LOG_DIRECTINPUTHOOK_SELF_OPENED_DEVICE_P_PLAYSTATION = "DirectInputHook: self-opened device {:p} PlayStation button mapping {} (product:\"{}\", vid:{:04X}, pid:{:04X})";
+		static const char* LOG_DIRECTINPUTHOOK_CREATEDEVICE_FAILED_FMT_HR_08X = "DirectInputHook: CreateDevice failed for \"{}\" (hr={:08X})";
+		static const char* LOG_DIRECTINPUTHOOK_SETDATAFORMAT_FAILED_FMT_CUSTOM_HR = "DirectInputHook: SetDataFormat failed for \"{}\" (custom hr={:08X}, default hr={:08X})";
+		static const char* LOG_DIRECTINPUTHOOK_FMT_ACCEPTED_ONLY_DEFAULT_JOYSTICK = "DirectInputHook: \"{}\" accepted only the default joystick data format (custom hr={:08X})";
+		static const char* LOG_DIRECTINPUTHOOK_SETCOOPERATIVELEVEL_FAILED_FMT_HR_08 = "DirectInputHook: SetCooperativeLevel failed for \"{}\" (hr={:08X})";
+		static const char* LOG_DIRECTINPUTHOOK_ACQUIRE_FAILED_FMT_HR_08X = "DirectInputHook: Acquire failed for \"{}\" (hr={:08X})";
+		static const char* LOG_DIRECTINPUTHOOK_SELF_OPENED_JOYSTICK_DEVICE_P = "DirectInputHook: self-opened joystick device {:p} ({})";
+		static const char* LOG_DIRECTINPUTHOOK_SELF_POLLING_UNAVAILABLE_DINPUT8_DLL = "DirectInputHook: self-polling unavailable - dinput8.dll could not be loaded";
+		static const char* LOG_DIRECTINPUTHOOK_SELF_POLLING_UNAVAILABLE_DIRECTINPUT = "DirectInputHook: self-polling unavailable - DirectInput8Create export not found";
+		static const char* LOG_DIRECTINPUTHOOK_SELF_POLLING_UNAVAILABLE_IDIRECTINPU = "DirectInputHook: self-polling unavailable - IDirectInput8 creation failed (hr={:08X})";
+		static const char* LOG_DIRECTINPUTHOOK_OPENED_INDEPENDENT_IDIRECTINPUT8_INS = "DirectInputHook: opened an independent IDirectInput8 instance for self-driven controller polling";
+		static const char* LOG_DIRECTINPUTHOOK_SELF_POLLING_ACTIVE_HWND_P = "DirectInputHook: self-polling active (hwnd={:p})";
+		static const char* LOG_DIRECTINPUTHOOK_ENUMDEVICES_FAILED_HR_08X = "DirectInputHook: EnumDevices failed (hr={:08X})";
+		static const char* LOG_DIRECTINPUTHOOK_WINDOWS_REPORTS_ZERO_DIRECTINPUT_GAM = "DirectInputHook: Windows reports zero DirectInput game controllers - connected pads are XInput-only or hidden by another driver";
+		static const char* LOG_DIRECTINPUTHOOK_STEAM_VIRTUAL_360_DEVICE_P = "DirectInputHook: Steam virtual 360 device {:p} PlayStation identity {} (Sony pad {})";
+
 		static constexpr size_t kSlotGetCapabilities = 3;
 		static constexpr size_t kSlotRelease = 2;
 		static constexpr size_t kSlotGetProperty = 5;
@@ -319,7 +344,7 @@ namespace RadarKeys {
 
 			it->second.isPlaystation = nameMatch || vidMatch ||
 				(it->second.steamVirtual360 && SonyGamepadPresentInSystem());
-			spdlog::info("DirectInputHook: device {:p} PlayStation button mapping {} (product:\"{}\", instance:\"{}\", vid:{:04X}, pid:{:04X})",
+			spdlog::info(LOG_DIRECTINPUTHOOK_DEVICE_P_PLAYSTATION_BUTTON_MAPPING,
 				static_cast<void*>(self), it->second.isPlaystation ? "ENABLED" : "disabled",
 				toNarrow(productName), toNarrow(instanceName), vendorId, productId);
 		}
@@ -692,7 +717,7 @@ namespace RadarKeys {
 				g_deviceInfo[device].origVTable = origVtbl;
 			}
 
-			spdlog::debug("DirectInputHook: wrapped device {:p} initial kind:{} ({})",
+			spdlog::debug(LOG_DIRECTINPUTHOOK_WRAPPED_DEVICE_P_INITIAL_KIND,
 				static_cast<void*>(device), static_cast<int>(kind), installed ? "vtable wrapped" : "already wrapped");
 			spdlog::default_logger()->flush();
 			return hr;
@@ -711,7 +736,7 @@ namespace RadarKeys {
 		static HRESULT WINAPI Hooked_DirectInput8Create(HINSTANCE hinst, DWORD dwVersion,
 			REFGUID riidltf, LPVOID* ppvOut, LPUNKNOWN punkOuter) {
 			HRESULT hr = g_origDirectInput8Create(hinst, dwVersion, riidltf, ppvOut, punkOuter);
-			spdlog::info("DirectInputHook: DirectInput8Create called (dwVersion={:08X}, riid={:08X}, hr={:08X}, wrapping={})",
+			spdlog::info(LOG_DIRECTINPUTHOOK_DIRECTINPUT8CREATE_CALLED_DWVERSION_,
 				dwVersion, riidltf.Data1, static_cast<unsigned>(hr),
 				(SUCCEEDED(hr) && PassiveWrapEnabled()) ? "on" : "off");
 			spdlog::default_logger()->flush();
@@ -742,7 +767,7 @@ namespace RadarKeys {
 				g_di8OrigVTables[directInput] = origVtbl;
 			}
 
-			spdlog::debug("DirectInputHook: wrapped IDirectInput8 instance {:p}", static_cast<void*>(directInput));
+			spdlog::debug(LOG_DIRECTINPUTHOOK_WRAPPED_IDIRECTINPUT8_INSTANCE_P, static_cast<void*>(directInput));
 			spdlog::default_logger()->flush();
 			return hr;
 		}
@@ -939,7 +964,7 @@ namespace RadarKeys {
 			if (!target) {
 				if (!warnedInstallFailure) {
 					warnedInstallFailure = true;
-					spdlog::warn("DirectInputHook: DirectInput8Create export not found - capture disabled");
+					spdlog::warn(LOG_DIRECTINPUTHOOK_DIRECTINPUT8CREATE_EXPORT_NOT_FOUND_);
 				}
 				return false;
 			}
@@ -951,7 +976,7 @@ namespace RadarKeys {
 			if (!createUsable) {
 				if (!warnedInstallFailure) {
 					warnedInstallFailure = true;
-					spdlog::warn("DirectInputHook: failed to hook DirectInput8Create (mh={}) - will retry", static_cast<int>(createStatus));
+					spdlog::warn(LOG_DIRECTINPUTHOOK_FAILED_HOOK_DIRECTINPUT8CREATE_MH_FM, static_cast<int>(createStatus));
 				}
 				return false;
 			}
@@ -959,14 +984,14 @@ namespace RadarKeys {
 			if (enableStatus != MH_OK && enableStatus != MH_ERROR_ENABLED) {
 				if (!warnedInstallFailure) {
 					warnedInstallFailure = true;
-					spdlog::warn("DirectInputHook: failed to enable DirectInput8Create hook (mh={}) - will retry", static_cast<int>(enableStatus));
+					spdlog::warn(LOG_DIRECTINPUTHOOK_FAILED_ENABLE_DIRECTINPUT8CREATE_HOO, static_cast<int>(enableStatus));
 				}
 				return false;
 			}
 
 			g_directInput8CreateHooked = true;
-			spdlog::info("DirectInputHook: hooked DirectInput8Create in the loaded dinput8.dll (chains through any proxy such as IHHook's)");
-			spdlog::info("DirectInputHook: passive vtable wrapping {} (kill switch: mod/radarKeys/di_vtable_wrap_off.txt)",
+			spdlog::info(LOG_DIRECTINPUTHOOK_HOOKED_DIRECTINPUT8CREATE_LOADED_DIN);
+			spdlog::info(LOG_DIRECTINPUTHOOK_PASSIVE_VTABLE_WRAPPING_FMT_KILL,
 				PassiveWrapEnabled() ? "ENABLED" : "DISABLED");
 			spdlog::default_logger()->flush();
 			return true;
@@ -1214,7 +1239,7 @@ namespace RadarKeys {
 			}
 			info.rangeQueried = true;
 
-			spdlog::info("DirectInputHook: self-opened device {:p} PlayStation button mapping {} (product:\"{}\", vid:{:04X}, pid:{:04X})",
+			spdlog::info(LOG_DIRECTINPUTHOOK_SELF_OPENED_DEVICE_P_PLAYSTATION,
 				static_cast<void*>(device), info.isPlaystation ? "ENABLED" : "disabled",
 				toNarrow(diInfo.tszProductName), vendorId, productId);
 		}
@@ -1242,7 +1267,7 @@ namespace RadarKeys {
 					device->Release();
 				}
 				if (EnumWarnOnceForGuid(0, pdidInstance->guidInstance)) {
-					spdlog::warn("DirectInputHook: CreateDevice failed for \"{}\" (hr={:08X})",
+					spdlog::warn(LOG_DIRECTINPUTHOOK_CREATEDEVICE_FAILED_FMT_HR_08X,
 						toNarrow(pdidInstance->tszProductName), static_cast<unsigned>(hrCreate));
 				}
 				return DIENUM_CONTINUE;
@@ -1254,24 +1279,24 @@ namespace RadarKeys {
 				if (FAILED(hrFallback)) {
 					device->Release();
 					if (EnumWarnOnceForGuid(1, pdidInstance->guidInstance)) {
-						spdlog::warn("DirectInputHook: SetDataFormat failed for \"{}\" (custom hr={:08X}, default hr={:08X})",
+						spdlog::warn(LOG_DIRECTINPUTHOOK_SETDATAFORMAT_FAILED_FMT_CUSTOM_HR,
 							toNarrow(pdidInstance->tszProductName), static_cast<unsigned>(hrFormat), static_cast<unsigned>(hrFallback));
 					}
 					return DIENUM_CONTINUE;
 				}
-				spdlog::info("DirectInputHook: \"{}\" accepted only the default joystick data format (custom hr={:08X})",
+				spdlog::info(LOG_DIRECTINPUTHOOK_FMT_ACCEPTED_ONLY_DEFAULT_JOYSTICK,
 					toNarrow(pdidInstance->tszProductName), static_cast<unsigned>(hrFormat));
 			}
 			if (hwnd) {
 				HRESULT hrCoop = device->SetCooperativeLevel(hwnd, DISCL_BACKGROUND | DISCL_NONEXCLUSIVE);
 				if (FAILED(hrCoop) && EnumWarnOnceForGuid(2, pdidInstance->guidInstance)) {
-					spdlog::warn("DirectInputHook: SetCooperativeLevel failed for \"{}\" (hr={:08X})",
+					spdlog::warn(LOG_DIRECTINPUTHOOK_SETCOOPERATIVELEVEL_FAILED_FMT_HR_08,
 						toNarrow(pdidInstance->tszProductName), static_cast<unsigned>(hrCoop));
 				}
 			}
 			HRESULT hrAcquire = device->Acquire();
 			if (FAILED(hrAcquire) && hrAcquire != S_FALSE && EnumWarnOnceForGuid(3, pdidInstance->guidInstance)) {
-				spdlog::warn("DirectInputHook: Acquire failed for \"{}\" (hr={:08X})",
+				spdlog::warn(LOG_DIRECTINPUTHOOK_ACQUIRE_FAILED_FMT_HR_08X,
 					toNarrow(pdidInstance->tszProductName), static_cast<unsigned>(hrAcquire));
 			}
 
@@ -1288,7 +1313,7 @@ namespace RadarKeys {
 			}
 			g_ownedDevices.emplace_back(pdidInstance->guidInstance, device);
 			g_selfDevicePointers.insert(device);
-			spdlog::info("DirectInputHook: self-opened joystick device {:p} ({})",
+			spdlog::info(LOG_DIRECTINPUTHOOK_SELF_OPENED_JOYSTICK_DEVICE_P,
 				static_cast<void*>(device), info.isPlaystation ? "PlayStation" : "generic");
 
 			return DIENUM_CONTINUE;
@@ -1306,7 +1331,7 @@ namespace RadarKeys {
 				static bool warnedModule = false;
 				if (!warnedModule) {
 					warnedModule = true;
-					spdlog::warn("DirectInputHook: self-polling unavailable - dinput8.dll could not be loaded");
+					spdlog::warn(LOG_DIRECTINPUTHOOK_SELF_POLLING_UNAVAILABLE_DINPUT8_DLL);
 				}
 				return;
 			}
@@ -1315,7 +1340,7 @@ namespace RadarKeys {
 				static bool warnedExport = false;
 				if (!warnedExport) {
 					warnedExport = true;
-					spdlog::warn("DirectInputHook: self-polling unavailable - DirectInput8Create export not found");
+					spdlog::warn(LOG_DIRECTINPUTHOOK_SELF_POLLING_UNAVAILABLE_DIRECTINPUT);
 				}
 				return;
 			}
@@ -1325,12 +1350,12 @@ namespace RadarKeys {
 				static bool warnedCreate = false;
 				if (!warnedCreate) {
 					warnedCreate = true;
-					spdlog::warn("DirectInputHook: self-polling unavailable - IDirectInput8 creation failed (hr={:08X})", static_cast<unsigned>(hr));
+					spdlog::warn(LOG_DIRECTINPUTHOOK_SELF_POLLING_UNAVAILABLE_IDIRECTINPU, static_cast<unsigned>(hr));
 				}
 				return;
 			}
 			g_ownDI8 = static_cast<IDirectInput8*>(out);
-			spdlog::info("DirectInputHook: opened an independent IDirectInput8 instance for self-driven controller polling");
+			spdlog::info(LOG_DIRECTINPUTHOOK_OPENED_INDEPENDENT_IDIRECTINPUT8_INS);
 		}
 
 		void Poll(HWND hwnd) {
@@ -1345,7 +1370,7 @@ namespace RadarKeys {
 			static bool loggedPollStart = false;
 			if (!loggedPollStart) {
 				loggedPollStart = true;
-				spdlog::info("DirectInputHook: self-polling active (hwnd={:p})", static_cast<void*>(hwnd));
+				spdlog::info(LOG_DIRECTINPUTHOOK_SELF_POLLING_ACTIVE_HWND_P, static_cast<void*>(hwnd));
 			}
 
 			ULONGLONG now = GetTickCount64();
@@ -1360,13 +1385,13 @@ namespace RadarKeys {
 					static bool warnedEnum = false;
 					if (!warnedEnum) {
 						warnedEnum = true;
-						spdlog::warn("DirectInputHook: EnumDevices failed (hr={:08X})", static_cast<unsigned>(hrEnum));
+						spdlog::warn(LOG_DIRECTINPUTHOOK_ENUMDEVICES_FAILED_HR_08X, static_cast<unsigned>(hrEnum));
 					}
 				} else if (g_enumCallbackSeen == 0 && g_ownedDevices.empty()) {
 					static bool warnedNoDevices = false;
 					if (!warnedNoDevices) {
 						warnedNoDevices = true;
-						spdlog::warn("DirectInputHook: Windows reports zero DirectInput game controllers - connected pads are XInput-only or hidden by another driver");
+						spdlog::warn(LOG_DIRECTINPUTHOOK_WINDOWS_REPORTS_ZERO_DIRECTINPUT_GAM);
 					}
 				}
 
@@ -1384,7 +1409,7 @@ namespace RadarKeys {
 					}
 					if (info.isPlaystation != sonyPresent) {
 						info.isPlaystation = sonyPresent;
-						spdlog::info("DirectInputHook: Steam virtual 360 device {:p} PlayStation identity {} (Sony pad {})",
+						spdlog::info(LOG_DIRECTINPUTHOOK_STEAM_VIRTUAL_360_DEVICE_P,
 							static_cast<void*>(entry.first), sonyPresent ? "ENABLED" : "disabled",
 							sonyPresent ? "present" : "not present");
 					}
