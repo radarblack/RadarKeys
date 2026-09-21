@@ -171,14 +171,7 @@ namespace RadarKeys {
 			return cached;
 		}
 
-		const std::string& GetDebugLogFileName() {
-			static std::string cached;
-			if (cached.empty()) {
-				cached = (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "radarkeys_debug.txt").string();
-			}
-			return cached;
-		}
-
+		bool PreviousSessionEndedCleanly(const std::string& logPath);
 		void InitDiagnostics() {
 			static bool initialized = false;
 			if (initialized) return;
@@ -186,15 +179,16 @@ namespace RadarKeys {
 			try {
 				EnsureBindsDirectory();
 				std::error_code logEc;
-				const std::filesystem::path logPath(GetDebugLogFileName());
-				const std::filesystem::path prevPath = logPath.parent_path() / "radarkeys_debug_prev.txt";
+				const std::filesystem::path logPath(GetLogFileName());
+				const std::filesystem::path prevPath = logPath.parent_path() / "radarkeys_log_prev.txt";
+				const bool wasClean = PreviousSessionEndedCleanly(logPath.string());
 				if (std::filesystem::exists(logPath, logEc)) {
 					std::filesystem::copy_file(logPath, prevPath,
-						std::filesystem::copy_options::overwrite_existing, logEc);
+					std::filesystem::copy_options::overwrite_existing, logEc);
 				}
 				for (int rolledIndex = 1; rolledIndex <= 3; ++rolledIndex) {
 					std::filesystem::remove(logPath.parent_path() /
-						("radarkeys_debug." + std::to_string(rolledIndex) + ".txt"), logEc);
+					("radarkeys_log." + std::to_string(rolledIndex) + ".txt"), logEc);
 				}
 				auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
 				auto logger = std::make_shared<spdlog::logger>("radarkeys", sink);
@@ -202,8 +196,11 @@ namespace RadarKeys {
 				logger->flush_on(spdlog::level::info);
 				spdlog::set_default_logger(logger);
 				spdlog::flush_every(std::chrono::seconds(5));
-				spdlog::info("RadarKeys diagnostics: debug log at {} (previous session preserved at {})",
-					logPath.string(), prevPath.string());
+				if (!wasClean) {
+					spdlog::warn("[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).");
+				}
+				spdlog::info("RadarKeys diagnostics: single log at {} (previous session preserved at {})",
+				logPath.string(), prevPath.string());
 			} catch (const std::exception& e) {
 				spdlog::warn("InitDiagnostics failed ({}); diagnostics stay on the default sink", e.what());
 			}
@@ -224,15 +221,6 @@ namespace RadarKeys {
 			return true;
 		}
 
-		static std::deque<std::string> activityLogLines;
-		static size_t activityLogBytes = 0;
-		static size_t activityLogBaselineBytes = 0;
-		static size_t activityLogMaxBytes = 10240;
-		static int activityLogWritesSinceFlush = 0;
-		static bool activityLogReady = false;
-		static std::recursive_mutex activityLogMutex;
-		static constexpr int activityLogFlushEveryNWrites = 20;
-
 		bool PreviousSessionEndedCleanly(const std::string& logPath) {
 			std::ifstream in(logPath);
 			if (!in) return true;
@@ -240,92 +228,12 @@ namespace RadarKeys {
 			while (std::getline(in, line)) {
 				if (!line.empty()) lastNonEmptyLine = line;
 			}
-			return lastNonEmptyLine.empty() || lastNonEmptyLine == "[STATE] CLEAN_EXIT";
+			return lastNonEmptyLine.empty() ||
+				(lastNonEmptyLine.size() >= 18 &&
+				lastNonEmptyLine.compare(lastNonEmptyLine.size() - 18, 18, "[STATE] CLEAN_EXIT") == 0);
 		}
-
-		void EnsureActivityLogReady() {
-			std::lock_guard<std::recursive_mutex> lock(activityLogMutex);
-			if (activityLogReady) return;
-			EnsureBindsDirectory();
-
-			std::string currentLog = GetLogFileName();
-			std::string prevLog = currentLog;
-			size_t replacePos = prevLog.find("radarkeys_log.txt");
-			if (replacePos != std::string::npos) {
-				prevLog.replace(replacePos, std::strlen("radarkeys_log.txt"), "radarkeys_log_prev.txt");
-			}
-
-			std::error_code ec;
-			bool wasClean = true;
-			if (std::filesystem::exists(currentLog, ec)) {
-				wasClean = PreviousSessionEndedCleanly(currentLog);
-
-				std::filesystem::copy_file(currentLog, prevLog, std::filesystem::copy_options::overwrite_existing, ec);
-			}
-
-			std::ofstream clearStream(currentLog, std::ios::trunc);
-			if (!wasClean) {
-				clearStream << "[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).\n";
-			}
-			
-			clearStream.close();
-			activityLogBaselineBytes = std::filesystem::file_size(currentLog, ec);
-			if (ec) activityLogBaselineBytes = 0;
-			activityLogReady = true;
-		}
-
-		void FlushActivityLog() {
-			std::lock_guard<std::recursive_mutex> lock(activityLogMutex);
-			std::string currentLog = GetLogFileName();
-			std::error_code ec;
-			std::filesystem::resize_file(currentLog, activityLogBaselineBytes, ec);
-			std::ofstream out(currentLog, std::ios::app);
-			
-			if (!out) {
-				spdlog::warn("KeyBindMenu::FlushActivityLog: couldn't open {} for writing", currentLog);
-				return;
-			}
-			for (const std::string& line : activityLogLines) {
-				out << line;
-			}
-		}
-
-		void MarkInitializationComplete() {
-			std::lock_guard<std::recursive_mutex> lock(activityLogMutex);
-			FlushActivityLog();
-			std::string currentLog = GetLogFileName();
-			std::error_code ec;
-			size_t newBaseline = std::filesystem::file_size(currentLog, ec);
-			if (ec) {
-				spdlog::warn("KeyBindMenu::MarkInitializationComplete: couldn't stat {}: {}", currentLog, ec.message());
-				return;
-			}
-			activityLogBaselineBytes = newBaseline;
-			activityLogLines.clear();
-			activityLogBytes = 0;
-			activityLogWritesSinceFlush = 0;
-		}
-
-		void AppendActivityLogLine(const std::string& line) {
-			std::lock_guard<std::recursive_mutex> lock(activityLogMutex);
-			activityLogLines.push_back(line);
-			activityLogBytes += line.size();
-
-			while (activityLogBytes > activityLogMaxBytes && !activityLogLines.empty()) {
-				activityLogBytes -= activityLogLines.front().size();
-				activityLogLines.pop_front();
-			}
-
-			if (++activityLogWritesSinceFlush >= activityLogFlushEveryNWrites) {
-				activityLogWritesSinceFlush = 0;
-				FlushActivityLog();
-			}
-		}
-
+		
 		void LogActivity(const std::string& message, bool success) {
-			std::lock_guard<std::recursive_mutex> lock(activityLogMutex);
-			EnsureActivityLogReady();
-
 			static const auto bootTime = std::chrono::steady_clock::now();
 			auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - bootTime);
 			auto hours = std::chrono::duration_cast<std::chrono::hours>(durationMs);
@@ -334,18 +242,21 @@ namespace RadarKeys {
 			durationMs -= minutes;
 			auto seconds = std::chrono::duration_cast<std::chrono::seconds>(durationMs);
 			durationMs -= seconds;
-
+			
 			char timeBuf[32];
-			snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d.%03d", (int)hours.count(), (int)minutes.count(), (int)seconds.count(), (int)durationMs.count());
-
-			AppendActivityLogLine(std::string("[") + timeBuf + "] [" + (success ? "OK" : "FAIL") + "] " + message + "\n");
+			snprintf(timeBuf, sizeof(timeBuf), "[%02d:%02d:%02d.%03d]", (int)hours.count(), (int)minutes.count(), (int)seconds.count(), (int)durationMs.count());
+			
+			const std::string tagged = std::string(timeBuf) + " [" + (success ? "OK" : "FAIL") + "] " + message;
+			if (success) {
+				spdlog::info("{}", tagged);
+			} else {
+				spdlog::warn("{}", tagged);
+			}
 		}
-
+		
 		void LogCleanShutdown() {
-			std::lock_guard<std::recursive_mutex> lock(activityLogMutex);
-			EnsureActivityLogReady();
-			AppendActivityLogLine("[STATE] CLEAN_EXIT\n");
-			FlushActivityLog();
+			spdlog::info("[STATE] CLEAN_EXIT");
+			spdlog::default_logger()->flush();
 		}
 
 		struct VkNameEntry { const char* name; USHORT vKey; };
@@ -1697,7 +1608,6 @@ namespace RadarKeys {
 			}
 			RegisterMenuToggleKey(menuToggleVKey);
 			LogActivity("Menu hotkey set to " + NameForVKey(menuToggleVKey));
-			MarkInitializationComplete();
 		}
 
 		static USHORT capturedVKey = 0;
