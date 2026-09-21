@@ -35,35 +35,47 @@ namespace RadarKeys {
 
 	void InitCursorHook() {
 		if (MH_CreateHook(&SetCursorPos, &SetCursorPos_Hook, reinterpret_cast<LPVOID*>(&SetCursorPos_Orig)) != MH_OK) {
-			spdlog::error("InitCursorHook: MH_CreateHook failed for SetCursorPos");
+			spdlog::error(LOG_INITCURSORHOOK_MH_CREATEHOOK_FAILED_SETCURSORPOS);
 			return;
 		}
 		if (MH_EnableHook(&SetCursorPos) != MH_OK) {
-			spdlog::error("InitCursorHook: MH_EnableHook failed for SetCursorPos");
+			spdlog::error(LOG_INITCURSORHOOK_MH_ENABLEHOOK_FAILED_SETCURSORPOS);
 		}
 	}
 
 	// DLL_PROCESS_ATTACH runs under the loader lock - heavy initialization
+	static const char* LOG_INITCURSORHOOK_MH_CREATEHOOK_FAILED_SETCURSORPOS = "InitCursorHook: MH_CreateHook failed for SetCursorPos";
+	static const char* LOG_INITCURSORHOOK_MH_ENABLEHOOK_FAILED_SETCURSORPOS = "InitCursorHook: MH_EnableHook failed for SetCursorPos";
+	static const char* LOG_RADARKEYS_INITTHREAD_STARTING = "RadarKeys InitThread starting";
+	static const char* LOG_RADARKEYS_INITTHREAD_MH_INITIALIZE_FAILED = "RadarKeys InitThread: MH_Initialize failed";
+	static const char* LOG_RADARKEYS_INITTHREAD_RESOLVELUAAPI_FAILED_LUA_BINDIN = "RadarKeys InitThread: ResolveLuaApi failed - Lua bindings will not work";
+	static const char* LOG_RADARKEYS_FRAME_INITIALIZED = "RadarKeys frame initialized";
+	static const char* LOG_RADARKEYS_KEY_QUERY_UNRECOGNIZED_KEY_NAME = "RadarKeys key query: unrecognized key name '{}'";
+	static const char* LOG_RADARKEYS_COMBO_QUERY_UNRECOGNIZED_MALFORMED_COMBO = "RadarKeys combo query: unrecognized or malformed combo string '{}'";
+	static const char* LOG_RADARKEYS_KEY_QUERY_INVALID_HOLD_SECONDS = "RadarKeys key query: invalid hold-seconds arg '{}'";
+	static const char* LOG_LUAOPEN_RADARKEYS = "luaopen_RadarKeys";
+	static const char* LOG_LUAOPEN_RADARKEYS_REGISTERLUALIBRARY_FAILED_LUA_API = "luaopen_RadarKeys: RegisterLuaLibrary failed - Lua API addresses may not have resolved yet";
+
 	void InitThread() {
 		KeyBindMenu::InitDiagnostics();
-		spdlog::info("RadarKeys InitThread starting");
+		spdlog::info(LOG_RADARKEYS_INITTHREAD_STARTING);
 
 		MH_STATUS mhStatus = MH_Initialize();
 		if (mhStatus != MH_OK && mhStatus != MH_ERROR_ALREADY_INITIALIZED) {
-			spdlog::error("RadarKeys InitThread: MH_Initialize failed");
+			spdlog::error(LOG_RADARKEYS_INITTHREAD_MH_INITIALIZE_FAILED);
 			return;
 		}
 		DirectInputHook::InstallEarly();
 
 		if (!ResolveLuaApi()) {
-			spdlog::error("RadarKeys InitThread: ResolveLuaApi failed - Lua bindings will not work");
+			spdlog::error(LOG_RADARKEYS_INITTHREAD_RESOLVELUAAPI_FAILED_LUA_BINDIN);
 		}
 
 		Render::CreateD3DHook();
 		InitCursorHook();
 		DirectInputHook::Install();
 
-		spdlog::info("RadarKeys frame initialized");
+		spdlog::info(LOG_RADARKEYS_FRAME_INITIALIZED);
 	}
 
 	//--- Lua bindings ---
@@ -99,7 +111,7 @@ namespace RadarKeys {
 		const char* name = LuaToString(L, 1);
 		if (!name) return -1;
 		int vKey = KeyBindMenu::VKeyForName(name);
-		if (vKey < 0) spdlog::warn("RadarKeys key query: unrecognized key name '{}'", name);
+		if (vKey < 0) spdlog::warn(LOG_RADARKEYS_KEY_QUERY_UNRECOGNIZED_KEY_NAME, name);
 		return vKey;
 	}
 
@@ -108,7 +120,7 @@ namespace RadarKeys {
 		if (!raw) return {};
 		std::vector<USHORT> result = KeyBindMenu::ParseComboKeyNames(raw);
 		if (result.empty()) {
-			spdlog::warn("RadarKeys combo query: unrecognized or malformed combo string '{}'", raw);
+			spdlog::warn(LOG_RADARKEYS_COMBO_QUERY_UNRECOGNIZED_MALFORMED_COMBO, raw);
 		}
 		return result;
 	}
@@ -128,7 +140,7 @@ namespace RadarKeys {
 		char* end = nullptr;
 		double value = std::strtod(raw, &end);
 		if (end == raw || *end != '\0' || !std::isfinite(value) || value < 0.0) {
-			spdlog::warn("RadarKeys key query: invalid hold-seconds arg '{}'", raw);
+			spdlog::warn(LOG_RADARKEYS_KEY_QUERY_INVALID_HOLD_SECONDS, raw);
 			return -1.0;
 		}
 		return value;
@@ -267,7 +279,7 @@ namespace RadarKeys {
 }
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
-	spdlog::debug("luaopen_RadarKeys");
+	spdlog::debug(LOG_LUAOPEN_RADARKEYS);
 
 	luaL_Reg radarkeys_funcs[] = {
 		{ "MenuMessage", RadarKeys::l_MenuMessage },
@@ -298,7 +310,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 	};
 
 	if (!RadarKeys::RegisterLuaLibrary(L, "RadarKeys", radarkeys_funcs)) {
-		spdlog::error("luaopen_RadarKeys: RegisterLuaLibrary failed - Lua API addresses may not have resolved yet");
+		spdlog::error(LOG_LUAOPEN_RADARKEYS_REGISTERLUALIBRARY_FAILED_LUA_API);
 		return 0;
 	}
 	RadarKeys::LuaApiCaptureState(L);
