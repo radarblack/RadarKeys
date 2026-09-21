@@ -141,12 +141,21 @@ namespace RadarKeys {
 		static void* g_xinputHookTargets[kMaxXInputModules] = {};
 		static const char* g_xinputSlotNames[kMaxXInputModules] = {};
 
-		static void ApplyPlaystationTriggerFeed(DWORD result, XINPUT_STATE* pState) {
-			if (result != ERROR_SUCCESS || !pState) {
+		static void ApplyPlaystationTriggerFeed(DWORD& result, DWORD dwUserIndex, XINPUT_STATE* pState) {
+			if (!pState || dwUserIndex != 0) {
 				return;
 			}
 			const bool l2 = realStateHeld[VK_PS_L2].load(std::memory_order_relaxed) != 0;
 			const bool r2 = realStateHeld[VK_PS_R2].load(std::memory_order_relaxed) != 0;
+			if (!l2 && !r2) {
+				return;
+			}
+			if (result != ERROR_SUCCESS) {
+				static std::atomic<DWORD> syntheticPacket{ 0 };
+				std::memset(pState, 0, sizeof(XINPUT_STATE));
+				pState->dwPacketNumber = syntheticPacket.fetch_add(1, std::memory_order_relaxed);
+				result = ERROR_SUCCESS;
+			}
 			if (l2) {
 				pState->Gamepad.bLeftTrigger = 255;
 			}
@@ -154,7 +163,7 @@ namespace RadarKeys {
 				pState->Gamepad.bRightTrigger = 255;
 			}
 			static std::atomic<unsigned char> feedLogged{ 0 };
-			if ((l2 || r2) && feedLogged.load(std::memory_order_relaxed) == 0) {
+			if (feedLogged.load(std::memory_order_relaxed) == 0) {
 				unsigned char expected = 0;
 				if (feedLogged.compare_exchange_strong(expected, 1)) {
 					spdlog::info(LOG_RAWINPUT_PLAYSTATION_TRIGGER_FEED_ENGAGED);
@@ -171,7 +180,7 @@ namespace RadarKeys {
 #define RADARKEYS_DEFINE_XINPUT_DETOUR(N) \
 		static DWORD WINAPI HookedXInputGetState##N(DWORD dwUserIndex, XINPUT_STATE* pState) { \
 			DWORD result = g_origXInputGetState[N] ? g_origXInputGetState[N](dwUserIndex, pState) : ERROR_DEVICE_NOT_CONNECTED; \
-			ApplyPlaystationTriggerFeed(result, pState); \
+			ApplyPlaystationTriggerFeed(result, dwUserIndex, pState); \
 			SuppressXInputStateIfBlocked(result, pState); \
 			return result; \
 		}
@@ -193,7 +202,7 @@ namespace RadarKeys {
 
 		static DWORD WINAPI HookedXInputGetStateIatFeed(DWORD dwUserIndex, XINPUT_STATE* pState) {
 			DWORD result = g_origXInputGetStateIatFeed ? g_origXInputGetStateIatFeed(dwUserIndex, pState) : ERROR_DEVICE_NOT_CONNECTED;
-			ApplyPlaystationTriggerFeed(result, pState);
+			ApplyPlaystationTriggerFeed(result, dwUserIndex, pState);
 			return result;
 		}
 
