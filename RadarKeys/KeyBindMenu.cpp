@@ -20,7 +20,6 @@
 #include <cstring>
 #include <cctype>
 #include <sstream>
-#include <deque>
 #include <algorithm>
 #include <unordered_set>
 #include <unordered_map>
@@ -28,6 +27,7 @@
 #include <memory>
 #include <cmath>
 #include "spdlog/sinks/basic_file_sink.h"
+	#include "spdlog/sinks/base_sink.h"
 
 namespace RadarKeys {
 	std::atomic<bool> showCapturePrompt{ false };
@@ -171,6 +171,37 @@ namespace RadarKeys {
 			return cached;
 		}
 
+		class BootStampSink : public spdlog::sinks::base_sink<std::mutex> {
+			public:
+			explicit BootStampSink(spdlog::sink_ptr downstream)
+			: downstream_(std::move(downstream)) {
+				downstream_->set_pattern("%v");
+			}
+			protected:
+			void sink_it_(const spdlog::details::log_msg& msg) override {
+				static const auto bootTime = std::chrono::steady_clock::now();
+				auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - bootTime);
+				auto hours = std::chrono::duration_cast<std::chrono::hours>(durationMs);
+				durationMs -= hours;
+				auto minutes = std::chrono::duration_cast<std::chrono::minutes>(durationMs);
+				durationMs -= minutes;
+				auto seconds = std::chrono::duration_cast<std::chrono::seconds>(durationMs);
+				durationMs -= seconds;
+				char stamp[32];
+				snprintf(stamp, sizeof(stamp), "[%02d:%02d:%02d.%03d] ", (int)hours.count(), (int)minutes.count(), (int)seconds.count(), (int)durationMs.count());
+				std::string line;
+				line.reserve(msg.payload.size() + 32);
+				line.append(stamp);
+				line.append(msg.payload.data(), msg.payload.size());
+				spdlog::details::log_msg stamped(msg.logger_name, msg.level, spdlog::string_view_t(line.data(), line.size()));
+				downstream_->log(stamped);
+			}
+			void flush_() override {
+				downstream_->flush();
+			}
+			spdlog::sink_ptr downstream_;
+		};
+
 		bool PreviousSessionEndedCleanly(const std::string& logPath);
 		void InitDiagnostics() {
 			static bool initialized = false;
@@ -190,7 +221,8 @@ namespace RadarKeys {
 					std::filesystem::remove(logPath.parent_path() /
 					("radarkeys_log." + std::to_string(rolledIndex) + ".txt"), logEc);
 				}
-				auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
+				auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
+				auto sink = std::make_shared<BootStampSink>(fileSink);
 				auto logger = std::make_shared<spdlog::logger>("radarkeys", sink);
 				logger->set_level(spdlog::level::debug);
 				logger->flush_on(spdlog::level::info);
@@ -234,23 +266,10 @@ namespace RadarKeys {
 		}
 		
 		void LogActivity(const std::string& message, bool success) {
-			static const auto bootTime = std::chrono::steady_clock::now();
-			auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - bootTime);
-			auto hours = std::chrono::duration_cast<std::chrono::hours>(durationMs);
-			durationMs -= hours;
-			auto minutes = std::chrono::duration_cast<std::chrono::minutes>(durationMs);
-			durationMs -= minutes;
-			auto seconds = std::chrono::duration_cast<std::chrono::seconds>(durationMs);
-			durationMs -= seconds;
-			
-			char timeBuf[32];
-			snprintf(timeBuf, sizeof(timeBuf), "[%02d:%02d:%02d.%03d]", (int)hours.count(), (int)minutes.count(), (int)seconds.count(), (int)durationMs.count());
-			
-			const std::string tagged = std::string(timeBuf) + " [" + (success ? "OK" : "FAIL") + "] " + message;
 			if (success) {
-				spdlog::info("{}", tagged);
+				spdlog::info("[OK] {}", message);
 			} else {
-				spdlog::warn("{}", tagged);
+				spdlog::warn("[FAIL] {}", message);
 			}
 		}
 		
