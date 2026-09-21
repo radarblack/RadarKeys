@@ -23,6 +23,8 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <filesystem>
+#include <cwctype>
+#include <MinHook.h>
 
 namespace RadarKeys {
 	namespace RawInput {
@@ -35,9 +37,12 @@ namespace RadarKeys {
 		std::atomic<unsigned char> realStateHeld[vKeyMax]{};
 		std::atomic<unsigned char> g_keyboardBlockedToGame{ false };
 		std::atomic<unsigned char> g_mouseBlockedToGame{ false };
+		std::atomic<unsigned char> g_gamepadBlockedToGame{ false };
 
 		bool IsKeyboardBlockedToGame() { return g_keyboardBlockedToGame.load() != false; }
 		bool IsMouseBlockedToGame() { return g_mouseBlockedToGame.load() != false; }
+		bool IsGamepadBlockedToGame() { return g_gamepadBlockedToGame.load() != false; }
+		void SetGamepadBlockedToGame(bool blocked) { g_gamepadBlockedToGame.store(blocked ? 1 : 0); }
 
 		std::list<std::pair<ActionHandle, ButtonAction>>* buttonActions[vKeyMax] = { nullptr };
 		ActionHandle nextActionHandle = 1;
@@ -111,7 +116,33 @@ namespace RadarKeys {
 		static XInputGetStateFunc g_origXInputGetState[kMaxXInputModules] = {};
 		static int g_xinputModuleCount = 0;
 		static const char* g_xinputSlotNames[kMaxXInputModules] = {};
-		
+
+		static void SuppressXInputStateIfBlocked(DWORD result, XINPUT_STATE* pState) {
+			if (result == ERROR_SUCCESS && pState && g_gamepadBlockedToGame.load() != false) {
+				std::memset(&pState->Gamepad, 0, sizeof(pState->Gamepad));
+			}
+		}
+
+#define RADARKEYS_DEFINE_XINPUT_DETOUR(N) \
+		static DWORD WINAPI HookedXInputGetState##N(DWORD dwUserIndex, XINPUT_STATE* pState) { \
+			DWORD result = g_origXInputGetState[N] ? g_origXInputGetState[N](dwUserIndex, pState) : ERROR_DEVICE_NOT_CONNECTED; \
+			SuppressXInputStateIfBlocked(result, pState); \
+			return result; \
+		}
+		RADARKEYS_DEFINE_XINPUT_DETOUR(0)
+		RADARKEYS_DEFINE_XINPUT_DETOUR(1)
+		RADARKEYS_DEFINE_XINPUT_DETOUR(2)
+		RADARKEYS_DEFINE_XINPUT_DETOUR(3)
+		RADARKEYS_DEFINE_XINPUT_DETOUR(4)
+		RADARKEYS_DEFINE_XINPUT_DETOUR(5)
+#undef RADARKEYS_DEFINE_XINPUT_DETOUR
+
+		typedef DWORD(WINAPI* XInputGetStateDetour_t)(DWORD, XINPUT_STATE*);
+		static XInputGetStateDetour_t g_xinputDetours[kMaxXInputModules] = {
+			&HookedXInputGetState0, &HookedXInputGetState1, &HookedXInputGetState2,
+			&HookedXInputGetState3, &HookedXInputGetState4, &HookedXInputGetState5,
+		};
+
 		void EnsureXInputHook() {
 			static const wchar_t* kModuleNames[] = {
 				L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll", L"xinput1_2.dll", L"xinput1_1.dll", L"xinputuap.dll"
@@ -130,17 +161,23 @@ namespace RadarKeys {
 				if (!module || seenModules.find(module) != seenModules.end()) {
 					continue;
 				}
-				XInputGetStateFunc fn = reinterpret_cast<XInputGetStateFunc>(GetProcAddress(module, "XInputGetState"));
-				if (!fn || g_xinputModuleCount >= kMaxXInputModules) {
+				void* target = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetState"));
+				if (!target || g_xinputModuleCount >= kMaxXInputModules) {
 					continue;
 				}
 				seenModules.insert(module);
 				int slot = g_xinputModuleCount;
-				g_origXInputGetState[slot] = fn;
+				bool hooked = MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
+					reinterpret_cast<LPVOID*>(&g_origXInputGetState[slot])) == MH_OK &&
+					MH_EnableHook(target) == MH_OK;
+				if (!hooked) {
+					MH_RemoveHook(target);
+					g_origXInputGetState[slot] = reinterpret_cast<XInputGetStateFunc>(target);
+				}
 				g_xinputSlotNames[slot] = kModuleNamesNarrow[nameIndex];
 				++g_xinputModuleCount;
-				spdlog::info("RawInput: XInputGetState in {} (slot {}) - recognition polling",
-					kModuleNamesNarrow[nameIndex], slot);
+				spdlog::info("RawInput: XInputGetState in {} (slot {}) - {}",
+					kModuleNamesNarrow[nameIndex], slot, hooked ? "hooked for gamepad suppression" : "recognition polling only");
 				spdlog::default_logger()->flush();
 			}
 		}
@@ -148,8 +185,127 @@ namespace RadarKeys {
 		std::atomic<bool> g_anyGamepadConnected{ false };
 		std::atomic<bool> g_xinputGamepadConnected{ false };
 		std::atomic<bool> g_psBridgeActive{ false };
+
+		static std::mutex g_hidGamepadMutex;
+		static std::unordered_set<HANDLE> g_hidGamepadHandles;
+
+		static bool PathIsGamepadHid(const std::wstring& path) {
+			std::wstring upper = path;
+			std::transform(upper.begin(), upper.end(), upper.begin(), ::towupper);
+			return upper.find(L"HID#VID_054C") != std::wstring::npos ||
+				upper.find(L"HID#VID_28DE") != std::wstring::npos;
+		}
+
+		static void SanitizeGamepadHidBuffer(LPVOID buf, DWORD bytesRead) {
+			std::memset(buf, 0, bytesRead);
+			unsigned char* bytes = static_cast<unsigned char*>(buf);
+			if (bytesRead > 5) {
+				bytes[1] = 0x80;
+				bytes[2] = 0x80;
+				bytes[3] = 0x80;
+				bytes[4] = 0x80;
+				bytes[5] = 0x08;
+			}
+		}
+
+		typedef HANDLE(WINAPI* CreateFileW_t)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+		typedef BOOL(WINAPI* ReadFile_t)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+		typedef BOOL(WINAPI* CloseHandle_t)(HANDLE);
+		static CreateFileW_t g_origCreateFileW = nullptr;
+		static ReadFile_t g_origReadFile = nullptr;
+		static CloseHandle_t g_origCloseHandle = nullptr;
+
+		static HANDLE WINAPI HookedCreateFileWGamepad(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+			LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition,
+			DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) {
+			HANDLE handle = g_origCreateFileW(lpFileName, dwDesiredAccess, dwShareMode,
+				lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+			if (handle != INVALID_HANDLE_VALUE && lpFileName && PathIsGamepadHid(lpFileName)) {
+				std::lock_guard<std::mutex> lock(g_hidGamepadMutex);
+				if (g_hidGamepadHandles.size() < 4096) {
+					g_hidGamepadHandles.insert(handle);
+				}
+			}
+			return handle;
+		}
+
+		static BOOL WINAPI HookedReadFileGamepad(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead,
+			LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped) {
+			BOOL ok = g_origReadFile(hFile, lpBuffer, nNumberOfBytesToRead, lpNumberOfBytesRead, lpOverlapped);
+			if (ok && lpBuffer && !lpOverlapped && g_gamepadBlockedToGame.load() != false) {
+				bool tracked;
+				{
+					std::lock_guard<std::mutex> lock(g_hidGamepadMutex);
+					tracked = g_hidGamepadHandles.find(hFile) != g_hidGamepadHandles.end();
+				}
+				if (tracked) {
+					DWORD bytesRead = lpNumberOfBytesRead ? *lpNumberOfBytesRead : nNumberOfBytesToRead;
+					if (bytesRead > 0) {
+						SanitizeGamepadHidBuffer(lpBuffer, bytesRead);
+					}
+				}
+			}
+			return ok;
+		}
+
+		static BOOL WINAPI HookedCloseHandleGamepad(HANDLE hObject) {
+			{
+				std::lock_guard<std::mutex> lock(g_hidGamepadMutex);
+				g_hidGamepadHandles.erase(hObject);
+			}
+			return g_origCloseHandle(hObject);
+		}
+
+		void EnsureHidGamepadSuppressionHook() {
+			static bool installed = false;
+			if (installed) {
+				return;
+			}
+			installed = true;
+
+			HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+			if (!kernel32) {
+				return;
+			}
+
+			void* createFileTarget = reinterpret_cast<void*>(GetProcAddress(kernel32, "CreateFileW"));
+			if (createFileTarget && MH_CreateHook(createFileTarget, reinterpret_cast<LPVOID>(&HookedCreateFileWGamepad),
+				reinterpret_cast<LPVOID*>(&g_origCreateFileW)) == MH_OK &&
+				MH_EnableHook(createFileTarget) == MH_OK) {
+				spdlog::info("RawInput: hooked CreateFileW for gamepad HID suppression");
+			} else {
+				MH_RemoveHook(createFileTarget);
+				g_origCreateFileW = nullptr;
+				spdlog::warn("RawInput: failed to hook CreateFileW for gamepad HID suppression");
+			}
+
+			void* readFileTarget = reinterpret_cast<void*>(GetProcAddress(kernel32, "ReadFile"));
+			if (readFileTarget && MH_CreateHook(readFileTarget, reinterpret_cast<LPVOID>(&HookedReadFileGamepad),
+				reinterpret_cast<LPVOID*>(&g_origReadFile)) == MH_OK &&
+				MH_EnableHook(readFileTarget) == MH_OK) {
+				spdlog::info("RawInput: hooked ReadFile for gamepad HID suppression");
+			} else {
+				MH_RemoveHook(readFileTarget);
+				g_origReadFile = nullptr;
+				spdlog::warn("RawInput: failed to hook ReadFile for gamepad HID suppression");
+			}
+
+			void* closeHandleTarget = reinterpret_cast<void*>(GetProcAddress(kernel32, "CloseHandle"));
+			if (closeHandleTarget && MH_CreateHook(closeHandleTarget, reinterpret_cast<LPVOID>(&HookedCloseHandleGamepad),
+				reinterpret_cast<LPVOID*>(&g_origCloseHandle)) == MH_OK &&
+				MH_EnableHook(closeHandleTarget) == MH_OK) {
+				spdlog::info("RawInput: hooked CloseHandle for gamepad HID suppression");
+			} else {
+				MH_RemoveHook(closeHandleTarget);
+				g_origCloseHandle = nullptr;
+				spdlog::warn("RawInput: failed to hook CloseHandle for gamepad HID suppression");
+			}
+			spdlog::default_logger()->flush();
+		}
+
 		void PollGamepad() {
 			EnsureXInputHook();
+			EnsureHidGamepadSuppressionHook();
 
 			WORD buttons = 0;
 			BYTE leftTrigger = 0, rightTrigger = 0;
