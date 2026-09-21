@@ -23,6 +23,18 @@
 #include <sstream>
 
 namespace RadarKeys {
+		static const char* LOG_INITCURSORHOOK_MH_CREATEHOOK_FAILED_SETCURSORPOS = "InitCursorHook: MH_CreateHook failed for SetCursorPos";
+		static const char* LOG_INITCURSORHOOK_MH_ENABLEHOOK_FAILED_SETCURSORPOS = "InitCursorHook: MH_EnableHook failed for SetCursorPos";
+		static const char* LOG_RADARKEYS_INITTHREAD_STARTING = "RadarKeys InitThread starting";
+		static const char* LOG_RADARKEYS_INITTHREAD_MH_INITIALIZE_FAILED = "RadarKeys InitThread: MH_Initialize failed";
+		static const char* LOG_RADARKEYS_INITTHREAD_RESOLVELUAAPI_FAILED_LUA_BINDIN = "RadarKeys InitThread: ResolveLuaApi failed - Lua bindings will not work";
+		static const char* LOG_RADARKEYS_FRAME_INITIALIZED = "RadarKeys frame initialized";
+		static const char* LOG_RADARKEYS_KEY_QUERY_UNRECOGNIZED_KEY_NAME = "RadarKeys key query: unrecognized key name '{}'";
+		static const char* LOG_RADARKEYS_COMBO_QUERY_UNRECOGNIZED_MALFORMED_COMBO = "RadarKeys combo query: unrecognized or malformed combo string '{}'";
+		static const char* LOG_RADARKEYS_KEY_QUERY_INVALID_HOLD_SECONDS = "RadarKeys key query: invalid hold-seconds arg '{}'";
+		static const char* LOG_LUAOPEN_RADARKEYS = "luaopen_RadarKeys";
+		static const char* LOG_LUAOPEN_RADARKEYS_REGISTERLUALIBRARY_FAILED_LUA_API = "luaopen_RadarKeys: RegisterLuaLibrary failed - Lua API addresses may not have resolved yet";
+
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
 	SetCursorPosFunc SetCursorPos_Orig = NULL;
 
@@ -44,17 +56,6 @@ namespace RadarKeys {
 	}
 
 	// DLL_PROCESS_ATTACH runs under the loader lock - heavy initialization
-	static const char* LOG_INITCURSORHOOK_MH_CREATEHOOK_FAILED_SETCURSORPOS = "InitCursorHook: MH_CreateHook failed for SetCursorPos";
-	static const char* LOG_INITCURSORHOOK_MH_ENABLEHOOK_FAILED_SETCURSORPOS = "InitCursorHook: MH_EnableHook failed for SetCursorPos";
-	static const char* LOG_RADARKEYS_INITTHREAD_STARTING = "RadarKeys InitThread starting";
-	static const char* LOG_RADARKEYS_INITTHREAD_MH_INITIALIZE_FAILED = "RadarKeys InitThread: MH_Initialize failed";
-	static const char* LOG_RADARKEYS_INITTHREAD_RESOLVELUAAPI_FAILED_LUA_BINDIN = "RadarKeys InitThread: ResolveLuaApi failed - Lua bindings will not work";
-	static const char* LOG_RADARKEYS_FRAME_INITIALIZED = "RadarKeys frame initialized";
-	static const char* LOG_RADARKEYS_KEY_QUERY_UNRECOGNIZED_KEY_NAME = "RadarKeys key query: unrecognized key name '{}'";
-	static const char* LOG_RADARKEYS_COMBO_QUERY_UNRECOGNIZED_MALFORMED_COMBO = "RadarKeys combo query: unrecognized or malformed combo string '{}'";
-	static const char* LOG_RADARKEYS_KEY_QUERY_INVALID_HOLD_SECONDS = "RadarKeys key query: invalid hold-seconds arg '{}'";
-	static const char* LOG_LUAOPEN_RADARKEYS = "luaopen_RadarKeys";
-	static const char* LOG_LUAOPEN_RADARKEYS_REGISTERLUALIBRARY_FAILED_LUA_API = "luaopen_RadarKeys: RegisterLuaLibrary failed - Lua API addresses may not have resolved yet";
 
 	void InitThread() {
 		KeyBindMenu::InitDiagnostics();
