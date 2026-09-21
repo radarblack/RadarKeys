@@ -27,7 +27,7 @@
 #include <memory>
 #include <cmath>
 #include "spdlog/sinks/basic_file_sink.h"
-	#include "spdlog/sinks/base_sink.h"
+#include "spdlog/sinks/base_sink.h"
 
 namespace RadarKeys {
 	std::atomic<bool> showCapturePrompt{ false };
