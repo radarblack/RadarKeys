@@ -12,6 +12,16 @@
 
 namespace RadarKeys {
 	namespace DebuggerMenu {
+		static const char* LOG_BND_FMT = "[BND] {}";
+		static const char* LOG_BTN_FMT = "[BTN] {}";
+		static const char* LOG_LUA_FMT = "[LUA] {}";
+		static const char* LOG_SCR_DLL_MISSING_SKIP_FMT = "[SCR][DLL] missing - SKIP: {}";
+		static const char* LOG_SCR_DLL_ATTEMPT_FMT = "[SCR][DLL] attempt: {}";
+		static const char* LOG_DEBUGGERMENU_ONDOSCRIPTRESULT_MALFORMED_ARGS_SIZE_FM = "DebuggerMenu::OnDoScriptResult: malformed args (size {})";
+		static const char* LOG_SCR_LUA_SUCCESS = "[SCR][LUA] success";
+		static const char* LOG_DEBUGGERMENU_ONDOSCRIPTRESULT_SCRIPT_FAILED_BUT_NO = "DebuggerMenu::OnDoScriptResult: script failed but no error message provided (size {})";
+		static const char* LOG_SCR_LUA_FAIL_FMT = "[SCR][LUA] fail: {}";
+
 		bool logBindUnbind = false;
 		bool logButtonPress = false;
 		bool logScriptResult = false;
@@ -52,21 +62,21 @@ namespace RadarKeys {
 		}
 
 		void LogBindEvent(const std::string& message) {
-			spdlog::info("[BND] {}", message);
+			spdlog::info(LOG_BND_FMT, message);
 			KeyBindMenu::LogActivity("[BND] " + message);
 			if (!logBindUnbind) return;
 			AddLogEntry("[BND] " + message);
 		}
 
 		void LogButtonPress(const std::string& message) {
-			spdlog::debug("[BTN] {}", message);
+			spdlog::debug(LOG_BTN_FMT, message);
 			KeyBindMenu::LogActivity("[BTN] " + message);
 			if (!logButtonPress) return;
 			AddLogEntry("[BTN] " + message);
 		}
 
 		void LogLuaDebug(const std::string& message) {
-			spdlog::debug("[LUA] {}", message);
+			spdlog::debug(LOG_LUA_FMT, message);
 			KeyBindMenu::LogActivity("[LUA] " + message);
 			if (!logLuaDebug) return;
 			AddLogEntry("[LUA] " + message);
@@ -75,14 +85,14 @@ namespace RadarKeys {
 		bool LogScriptAttempt(const std::string& scriptPath) {
 			bool exists = std::filesystem::exists(scriptPath);
 			if (!exists) {
-				spdlog::error("[SCR][DLL] missing - SKIP: {}", scriptPath);
+				spdlog::error(LOG_SCR_DLL_MISSING_SKIP_FMT, scriptPath);
 				KeyBindMenu::LogActivity("[SCR][DLL] missing - SKIP: " + scriptPath, false);
 				if (logScriptResult) {
 					AddLogEntry("[SCR][DLL] missing - SKIP: " + scriptPath);
 				}
 				return false;
 			}
-			spdlog::debug("[SCR][DLL] attempt: {}", scriptPath);
+			spdlog::debug(LOG_SCR_DLL_ATTEMPT_FMT, scriptPath);
 			KeyBindMenu::LogActivity("[SCR][DLL] attempt: " + scriptPath);
 			if (logScriptResult) {
 				AddLogEntry("[SCR][DLL] attempt: " + scriptPath);
@@ -92,26 +102,26 @@ namespace RadarKeys {
 
 		void OnDoScriptResult(std::vector<std::string> args) {
 			if (args.size() < 3) {
-				spdlog::warn("DebuggerMenu::OnDoScriptResult: malformed args (size {})", args.size());
+				spdlog::warn(LOG_DEBUGGERMENU_ONDOSCRIPTRESULT_MALFORMED_ARGS_SIZE_FM, args.size());
 				return;
 			}
 
 			bool success = args[2] == "1";
 			if (success) {
-				spdlog::debug("[SCR][LUA] success");
-				KeyBindMenu::LogActivity("[SCR][LUA] success");
+				spdlog::debug(LOG_SCR_LUA_SUCCESS);
+				KeyBindMenu::LogActivity(LOG_SCR_LUA_SUCCESS);
 				if (logScriptResult) {
 					AddLogEntry("[SCR][LUA] success");
 				}
 			}
 			else {
 				if (args.size() < 4) {
-					spdlog::warn("DebuggerMenu::OnDoScriptResult: script failed but no error message provided (size {})", args.size());
+					spdlog::warn(LOG_DEBUGGERMENU_ONDOSCRIPTRESULT_SCRIPT_FAILED_BUT_NO, args.size());
 					return;
 				}
 
 				std::string errorMsg = args[3];
-				spdlog::error("[SCR][LUA] fail: {}", errorMsg);
+				spdlog::error(LOG_SCR_LUA_FAIL_FMT, errorMsg);
 				KeyBindMenu::LogActivity("[SCR][LUA] fail: " + errorMsg, false);
 				if (logScriptResult) {
 					AddLogEntry("[SCR][LUA] fail: " + errorMsg);
