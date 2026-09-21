@@ -7,7 +7,6 @@ namespace RadarKeys {
 		void Install();
 		void InstallEarly();
 		void Poll(HWND hwnd);
-		void Shutdown();
 		bool IsPlaystationControlHeld(USHORT vKey);
 		bool HasJoystickDevice();
 		bool HasPlaystationDevice();
