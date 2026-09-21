@@ -108,6 +108,7 @@ namespace RadarKeys {
 		static const char* UI_HDR_CAPTURE_SUPPRESSION = "Suppress input to game (while this menu is open):";
 		static const char* UI_CHK_SUPPRESS_KEYBOARD = "Keyboard";
 		static const char* UI_CHK_SUPPRESS_MOUSE = "Mouse";
+		static const char* UI_CHK_SUPPRESS_GAMEPAD = "Gamepad";
 		static const char* UI_TIP_CAPTURE_SUPPRESSION =
 			"While this menu (or the Debugger overlay) is open, checking a device here hides it from the game right\n"
 			"away so Venom Snake doesn't move, aim or fire - unchecking it restores that device right away too.\n"
@@ -584,6 +585,7 @@ namespace RadarKeys {
 		bool menuOpen = false;
 		bool captureSuppressKeyboard = true;
 		bool captureSuppressMouse = true;
+		bool captureSuppressGamepad = true;
 
 		std::unordered_set<USHORT> activeBindVKeys;
 		void OnMenuToggleKeyPressed(RawInput::BUTTONEVENT buttonEvent) {
@@ -1267,7 +1269,8 @@ namespace RadarKeys {
 			outFile << "MENUKEY|" << NameForVKey(menuToggleVKey) << "\n";
 			outFile << "CAPTUREBLOCK|"
 				<< (captureSuppressKeyboard ? "1|" : "0|")
-				<< (captureSuppressMouse ? "1" : "0") << "\n";
+				<< (captureSuppressMouse ? "1|" : "0|")
+				<< (captureSuppressGamepad ? "1" : "0") << "\n";
 			std::string gameDirStr = std::filesystem::path(GetGameDirectory()).generic_string() + "/";
 			for (auto b : bindings) {
 				std::string genericOn = b.scriptPathOn.empty() ? "" : std::filesystem::path(b.scriptPathOn).generic_string();
@@ -1360,6 +1363,9 @@ namespace RadarKeys {
 				else if (parts[0] == "CAPTUREBLOCK" && parts.size() >= 3) {
 				captureSuppressKeyboard = trim(parts[1]) == "1";
 				captureSuppressMouse = trim(parts[2]) == "1";
+				if (parts.size() >= 4) {
+					captureSuppressGamepad = trim(parts[3]) == "1";
+				}
 				}
 				else if (parts[0] == "MODKEY" && parts.size() >= 4) {
 					ModKeyBindings::OverrideEntry entry;
@@ -2708,17 +2714,22 @@ namespace RadarKeys {
 			{
 				const bool prevKb = captureSuppressKeyboard;
 				const bool prevMouse = captureSuppressMouse;
+				const bool prevGamepad = captureSuppressGamepad;
 
 				ImGui::Checkbox(UI_CHK_SUPPRESS_KEYBOARD, &captureSuppressKeyboard);
 				ImGui::SameLine();
 				ImGui::Checkbox(UI_CHK_SUPPRESS_MOUSE, &captureSuppressMouse);
+				ImGui::SameLine();
+				ImGui::Checkbox(UI_CHK_SUPPRESS_GAMEPAD, &captureSuppressGamepad);
 
 				if (captureSuppressKeyboard != prevKb ||
-				captureSuppressMouse != prevMouse) {
+				captureSuppressMouse != prevMouse ||
+				captureSuppressGamepad != prevGamepad) {
 				SaveBindings();
 				LogActivity(std::string("Capture suppression set - ") +
 				UI_CHK_SUPPRESS_KEYBOARD + ": " + (captureSuppressKeyboard ? "on" : "off") + ", " +
-				UI_CHK_SUPPRESS_MOUSE + ": " + (captureSuppressMouse ? "on" : "off"));
+				UI_CHK_SUPPRESS_MOUSE + ": " + (captureSuppressMouse ? "on" : "off") + ", " +
+				UI_CHK_SUPPRESS_GAMEPAD + ": " + (captureSuppressGamepad ? "on" : "off"));
 				}
 			}
 			ImGui::Separator();
