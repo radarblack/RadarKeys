@@ -11,5 +11,6 @@ namespace RadarKeys {
 		bool HasJoystickDevice();
 		bool HasPlaystationDevice();
 		bool IsSonyGamepadAttachedToSystem();
+		void NotifyDeviceListChanged();
 	}
 }
