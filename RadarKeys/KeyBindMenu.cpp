@@ -49,6 +49,41 @@ namespace RadarKeys {
 		static bool requestCaptureFocus = false;
 
 		// ==================== UI Strings ====================
+		static const char* LOG_WARNING_PREVIOUS_SESSION_DID_NOT_CLOSE = "[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).";
+		static const char* LOG_RADARKEYS_DIAGNOSTICS_SINGLE_LOG_FMT_PREVIOUS = "RadarKeys diagnostics: single log at {} (previous session preserved at {})";
+		static const char* LOG_INITDIAGNOSTICS_FAILED_FMT_DIAGNOSTICS_STAY_DEFAULT = "InitDiagnostics failed ({}); diagnostics stay on the default sink";
+		static const char* LOG_KEYBINDMENU_COULDN_T_CREATE_FMT_DIRECTORY = "KeyBindMenu: couldn't create {} directory: {}";
+		static const char* LOG_OK_FMT = "[OK] {}";
+		static const char* LOG_FAIL_FMT = "[FAIL] {}";
+		static const char* LOG_STATE_CLEAN_EXIT = "[STATE] CLEAN_EXIT";
+		static const char* LOG_KEYBINDMENU_MAIN_MENU_FMT_F7 = "KeyBindMenu: main menu {} (F7)";
+		static const char* LOG_KEYBINDMENU_SAVEBINDINGS_COULDN_T_OPEN_FMT = "KeyBindMenu::SaveBindings: couldn't open {} for writing";
+		static const char* LOG_KEYBINDMENU_SAVEBINDINGS_FAILED_WRITING_FMT = "KeyBindMenu::SaveBindings: failed writing {}";
+		static const char* LOG_KEYBINDMENU_SAVEBINDINGS_COULDN_T_RENAME_FMT = "KeyBindMenu::SaveBindings: couldn't rename {} -> {}: {}";
+		static const char* LOG_KEYBINDMENU_SAVEBINDINGS_WROTE_FMT_BINDING_S = "KeyBindMenu::SaveBindings: wrote {} binding(s) to {}";
+		static const char* LOG_KEYBINDMENU_LOADBINDINGS_NO_FMT_YET_FINE = "KeyBindMenu::LoadBindings: no {} yet (fine on first run)";
+		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_MALFORMED_LINE_FMT = "KeyBindMenu::LoadBindings: skipping malformed line: {}";
+		static const char* LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_MENUKEY_NAME_FMT = "KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default";
+		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INVALID_COMBO2_LIN = "KeyBindMenu::LoadBindings: skipping invalid COMBO2 line: {}";
+		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_COMBO2_ = "KeyBindMenu::LoadBindings: skipping incomplete COMBO2 line: {}";
+		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INVALID_COMBO_LINE = "KeyBindMenu::LoadBindings: skipping invalid COMBO line: {}";
+		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_BIND_LI = "KeyBindMenu::LoadBindings: skipping incomplete BIND line: {}";
+		static const char* LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_KEY_NAME_FMT = "KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding";
+		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_OLD_FORMAT_MALFORM = "KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}";
+		static const char* LOG_KEYBINDMENU_LOADBINDINGS_LOADED_FMT_BINDING_S = "KeyBindMenu::LoadBindings: loaded {} binding(s) from {}";
+		static const char* LOG_RADARKEYS_KEYBINDMENU_INITIALIZING = "RadarKeys KeyBindMenu initializing";
+		static const char* LOG_KEYBINDMENU_INIT_UNKNOWN_MENU_HOTKEY_FMT = "KeyBindMenu::Init: unknown menu hotkey '{}', using default F7";
+		static const char* LOG_KEY_ASSIGNMENT_PROMPT_CANCELLED = "Key Assignment Prompt cancelled";
+		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_KEY = "Multi-key combo capture cancelled - a key was released before the hold completed";
+		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_MORE = "Multi-key combo capture cancelled - more than 3 keys held";
+		static const char* LOG_SINGLE_KEY_CAPTURE_CANCELLED_KEY_RELEASED = "Single-key capture cancelled - key was released before the hold completed";
+		static const char* LOG_KEYBINDMENU_CAPTURED_SINGLE_KEY_VKEY_FMT = "KeyBindMenu: captured single key vKey={} name=\"{}\" ctrl={} shift={} alt={}";
+		static const char* LOG_KEYBIND_HAS_BEEN_RESET = "Keybind has been reset";
+		static const char* LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET = "Multi-key combo has been reset";
+		static const char* LOG_KEYBINDMENU_DEBUGGER_OVERLAY_FMT = "KeyBindMenu: Debugger overlay {}";
+		static const char* LOG_MENU_KEY_REASSIGNMENT_PROMPT_OPENED = "Menu Key Reassignment Prompt opened";
+		static const char* LOG_KEY_ASSIGNMENT_BINDING_PROMPT_OPENED = "Key Assignment Binding Prompt opened";
+
 		static const char* UI_FMT_SCRIPT_FUNCTION_BRACKETS = "%s [%s]";
 		static const char* UI_LBL_BIND_TYPE = "Bind Type:";
 		static const char* UI_RADIO_SINGLE_KEY = "Single Key";
@@ -229,12 +264,12 @@ namespace RadarKeys {
 				spdlog::set_default_logger(logger);
 				spdlog::flush_every(std::chrono::seconds(5));
 				if (!wasClean) {
-					spdlog::warn("[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).");
+					spdlog::warn(LOG_WARNING_PREVIOUS_SESSION_DID_NOT_CLOSE);
 				}
-				spdlog::info("RadarKeys diagnostics: single log at {} (previous session preserved at {})",
+				spdlog::info(LOG_RADARKEYS_DIAGNOSTICS_SINGLE_LOG_FMT_PREVIOUS,
 				logPath.string(), prevPath.string());
 			} catch (const std::exception& e) {
-				spdlog::warn("InitDiagnostics failed ({}); diagnostics stay on the default sink", e.what());
+				spdlog::warn(LOG_INITDIAGNOSTICS_FAILED_FMT_DIAGNOSTICS_STAY_DEFAULT, e.what());
 			}
 		}
 
@@ -246,7 +281,7 @@ namespace RadarKeys {
 			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 			std::filesystem::create_directories(bindsDir, ec);
 			if (ec) {
-				spdlog::warn("KeyBindMenu: couldn't create {} directory: {}", bindsDir.string(), ec.message());
+				spdlog::warn(LOG_KEYBINDMENU_COULDN_T_CREATE_FMT_DIRECTORY, bindsDir.string(), ec.message());
 				return false;
 			}
 			ensured = true;
@@ -267,14 +302,14 @@ namespace RadarKeys {
 		
 		void LogActivity(const std::string& message, bool success) {
 			if (success) {
-				spdlog::info("[OK] {}", message);
+				spdlog::info(LOG_OK_FMT, message);
 			} else {
-				spdlog::warn("[FAIL] {}", message);
+				spdlog::warn(LOG_FAIL_FMT, message);
 			}
 		}
 		
 		void LogCleanShutdown() {
-			spdlog::info("[STATE] CLEAN_EXIT");
+			spdlog::info(LOG_STATE_CLEAN_EXIT);
 			spdlog::default_logger()->flush();
 		}
 
@@ -529,7 +564,7 @@ namespace RadarKeys {
 
 			menuOpen = !menuOpen;
 			LogActivity(menuOpen ? "Menu opened" : "Menu closed");
-			spdlog::info("KeyBindMenu: main menu {} (F7)", menuOpen ? "OPENED" : "CLOSED");
+			spdlog::info(LOG_KEYBINDMENU_MAIN_MENU_FMT_F7, menuOpen ? "OPENED" : "CLOSED");
 		}
 
 		void RegisterMenuToggleKey(USHORT vKey) {
@@ -1207,7 +1242,7 @@ namespace RadarKeys {
 			std::string bakPath = bindsPath + ".bak";
 			std::ofstream outFile(tmpPath);
 			if (!outFile) {
-				spdlog::warn("KeyBindMenu::SaveBindings: couldn't open {} for writing", tmpPath);
+				spdlog::warn(LOG_KEYBINDMENU_SAVEBINDINGS_COULDN_T_OPEN_FMT, tmpPath);
 				LogActivity("Save bindings failed: couldn't open " + tmpPath + " for writing", false);
 				return;
 			}
@@ -1257,7 +1292,7 @@ namespace RadarKeys {
 			}
 			outFile.close();
 			if (!outFile) {
-				spdlog::warn("KeyBindMenu::SaveBindings: failed writing {}", tmpPath);
+				spdlog::warn(LOG_KEYBINDMENU_SAVEBINDINGS_FAILED_WRITING_FMT, tmpPath);
 				LogActivity("Save bindings failed while writing " + tmpPath, false);
 				return;
 			}
@@ -1269,19 +1304,19 @@ namespace RadarKeys {
 				}
 				std::filesystem::rename(tmpPath, bindsPath, ec);
 				if (ec) {
-					spdlog::warn("KeyBindMenu::SaveBindings: couldn't rename {} -> {}: {}", tmpPath, bindsPath, ec.message());
+					spdlog::warn(LOG_KEYBINDMENU_SAVEBINDINGS_COULDN_T_RENAME_FMT, tmpPath, bindsPath, ec.message());
 					LogActivity("Save bindings failed: couldn't replace " + bindsPath + " (" + ec.message() + ")", false);
 					return;
 				}
 			}
-			spdlog::debug("KeyBindMenu::SaveBindings: wrote {} binding(s) to {}", bindings.size(), bindsPath);
+			spdlog::debug(LOG_KEYBINDMENU_SAVEBINDINGS_WROTE_FMT_BINDING_S, bindings.size(), bindsPath);
 			LogActivity("Saved " + std::to_string(bindings.size()) + " binding(s) to " + bindsPath);
 		}
 
 		void LoadBindings() {
 			std::ifstream inFile(GetBindsFileName());
 			if (!inFile) {
-				spdlog::debug("KeyBindMenu::LoadBindings: no {} yet (fine on first run)", GetBindsFileName());
+				spdlog::debug(LOG_KEYBINDMENU_LOADBINDINGS_NO_FMT_YET_FINE, GetBindsFileName());
 				LogActivity("No existing bindings file yet at " + GetBindsFileName() + " (fine on first run)");
 				ModKeyBindings::LoadFromEntries({});
 				return;
@@ -1293,7 +1328,7 @@ namespace RadarKeys {
 				if ((line = trim(line)).empty()) continue;
 				std::vector<std::string> parts = split(line, "|");
 				if (parts.size() < 2) {
-					spdlog::warn("KeyBindMenu::LoadBindings: skipping malformed line: {}", line);
+					spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_MALFORMED_LINE_FMT, line);
 					LogActivity("Skipped malformed line while loading bindings: " + line, false);
 					continue;
 				}
@@ -1302,7 +1337,7 @@ namespace RadarKeys {
 					int vKey = VKeyForName(trim(parts[1]));
 					if (vKey != -1) menuToggleVKey = (USHORT)vKey;
 					else {
-						spdlog::warn("KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default", parts[1]);
+						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_MENUKEY_NAME_FMT, parts[1]);
 						LogActivity("Unknown MENUKEY name '" + parts[1] + "', keeping default", false);
 					}
 				}
@@ -1333,7 +1368,7 @@ namespace RadarKeys {
 						comboKeys.push_back((USHORT)vk);
 					}
 					if (!allValid) {
-						spdlog::warn("KeyBindMenu::LoadBindings: skipping invalid COMBO2 line: {}", line);
+						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INVALID_COMBO2_LIN, line);
 						LogActivity("Skipped invalid COMBO2 line while loading bindings: " + line, false);
 						continue;
 					}
@@ -1357,7 +1392,7 @@ namespace RadarKeys {
 						funcTap = trim(parts[5]);
 						instantFieldStart = 6;
 					} else {
-						spdlog::warn("KeyBindMenu::LoadBindings: skipping incomplete COMBO2 line: {}", line);
+						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_COMBO2_, line);
 						LogActivity("Skipped incomplete COMBO2 line while loading bindings: " + line, false);
 						continue;
 					}
@@ -1404,7 +1439,7 @@ namespace RadarKeys {
 						comboKeys.push_back((USHORT)vk);
 					}
 					if (!allValid) {
-						spdlog::warn("KeyBindMenu::LoadBindings: skipping invalid COMBO line: {}", line);
+						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INVALID_COMBO_LINE, line);
 						LogActivity("Skipped invalid COMBO line while loading bindings: " + line, false);
 						continue;
 					}
@@ -1420,12 +1455,12 @@ namespace RadarKeys {
 				}
 				else if (parts[0] == "BIND" && parts.size() >= 7) {
 					if (parts.size() < 8) {
-						spdlog::warn("KeyBindMenu::LoadBindings: skipping incomplete BIND line: {}", line);
+						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_BIND_LI, line);
 						continue;
 					}
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
 					if (vKey == -1) {
-						spdlog::warn("KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding", keyName);
+						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_KEY_NAME_FMT, keyName);
 						LogActivity("Unknown Key name '" + keyName + "', skipping binding", false);
 						continue;
 					}
@@ -1490,12 +1525,12 @@ namespace RadarKeys {
 					bindings.push_back(b);
 				}
 				else if (parts[0] == "BIND") {
-					spdlog::warn("KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}", line);
+					spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_OLD_FORMAT_MALFORM, line);
 					LogActivity("Skipped old-format/malformed BIND line: " + line, false);
 				}
 			}
 			ModKeyBindings::LoadFromEntries(modKeyEntries);
-			spdlog::debug("KeyBindMenu::LoadBindings: loaded {} binding(s) from {}", bindings.size(), GetBindsFileName());
+			spdlog::debug(LOG_KEYBINDMENU_LOADBINDINGS_LOADED_FMT_BINDING_S, bindings.size(), GetBindsFileName());
 			LogActivity("Loaded " + std::to_string(bindings.size()) + " binding(s) from " + GetBindsFileName());
 			MarkDisplayCacheDirty();
 		}
@@ -1629,11 +1664,11 @@ namespace RadarKeys {
 		}
 
 		void Init(const std::string& defaultMenuKeyName) {
-			LogActivity("RadarKeys KeyBindMenu initializing");
+			LogActivity(LOG_RADARKEYS_KEYBINDMENU_INITIALIZING);
 			int defaultVKey = VKeyForName(defaultMenuKeyName);
 			if (defaultVKey != -1) menuToggleVKey = (USHORT)defaultVKey;
 			else if (!defaultMenuKeyName.empty()) {
-				spdlog::warn("KeyBindMenu::Init: unknown menu hotkey '{}', using default F7", defaultMenuKeyName);
+				spdlog::warn(LOG_KEYBINDMENU_INIT_UNKNOWN_MENU_HOTKEY_FMT, defaultMenuKeyName);
 				LogActivity("Unknown menu hotkey '" + defaultMenuKeyName + "', using default F7", false);
 			}
 
@@ -1696,7 +1731,7 @@ namespace RadarKeys {
 			ResetComboCaptureState();
 			captureIsCombo = false;
 			showCapturePrompt = isAssigningMenuToggleKey = isAssigningModKey = false; editingBindingIndex = -1;
-			LogActivity("Key Assignment Prompt cancelled");
+			LogActivity(LOG_KEY_ASSIGNMENT_PROMPT_CANCELLED);
 		}
 
 		std::vector<USHORT> ScanCurrentlyHeldKeys() {
@@ -1752,7 +1787,7 @@ namespace RadarKeys {
 					} else {
 						comboHoldActive = false;
 						comboHoldKeys.clear();
-						LogActivity("Multi-key combo capture cancelled - a key was released before the hold completed");
+						LogActivity(LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_KEY);
 					}
 					return;
 				}
@@ -1760,7 +1795,7 @@ namespace RadarKeys {
 			if (currentlyHeld.size() > 3) {
 				comboHoldActive = false;
 				comboHoldKeys.clear();
-				LogActivity("Multi-key combo capture cancelled - more than 3 keys held");
+				LogActivity(LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_MORE);
 				return;
 			}
 
@@ -2025,7 +2060,7 @@ namespace RadarKeys {
 					if (!RawInput::IsKeyHeldReal(singleHoldKey)) {
 						singleHoldActive = false;
 						singleHoldKey = 0;
-						LogActivity("Single-key capture cancelled - key was released before the hold completed");
+						LogActivity(LOG_SINGLE_KEY_CAPTURE_CANCELLED_KEY_RELEASED);
 					} else {
 						double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - singleHoldStartTime).count();
 						if (heldSeconds >= kComboHoldSeconds) {
@@ -2037,7 +2072,7 @@ namespace RadarKeys {
 								capturedInstantTriggerType = 0;
 							}
 							LogActivity("Single key captured: " + NameForVKey(capturedVKey));
-							spdlog::info("KeyBindMenu: captured single key vKey={} name=\"{}\" ctrl={} shift={} alt={}",
+							spdlog::info(LOG_KEYBINDMENU_CAPTURED_SINGLE_KEY_VKEY_FMT,
 								capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt);
 						}
 					}
@@ -2092,7 +2127,7 @@ namespace RadarKeys {
 				capturedInstantTriggerType = 0;
 				capturedRepeatAccelMult = 1.0f;
 				capturedInstantUserSet = false;
-				LogActivity("Keybind has been reset");
+				LogActivity(LOG_KEYBIND_HAS_BEEN_RESET);
 			}
 			} else {
 				UpdateComboCapture();
@@ -2170,7 +2205,7 @@ namespace RadarKeys {
 					capturedInstantTriggerType = 0;
 					capturedRepeatAccelMult = 1.0f;
 					capturedInstantUserSet = false;
-					LogActivity("Multi-key combo has been reset");
+					LogActivity(LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET);
 				}
 			}
 		
@@ -2637,7 +2672,7 @@ namespace RadarKeys {
 			if (ImGui::Button(UI_BTN_DEBUGGER)) {
 				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 				LogActivity(DebuggerMenu::menuOpen ? UI_LOG_DEBUGGER_OPENED : UI_LOG_DEBUGGER_CLOSED);
-				spdlog::info("KeyBindMenu: Debugger overlay {}", DebuggerMenu::menuOpen ? "OPENED" : "CLOSED");
+				spdlog::info(LOG_KEYBINDMENU_DEBUGGER_OVERLAY_FMT, DebuggerMenu::menuOpen ? "OPENED" : "CLOSED");
 			}
 			ImGui::SameLine();
 			
@@ -2645,7 +2680,7 @@ namespace RadarKeys {
 			if (ImGui::Button(buttonLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) { 
 				isAssigningMenuToggleKey = true; isAssigningModKey = false; showCapturePrompt = true;
 				requestCaptureFocus = true;
-				LogActivity("Menu Key Reassignment Prompt opened");
+				LogActivity(LOG_MENU_KEY_REASSIGNMENT_PROMPT_OPENED);
 			}
 			ImGui::Separator();
 
@@ -3281,7 +3316,7 @@ namespace RadarKeys {
 				capturedInstantUserSet = false;
 				isAssigningMenuToggleKey = false; isAssigningModKey = false; showCapturePrompt = true;
 				requestCaptureFocus = true;
-				LogActivity("Key Assignment Binding Prompt opened");
+				LogActivity(LOG_KEY_ASSIGNMENT_BINDING_PROMPT_OPENED);
 			}
 			ImGui::End();
 
