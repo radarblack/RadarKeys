@@ -54,6 +54,8 @@ namespace RadarKeys {
 		void UnBlockMouseClick();
 		void BlockKeyboard();
 		void UnBlockKeyboard();
+		void SetGamepadBlockedToGame(bool blocked);
+		bool IsGamepadBlockedToGame();
 		void PollGamepad();
 		void PollPlaystation();
 		bool IsAnyGamepadConnected();
