@@ -144,6 +144,12 @@ namespace RadarKeys {
 		};
 
 		void EnsureXInputHook() {
+			static ULONGLONG lastModuleScanTick = 0;
+			const ULONGLONG moduleScanNow = GetTickCount64();
+			if (moduleScanNow - lastModuleScanTick < 2000) {
+				return;
+			}
+			lastModuleScanTick = moduleScanNow;
 			static const wchar_t* kModuleNames[] = {
 				L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll", L"xinput1_2.dll", L"xinput1_1.dll", L"xinputuap.dll"
 			};
@@ -220,7 +226,7 @@ namespace RadarKeys {
 			DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) {
 			HANDLE handle = g_origCreateFileW(lpFileName, dwDesiredAccess, dwShareMode,
 				lpSecurityAttributes, dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
-			if (handle != INVALID_HANDLE_VALUE && lpFileName && PathIsGamepadHid(lpFileName)) {
+			if (handle != INVALID_HANDLE_VALUE && lpFileName && wcsstr(lpFileName, L"HID#") != nullptr && PathIsGamepadHid(lpFileName)) {
 				std::lock_guard<std::mutex> lock(g_hidGamepadMutex);
 				if (g_hidGamepadHandles.size() < 4096) {
 					g_hidGamepadHandles.insert(handle);
@@ -789,6 +795,11 @@ namespace RadarKeys {
 
 		bool OnMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 			switch (uMsg) {
+			case WM_DEVICECHANGE:
+				if (wParam == DBT_DEVICEARRIVAL || wParam == DBT_DEVICEREMOVECOMPLETE) {
+					DirectInputHook::NotifyDeviceListChanged();
+				}
+				break;
 			case WM_INPUT:
 			{
 				// wParam is either RIM_INPUT (this app foreground) or RIM_INPUTSINK (this app background)
