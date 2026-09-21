@@ -5,6 +5,9 @@
 #include "WindowsMessageHook.hpp"
 
 using namespace std;
+static const char* LOG_INITIALIZING_WINDOWSMESSAGEHOOK = "Initializing WindowsMessageHook";
+static const char* LOG_HOOKED_WINDOWS_MESSAGE_HANDLER = "Hooked Windows message handler";
+
 static WindowsMessageHook* g_windows_message_hook{ nullptr };
 std::recursive_mutex g_proc_mutex{};
 
@@ -31,7 +34,7 @@ WindowsMessageHook::WindowsMessageHook(HWND wnd)
     : m_wnd{ wnd },
     m_original_proc{ nullptr }
 {
-    spdlog::info("Initializing WindowsMessageHook");
+    spdlog::info(LOG_INITIALIZING_WINDOWSMESSAGEHOOK);
 
     g_windows_message_hook = this;
 
@@ -41,7 +44,7 @@ WindowsMessageHook::WindowsMessageHook(HWND wnd)
     // Set it to our "hook" procedure.
     SetWindowLongPtr(m_wnd, GWLP_WNDPROC, (LONG_PTR)&window_proc);
 
-    spdlog::info("Hooked Windows message handler");
+    spdlog::info(LOG_HOOKED_WINDOWS_MESSAGE_HANDLER);
 }
 
 WindowsMessageHook::~WindowsMessageHook() {
