@@ -1023,15 +1023,17 @@ namespace RadarKeys {
 					break;
 				}
 
-				LPBYTE lpb = new BYTE[dwSize];
-				if (lpb == NULL) {
-					break;
+				alignas(RAWINPUT) BYTE stackBuffer[256];
+				LPBYTE lpb = stackBuffer;
+				if (dwSize > sizeof(stackBuffer)) {
+					static thread_local std::vector<BYTE> heapBuffer;
+					heapBuffer.resize(dwSize);
+					lpb = heapBuffer.data();
 				}
 				ZeroMemory(lpb, dwSize);
 
 				// get actual data
 				if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
-					delete[] lpb;
 					break;
 				}
 
@@ -1040,7 +1042,6 @@ namespace RadarKeys {
 				if (pRaw->header.dwType == RIM_TYPEKEYBOARD) {
 					USHORT vKey = pRaw->data.keyboard.VKey;
 					if (vKey >= vKeyMax) {
-						delete[] lpb;
 						return true;
 					}
 
@@ -1048,19 +1049,15 @@ namespace RadarKeys {
 						ProcessKey(pRaw);
 					}
 					if (blockGameKeys[vKey]) {
-						delete[] lpb;
 						return false;
 					}
 				}
 				else if (pRaw->header.dwType == RIM_TYPEMOUSE) {
 					if (!ProcessMouseButtons(pRaw)) {
-						delete[] lpb;
 						return false;
 					}
 				}
 
-				// not needed
-				delete[] lpb;
 				break;
 			}//case WM_INPUT
 			}//switch uMsg
