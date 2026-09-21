@@ -716,15 +716,20 @@ namespace RadarKeys {
 		}
 
 		static bool TriggerHeld(const DeviceInfo& info, const DIJOYSTATE* js, int which) {
-			LONG value = (which == 0) ? js->rglSlider[0] : js->rglSlider[1];
-			size_t offsetBytes = DIJOFS_SLIDER(which);
-			size_t idx = offsetBytes / 4;
-			const AxisRange* r = ResolveAxisRange(info, idx);
+			LONG value = (which == 0) ? js->lZ : js->lRz;
+			const AxisRange* r = ResolveAxisRange(info, ((which == 0) ? DIJOFS_Z : DIJOFS_RZ) / 4);
 			if (r) {
-				return value >= r->minV + (r->maxV - r->minV) * 4 / 5;
+				if (value >= r->minV + (r->maxV - r->minV) * 4 / 5) {
+					return true;
+				}
+			} else if (value > 20000) {
+				return true;
 			}
-			if (which == 0 && js->lZ > 20000)  return true;
-			if (which == 1 && js->lRz > 20000) return true;
+			LONG slider = (which == 0) ? js->rglSlider[0] : js->rglSlider[1];
+			const AxisRange* s = ResolveAxisRange(info, DIJOFS_SLIDER(which) / 4);
+			if (s) {
+				return slider >= s->minV + (s->maxV - s->minV) * 4 / 5;
+			}
 			return false;
 		}
 
@@ -1363,6 +1368,5 @@ namespace RadarKeys {
 				}
 			}
 		}
-
 	}
 }
