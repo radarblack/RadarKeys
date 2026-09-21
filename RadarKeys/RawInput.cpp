@@ -11,12 +11,10 @@
 #include <cstdint>
 #include <new>
 #include <cstdint>
-#include <mmsystem.h>
 #include <Dbt.h>
 #include <algorithm>
 #include <utility>
 #include <mutex>
-#include <thread>
 #include <vector>
 #include <atomic>
 #include <list>
@@ -64,7 +62,6 @@ namespace RadarKeys {
 
 		bool IsKeyboardBlockedToGame() { return g_keyboardBlockedToGame.load() != false; }
 		bool IsMouseBlockedToGame() { return g_mouseBlockedToGame.load() != false; }
-		bool IsGamepadBlockedToGame() { return g_gamepadBlockedToGame.load() != false; }
 		void SetGamepadBlockedToGame(bool blocked) { g_gamepadBlockedToGame.store(blocked ? 1 : 0); }
 
 		std::list<std::pair<ActionHandle, ButtonAction>>* buttonActions[vKeyMax] = { nullptr };
