@@ -17,6 +17,9 @@ namespace RadarKeys {
 			std::recursive_mutex g_keyStateMutex;
 		}
 		using KeyStateLock = std::lock_guard<std::recursive_mutex>;
+		static const char* LOG_LUAKEYSTATE_ENSURETRACKED_NOW_TRACKING_VKEY_FMT = "LuaKeyState EnsureTracked: now tracking vKey:{}";
+		static const char* LOG_LUAKEYSTATE_RETIREIFUNDESCRIBED_RELEASED_VKEY_FMT = "LuaKeyState RetireIfUndescribed: released vKey:{}";
+
 		constexpr double kHoldTimeSeconds = 0.9;
 		constexpr double kRepeatRateSeconds = 0.85;
 		constexpr double kIncrementMultIncrementMult = 1.5;
@@ -197,7 +200,7 @@ namespace RadarKeys {
 			}
 			s.actionHandle = RawInput::RegisterAction(vKey, [vKey](RawInput::BUTTONEVENT ev) { OnRawEvent(vKey, ev); });
 			s.registered = true;
-			spdlog::debug("LuaKeyState EnsureTracked: now tracking vKey:{}", vKey);
+			spdlog::debug(LOG_LUAKEYSTATE_ENSURETRACKED_NOW_TRACKING_VKEY_FMT, vKey);
 		}
 
 		void RetireIfUndescribed(USHORT vKey) {
@@ -218,7 +221,7 @@ namespace RadarKeys {
 			}
 			RawInput::UnRegisterAction(vKey, s.actionHandle);
 			s = KeyPollState{};
-			spdlog::debug("LuaKeyState RetireIfUndescribed: released vKey:{}", vKey);
+			spdlog::debug(LOG_LUAKEYSTATE_RETIREIFUNDESCRIBED_RELEASED_VKEY_FMT, vKey);
 		}
 
 		bool ButtonDown(USHORT vKey) {
