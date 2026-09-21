@@ -32,8 +32,6 @@ namespace RadarKeys {
 		static const char* LOG_RADARKEYS_KEY_QUERY_UNRECOGNIZED_KEY_NAME = "RadarKeys key query: unrecognized key name '{}'";
 		static const char* LOG_RADARKEYS_COMBO_QUERY_UNRECOGNIZED_MALFORMED_COMBO = "RadarKeys combo query: unrecognized or malformed combo string '{}'";
 		static const char* LOG_RADARKEYS_KEY_QUERY_INVALID_HOLD_SECONDS = "RadarKeys key query: invalid hold-seconds arg '{}'";
-		static const char* LOG_LUAOPEN_RADARKEYS = "luaopen_RadarKeys";
-		static const char* LOG_LUAOPEN_RADARKEYS_REGISTERLUALIBRARY_FAILED_LUA_API = "luaopen_RadarKeys: RegisterLuaLibrary failed - Lua API addresses may not have resolved yet";
 
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
 	SetCursorPosFunc SetCursorPos_Orig = NULL;
@@ -278,6 +276,9 @@ namespace RadarKeys {
 		return 1;
 	}
 }
+
+static const char* LOG_LUAOPEN_RADARKEYS = "luaopen_RadarKeys";
+static const char* LOG_LUAOPEN_RADARKEYS_REGISTERLUALIBRARY_FAILED_LUA_API = "luaopen_RadarKeys: RegisterLuaLibrary failed - Lua API addresses may not have resolved yet";
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 	spdlog::debug(LOG_LUAOPEN_RADARKEYS);
