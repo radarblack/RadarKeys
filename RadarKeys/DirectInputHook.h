@@ -1,5 +1,6 @@
 #pragma once
 #include "windowsapi.h"
+#include <cstdint>
 
 namespace RadarKeys {
 	namespace DirectInputHook {
@@ -12,5 +13,6 @@ namespace RadarKeys {
 		bool HasPlaystationDevice();
 		bool IsSonyGamepadAttachedToSystem();
 		void NotifyDeviceListChanged();
+		uint32_t GetDeviceListSweepCount();
 	}
 }
