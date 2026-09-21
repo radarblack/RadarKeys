@@ -441,11 +441,23 @@ namespace RadarKeys {
 				}
 			}
 
+			UINT slotMask = 0;
+			for (int i = 0; i < XUSER_MAX_COUNT; ++i) {
+				if (slotSeen[i]) {
+					slotMask |= (1u << i);
+				}
+			}
 			static bool bridgeActive = false;
 			static ULONGLONG lastBridgeCheck = 0;
+			static UINT lastBridgeSlotMask = 0xFFFFFFFFu;
+			static uint32_t lastBridgeSweepCount = 0xFFFFFFFFu;
 			ULONGLONG bridgeNow = GetTickCount64();
-			if (bridgeNow - lastBridgeCheck >= 2000) {
+			const uint32_t bridgeSweepCount = DirectInputHook::GetDeviceListSweepCount();
+			const bool bridgeInputsChanged = (slotMask != lastBridgeSlotMask) || (bridgeSweepCount != lastBridgeSweepCount);
+			if (bridgeInputsChanged ? (bridgeNow - lastBridgeCheck >= 1000) : (bridgeNow - lastBridgeCheck >= 15000)) {
 				lastBridgeCheck = bridgeNow;
+				lastBridgeSlotMask = slotMask;
+				lastBridgeSweepCount = bridgeSweepCount;
 				bool wantBridge = connectedSlots == 1 &&
 					!DirectInputHook::HasPlaystationDevice() &&
 					DirectInputHook::IsSonyGamepadAttachedToSystem();
