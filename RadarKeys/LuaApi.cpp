@@ -60,7 +60,7 @@ namespace RadarKeys {
 		bool ok = g_FoxLuaRegisterLibrary && g_lua_gettop && g_lua_pushnumber && g_lua_tolstring &&
 			g_lua_pushstring && g_lua_createtable && g_lua_rawset && g_lua_pushnil;
 		if (!ok) {
-			spdlog::error("ResolveLuaApi: one or more Lua function addresses failed to resolve - game version may not match the day3900-en address table this build uses");
+			spdlog::error(LOG_RESOLVELUAAPI_ONE_MORE_LUA_FUNCTION_ADDRESSES);
 		}
 		if (!g_lua_getfield) {
 			g_lua_getfield = reinterpret_cast<lua_getfield_t>(ResolveGameAddress(ADDR_lua_getfield));
@@ -75,18 +75,27 @@ namespace RadarKeys {
 			g_lua_type = reinterpret_cast<lua_type_t>(ResolveGameAddress(ADDR_lua_type));
 		}
 
+		static const char* LOG_RESOLVELUAAPI_ONE_MORE_LUA_FUNCTION_ADDRESSES = "ResolveLuaApi: one or more Lua function addresses failed to resolve - game version may not match the day3900-en address table this build uses";
+		static const char* LOG_RESOLVELUAAPI_DIRECT_NON_QUEUED_LUA_CALL = "ResolveLuaApi: direct (non-queued) Lua call path is available";
+		static const char* LOG_RESOLVELUAAPI_DIRECT_LUA_CALL_PATH_UNAVAILABLE = "ResolveLuaApi: direct Lua call path unavailable (ADDR_lua_getfield/pcall/settop/type not set) - manual key binds will use the queued path";
+		static const char* LOG_RESOLVELUAAPI_DIRECT_LUA_CALL_PATH_COMPILED = "ResolveLuaApi: direct Lua call path compiled out (RADARKEYS_ALLOW_DIRECT_LUA_CALL=0) - manual key binds use the Lua-thread queued path";
+		static const char* LOG_REGISTERLUALIBRARY_REGISTERED_FMT = "RegisterLuaLibrary: registered {}";
+		static const char* LOG_LUAAPICAPTURESTATE_CAPTURED_MAIN_LUA_STATE_DIRECT = "LuaApiCaptureState: captured main lua_State for direct calls";
+		static const char* LOG_LUACALLGLOBALFUNCTION_DIRECT_OFF_THREAD_LUA_CALLS = "LuaCallGlobalFunction: direct (off-thread) Lua calls are compiled out (RADARKEYS_ALLOW_DIRECT_LUA_CALL=0); using queued CallFunction path";
+		static const char* LOG_LUACALLGLOBALFUNCTION_FMT_RAISED_ERROR_FMT = "LuaCallGlobalFunction: '{}' raised an error: {}";
+
 		static bool loggedDirectCallAvailability = false;
 		if (!loggedDirectCallAvailability) {
 			loggedDirectCallAvailability = true;
 #if RADARKEYS_ALLOW_DIRECT_LUA_CALL
 			bool directCallReady = g_lua_getfield && g_lua_pcall && g_lua_settop && g_lua_type;
 			if (directCallReady) {
-				spdlog::info("ResolveLuaApi: direct (non-queued) Lua call path is available");
+				spdlog::info(LOG_RESOLVELUAAPI_DIRECT_NON_QUEUED_LUA_CALL);
 			} else {
-				spdlog::info("ResolveLuaApi: direct Lua call path unavailable (ADDR_lua_getfield/pcall/settop/type not set) - manual key binds will use the queued path");
+				spdlog::info(LOG_RESOLVELUAAPI_DIRECT_LUA_CALL_PATH_UNAVAILABLE);
 			}
 #else
-			spdlog::info("ResolveLuaApi: direct Lua call path compiled out (RADARKEYS_ALLOW_DIRECT_LUA_CALL=0) - manual key binds use the Lua-thread queued path");
+			spdlog::info(LOG_RESOLVELUAAPI_DIRECT_LUA_CALL_PATH_COMPILED);
 #endif
 		}
 
@@ -158,7 +167,7 @@ namespace RadarKeys {
 			return false;
 		}
 		g_FoxLuaRegisterLibrary(L, libName, funcs);
-		spdlog::debug("RegisterLuaLibrary: registered {}", libName);
+		spdlog::debug(LOG_REGISTERLUALIBRARY_REGISTERED_FMT, libName);
 		return true;
 	}
 
@@ -169,7 +178,7 @@ static std::atomic<lua_State*> g_CapturedLuaState{ nullptr };
 			return;
 		}
 			if (!g_CapturedLuaState.load()) {
-			spdlog::info("LuaApiCaptureState: captured main lua_State for direct calls");
+			spdlog::info(LOG_LUAAPICAPTURESTATE_CAPTURED_MAIN_LUA_STATE_DIRECT);
 		}
 			g_CapturedLuaState.store(L);
 	}
@@ -187,7 +196,7 @@ static std::atomic<lua_State*> g_CapturedLuaState{ nullptr };
 		static bool loggedDirectCallDisabled = false;
 		if (!loggedDirectCallDisabled) {
 			loggedDirectCallDisabled = true;
-			spdlog::info("LuaCallGlobalFunction: direct (off-thread) Lua calls are compiled out (RADARKEYS_ALLOW_DIRECT_LUA_CALL=0); using queued CallFunction path");
+			spdlog::info(LOG_LUACALLGLOBALFUNCTION_DIRECT_OFF_THREAD_LUA_CALLS);
 		}
 		return LuaDirectCallResult::NotAvailable;
 #else
@@ -206,7 +215,7 @@ static std::atomic<lua_State*> g_CapturedLuaState{ nullptr };
 
 		if (g_lua_pcall(L, 0, 0, 0) != 0) {
 			const char* err = LuaToString(L, -1);
-			spdlog::error("LuaCallGlobalFunction: '{}' raised an error: {}", functionName, err ? err : "<no message>");
+			spdlog::error(LOG_LUACALLGLOBALFUNCTION_FMT_RAISED_ERROR_FMT, functionName, err ? err : "<no message>");
 			g_lua_settop(L, top);
 			return LuaDirectCallResult::RuntimeError;
 		}
