@@ -22,6 +22,27 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 namespace RadarKeys {
 	namespace Render {
+	static const char* LOG_ENSURERENDERTARGET_GETBUFFER_FMT_FAILED_0X_08X = "EnsureRenderTarget: GetBuffer({}) failed: 0x{:08X}";
+	static const char* LOG_ENSURERENDERTARGET_CREATERENDERTARGETVIEW_FAILED_0X_ = "EnsureRenderTarget: CreateRenderTargetView failed: 0x{:08X}";
+	static const char* LOG_ATTEMPTING_FRAME_INITIALIZE = "Attempting to frame initialize";
+	static const char* LOG_DEVICE_SWAPCHAIN_NULL_DIRECTX_12_MAY = "Device or SwapChain null. DirectX 12 may be in use. A crash may occur.";
+	static const char* LOG_FRAMEINITIALIZE_SWAP_CHAIN_HAS_NO_OUTPUT = "FrameInitialize: swap chain has no output window - input hook skipped";
+	static const char* LOG_CREATING_RENDER_TARGET = "Creating render target";
+	static const char* LOG_WINDOW_HANDLE_0_X = "Window Handle: {0:x}";
+	static const char* LOG_INITIALIZING_IMGUI = "Initializing ImGui";
+	static const char* LOG_INITIALIZING_IMGUI_WIN32 = "Initializing ImGui Win32";
+	static const char* LOG_FAILED_INITIALIZE_IMGUI = "Failed to initialize ImGui.";
+	static const char* LOG_INITIALIZING_IMGUI_D3D11 = "Initializing ImGui D3D11";
+	static const char* LOG_INPUT_UNLOCK_FMT_MAINMENU_FMT_DEBUGGER = "Input unlock: {} (mainMenu={}, debugger={})";
+	static const char* LOG_KEYBOARD_BLOCK_GAME_FMT_UNLOCK_FMT = "Keyboard block-to-game: {} (unlock={}, captureSuppressKeyboard={}, mainMenu={}, debugger={})";
+	static const char* LOG_MOUSE_BLOCK_GAME_FMT_UNLOCK_FMT = "Mouse block-to-game: {} (unlock={}, captureSuppressMouse={}, mainMenu={}, debugger={})";
+	static const char* LOG_GAMEPAD_BLOCK_GAME_FMT_UNLOCK_FMT = "Gamepad block-to-game: {} (unlock={}, captureSuppressGamepad={}, mainMenu={}, debugger={})";
+	static const char* LOG_FAILED_FRAME_INITIALIZE_RADARKEYS = "Failed to frame initialize RadarKeys";
+	static const char* LOG_RADARKEYS_FRAME_INITIALIZED = "RadarKeys frame initialized";
+	static const char* LOG_ONRESET = "OnReset";
+	static const char* LOG_ONRESET_DONE = "OnReset done";
+	static const char* LOG_HOOKED_D3D11 = "Hooked D3D11";
+
 
 		std::unique_ptr<D3D11Hook> d3d11Hook;
 		std::unique_ptr<WindowsMessageHook> windowsMessageHook;
@@ -90,7 +111,7 @@ namespace RadarKeys {
 				ID3D11Texture2D* backBuffer{ nullptr };
 				HRESULT hr = swapChain->GetBuffer(bufferIndex, __uuidof(ID3D11Texture2D), reinterpret_cast<LPVOID*>(&backBuffer));
 				if (FAILED(hr) || backBuffer == nullptr) {
-					spdlog::warn("EnsureRenderTarget: GetBuffer({}) failed: 0x{:08X}", bufferIndex, static_cast<unsigned>(hr));
+					spdlog::warn(LOG_ENSURERENDERTARGET_GETBUFFER_FMT_FAILED_0X_08X, bufferIndex, static_cast<unsigned>(hr));
 					return nullptr;
 				}
 
@@ -98,7 +119,7 @@ namespace RadarKeys {
 				backBuffer->Release();
 				if (FAILED(hr)) {
 					backBufferRTVs[bufferIndex] = nullptr;
-					spdlog::warn("EnsureRenderTarget: CreateRenderTargetView failed: 0x{:08X}", static_cast<unsigned>(hr));
+					spdlog::warn(LOG_ENSURERENDERTARGET_CREATERENDERTARGETVIEW_FAILED_0X_, static_cast<unsigned>(hr));
 					return nullptr;
 				}
 			}
@@ -174,13 +195,13 @@ namespace RadarKeys {
 				return true;
 			}
 
-			spdlog::info("Attempting to frame initialize");
+			spdlog::info(LOG_ATTEMPTING_FRAME_INITIALIZE);
 
 			auto device = d3d11Hook->get_device();
 			auto swapChain = d3d11Hook->get_swap_chain();
 
 			if (device == nullptr || swapChain == nullptr) {
-				spdlog::info("Device or SwapChain null. DirectX 12 may be in use. A crash may occur.");
+				spdlog::info(LOG_DEVICE_SWAPCHAIN_NULL_DIRECTX_12_MAY);
 				return false;
 			}
 
@@ -191,7 +212,7 @@ namespace RadarKeys {
 			swapChain->GetDesc(&swapDesc);
 			hwnd = swapDesc.OutputWindow;
 			if (hwnd == nullptr) {
-				spdlog::warn("FrameInitialize: swap chain has no output window - input hook skipped");
+				spdlog::warn(LOG_FRAMEINITIALIZE_SWAP_CHAIN_HAS_NO_OUTPUT);
 			}
 			windowsMessageHook.reset();
 			windowsMessageHook = std::make_unique<WindowsMessageHook>(hwnd);
@@ -199,27 +220,27 @@ namespace RadarKeys {
 				return OnMessage(wnd, msg, wParam, lParam);
 			};
 
-			spdlog::info("Creating render target");
+			spdlog::info(LOG_CREATING_RENDER_TARGET);
 			EnsureRenderTarget();
 
-			spdlog::info("Window Handle: {0:x}", (uintptr_t)hwnd);
+			spdlog::info(LOG_WINDOW_HANDLE_0_X, (uintptr_t)hwnd);
 
 			if (!ImGuiInitialized) {
-				spdlog::info("Initializing ImGui");
+				spdlog::info(LOG_INITIALIZING_IMGUI);
 				IMGUI_CHECKVERSION();
 				ImGui::CreateContext();
 				ImGuiIO& io = ImGui::GetIO(); (void)io;
 
-				spdlog::info("Initializing ImGui Win32");
+				spdlog::info(LOG_INITIALIZING_IMGUI_WIN32);
 				if (!ImGui_ImplWin32_Init(hwnd)) {
-					spdlog::error("Failed to initialize ImGui.");
+					spdlog::error(LOG_FAILED_INITIALIZE_IMGUI);
 					context->Release();
 					return false;
 				}
 
-				spdlog::info("Initializing ImGui D3D11");
+				spdlog::info(LOG_INITIALIZING_IMGUI_D3D11);
 				if (!ImGui_ImplDX11_Init(device, context)) {
-					spdlog::error("Failed to initialize ImGui.");
+					spdlog::error(LOG_FAILED_INITIALIZE_IMGUI);
 					context->Release();
 					return false;
 				}
@@ -271,24 +292,24 @@ namespace RadarKeys {
 			static bool lastBlockGamepad = false;
 			static bool lastUnlock = false;
 			if (unlock != lastUnlock) {
-				spdlog::info("Input unlock: {} (mainMenu={}, debugger={})",
+				spdlog::info(LOG_INPUT_UNLOCK_FMT_MAINMENU_FMT_DEBUGGER,
 					unlock ? "ON" : "OFF", KeyBindMenu::menuOpen, DebuggerMenu::menuOpen);
 				lastUnlock = unlock;
 			}
 			if (blockKeyboard != lastBlockKeyboard) {
-				spdlog::info("Keyboard block-to-game: {} (unlock={}, captureSuppressKeyboard={}, mainMenu={}, debugger={})",
+				spdlog::info(LOG_KEYBOARD_BLOCK_GAME_FMT_UNLOCK_FMT,
 					blockKeyboard ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressKeyboard,
 					KeyBindMenu::menuOpen, DebuggerMenu::menuOpen);
 				lastBlockKeyboard = blockKeyboard;
 			}
 			if (blockMouse != lastBlockMouse) {
-				spdlog::info("Mouse block-to-game: {} (unlock={}, captureSuppressMouse={}, mainMenu={}, debugger={})",
+				spdlog::info(LOG_MOUSE_BLOCK_GAME_FMT_UNLOCK_FMT,
 					blockMouse ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressMouse,
 					KeyBindMenu::menuOpen, DebuggerMenu::menuOpen);
 				lastBlockMouse = blockMouse;
 			}
 			if (blockGamepad != lastBlockGamepad) {
-				spdlog::info("Gamepad block-to-game: {} (unlock={}, captureSuppressGamepad={}, mainMenu={}, debugger={})",
+				spdlog::info(LOG_GAMEPAD_BLOCK_GAME_FMT_UNLOCK_FMT,
 					blockGamepad ? "ON" : "OFF", unlock, KeyBindMenu::captureSuppressGamepad,
 					KeyBindMenu::menuOpen, DebuggerMenu::menuOpen);
 				lastBlockGamepad = blockGamepad;
@@ -308,10 +329,10 @@ namespace RadarKeys {
 		void OnFrame() {
 			if (!frameInitialized) {
 				if (!FrameInitialize()) {
-					spdlog::error("Failed to frame initialize RadarKeys");
+					spdlog::error(LOG_FAILED_FRAME_INITIALIZE_RADARKEYS);
 					return;
 				}
-				spdlog::info("RadarKeys frame initialized");
+				spdlog::info(LOG_RADARKEYS_FRAME_INITIALIZED);
 				frameInitialized = true;
 				return;
 			}
@@ -357,12 +378,12 @@ namespace RadarKeys {
 		}
 
 		void OnReset() {
-			spdlog::info("OnReset");
+			spdlog::info(LOG_ONRESET);
 
 			CleanupRenderTarget();
 			frameInitialized = false;
 
-			spdlog::info("OnReset done");
+			spdlog::info(LOG_ONRESET_DONE);
 		}
 
 		void CreateD3DHook() {
@@ -372,7 +393,7 @@ namespace RadarKeys {
 
 			d3dHooked = d3d11Hook->hook();
 			if (d3dHooked) {
-				spdlog::info("Hooked D3D11");
+				spdlog::info(LOG_HOOKED_D3D11);
 			}
 			else {
 				std::wstring title = L"MGSTPP - RadarKeys";
