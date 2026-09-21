@@ -5,6 +5,13 @@
 
 using namespace std;
 
+static const char* LOG_HOOKING_D3D11 = "Hooking D3D11";
+static const char* LOG_FAILED_CREATE_DUMMY_WINDOW_D3D11_HOOK = "Failed to create dummy window for D3D11 hook. GetLastError={0:x}";
+static const char* LOG_CREATING_DUMMY_D3D11_DEVICE = "Creating dummy D3D11 device.";
+static const char* LOG_FAILED_CREATE_DUMMY_D3D11_DEVICE_HRESULT = "Failed to create dummy D3D11 device. HRESULT={0:x} max_feature={1:x}";
+static const char* LOG_CREATED_DUMMY_D3D11_DEVICE_HRESULT_0 = "Created dummy D3D11 device. HRESULT={0:x} max_feature={1:x}";
+static const char* LOG_RELEASED_DUMMY_D3D11_DEVICE = "Released dummy D3D11 device";
+
 static D3D11Hook* g_d3d11_hook = nullptr;
 
 D3D11Hook::~D3D11Hook() {
@@ -18,13 +25,13 @@ D3D11Hook::~D3D11Hook() {
 }
 
 bool D3D11Hook::hook() {
-    spdlog::info("Hooking D3D11");
+    spdlog::info(LOG_HOOKING_D3D11);
 
     g_d3d11_hook = this;
 
     HWND h_wnd = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 1, 1, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (h_wnd == nullptr) {
-        spdlog::error("Failed to create dummy window for D3D11 hook. GetLastError={0:x}", GetLastError());
+        spdlog::error(LOG_FAILED_CREATE_DUMMY_WINDOW_D3D11_HOOK, GetLastError());
         return false;
     }
 
@@ -47,14 +54,14 @@ bool D3D11Hook::hook() {
     swap_chain_desc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
     swap_chain_desc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
     swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-    spdlog::info("Creating dummy D3D11 device.");
+    spdlog::info(LOG_CREATING_DUMMY_D3D11_DEVICE);
     HRESULT hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_NULL, nullptr, 0, &feature_level, 1, D3D11_SDK_VERSION, &swap_chain_desc, &swap_chain, &device, &device_max_feature_level, &context);
     if (FAILED(hr)) {  
-        spdlog::error("Failed to create dummy D3D11 device. HRESULT={0:x} max_feature={1:x}", hr, device_max_feature_level);
+        spdlog::error(LOG_FAILED_CREATE_DUMMY_D3D11_DEVICE_HRESULT, hr, device_max_feature_level);
         DestroyWindow(h_wnd);
         return false;
     }
-    spdlog::info("Created dummy D3D11 device. HRESULT={0:x} max_feature={1:x}", hr, device_max_feature_level);
+    spdlog::info(LOG_CREATED_DUMMY_D3D11_DEVICE_HRESULT_0, hr, device_max_feature_level);
 
     auto present_fn = (*(uintptr_t**)swap_chain)[8];
     auto resize_buffers_fn = (*(uintptr_t**)swap_chain)[13];
@@ -65,7 +72,7 @@ bool D3D11Hook::hook() {
     context->Release();
     swap_chain->Release();
     DestroyWindow(h_wnd);
-    spdlog::info("Released dummy D3D11 device");
+    spdlog::info(LOG_RELEASED_DUMMY_D3D11_DEVICE);
 
     m_hooked = m_present_hook->create() && m_resize_buffers_hook->create();
 
