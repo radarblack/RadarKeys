@@ -235,9 +235,11 @@ namespace RadarKeys {
 			}
 			std::lock_guard<std::mutex> lock(g_mutex);
 			auto it = g_deviceInfo.find(self);
-			if (it != g_deviceInfo.end() && !it->second.selfOpened) {
-			it->second.kind = kind;
-			it->second.kindFromCapabilities = true;
+			if (it != g_deviceInfo.end()) {
+				if (!it->second.selfOpened) {
+					it->second.kind = kind;
+				}
+				it->second.kindFromCapabilities = true;
 			}
 		}
 
@@ -323,14 +325,22 @@ namespace RadarKeys {
 		}
 
 		static HRESULT STDMETHODCALLTYPE Hooked_Acquire(IDirectInputDevice8* self) {
-			Acquire_t origAcquire = OrigAcquire(self);
-			HRESULT hr = origAcquire ? origAcquire(self) : E_FAIL;
-			if (SUCCEEDED(hr)) {
-				ClassifyFromCapabilities(self);
-				ClassifyPlaystation(self);
-				spdlog::default_logger()->flush();
-			}
-			return hr;
+		Acquire_t origAcquire = OrigAcquire(self);
+		HRESULT hr = origAcquire ? origAcquire(self) : E_FAIL;
+		if (SUCCEEDED(hr)) {
+		bool needClassify = false;
+		{
+		std::lock_guard<std::mutex> lock(g_mutex);
+		auto it = g_deviceInfo.find(self);
+		needClassify = it == g_deviceInfo.end() ||
+		!it->second.kindFromCapabilities || !it->second.productQueried;
+		}
+		if (needClassify) {
+		ClassifyFromCapabilities(self);
+		ClassifyPlaystation(self);
+		}
+		}
+		return hr;
 		}
 
 		static HRESULT STDMETHODCALLTYPE Hooked_SetProperty(IDirectInputDevice8* self,
@@ -971,6 +981,7 @@ namespace RadarKeys {
 		}
 
 		static ULONGLONG g_lastEnumTick = 0;
+		static std::atomic<bool> g_deviceListDirty{ false };
 		static int g_enumCallbackSeen = 0;
 
 		static bool EnumWarnOnceForGuid(int category, REFGUID guid) {
@@ -1094,6 +1105,10 @@ namespace RadarKeys {
 				}
 			}
 			return sonyPadCount == 1;
+		}
+
+		void NotifyDeviceListChanged() {
+			g_deviceListDirty.store(true, std::memory_order_release);
 		}
 
 		bool IsSonyGamepadAttachedToSystem() {
@@ -1334,7 +1349,9 @@ namespace RadarKeys {
 			}
 
 			ULONGLONG now = GetTickCount64();
-			if (now - g_lastEnumTick >= 2000) {
+			const bool deviceListDirty = g_deviceListDirty.load(std::memory_order_acquire);
+			if (deviceListDirty ? (now - g_lastEnumTick >= 1000) : (now - g_lastEnumTick >= 15000)) {
+				g_deviceListDirty.store(false, std::memory_order_release);
 				g_lastEnumTick = now;
 				HWND ctxHwnd = hwnd;
 				g_enumCallbackSeen = 0;
