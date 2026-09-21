@@ -932,7 +932,6 @@ namespace RadarKeys {
 		}
 
 		void Update() {
-			RawInput::PollPlaystation();
 
 			static bool capturePromptWasActive = false;
 			if (capturePromptWasActive && !showCapturePrompt) {
@@ -960,9 +959,26 @@ namespace RadarKeys {
 			LuaKeyState::SweepStaleComboDescriptions();
 			ModInfoRegistry::SweepStale();
 
-			LuaKeyState::SetSuppressedVKeys(ComputeConflictedVKeys());
-			LuaKeyState::SetDisabledVKeys(ComputeDisabledModVKeys());
-			LuaKeyState::SetDisabledCombos(ComputeDisabledModCombos());
+			static std::vector<USHORT> cachedSuppressedVKeys;
+			static std::vector<USHORT> cachedDisabledVKeys;
+			static std::vector<std::vector<USHORT>> cachedDisabledCombos;
+			static ULONGLONG lastVKeyComputeTick = 0;
+			static bool lastVKeyComputeMenuOpen = false;
+			static bool lastVKeyComputeCapturePrompt = false;
+			const ULONGLONG vkeyComputeNow = GetTickCount64();
+			if (menuOpen != lastVKeyComputeMenuOpen ||
+			showCapturePrompt != lastVKeyComputeCapturePrompt ||
+			vkeyComputeNow - lastVKeyComputeTick >= 250) {
+			lastVKeyComputeTick = vkeyComputeNow;
+			lastVKeyComputeMenuOpen = menuOpen;
+			lastVKeyComputeCapturePrompt = showCapturePrompt;
+			cachedSuppressedVKeys = ComputeConflictedVKeys();
+			cachedDisabledVKeys = ComputeDisabledModVKeys();
+			cachedDisabledCombos = ComputeDisabledModCombos();
+			LuaKeyState::SetSuppressedVKeys(cachedSuppressedVKeys);
+			LuaKeyState::SetDisabledVKeys(cachedDisabledVKeys);
+			LuaKeyState::SetDisabledCombos(cachedDisabledCombos);
+			}
 
 			if (showCapturePrompt) {
 				for (USHORT vKey : activeBindVKeys) {
