@@ -1367,10 +1367,10 @@ namespace RadarKeys {
 			if (!exists) {
 				bool armedAutoDisabled = false;
 				std::string injectContent = BuildInjectContent(sourcePath, lineStart, lineEnd);
-				if (injectFile.empty()) {
+				if (injectContent.empty()) {
 					spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT, sourcePath);
 				} else {
-					RunInjectCompileCheck(injectFile);
+					RunInjectCompileCheck(injectContent);
 				}
 				armedAutoDisabled = injectContent.empty();
 				KeyBind newBind{};
