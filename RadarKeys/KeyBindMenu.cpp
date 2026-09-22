@@ -165,6 +165,7 @@ namespace RadarKeys {
 		static const char* UI_BTN_SCRIPT_PLACEHOLDER = "Script";
 		static const char* UI_TIP_REASSIGN_COMBO = "Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder";
 		static const char* UI_TIP_REASSIGN_KEY = "Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder";
+		static const char* UI_LBL_KEY_GROUP_SEPARATOR = " / ";
 		static const char* UI_TIP_CANNOT_REASSIGN_UNDESCRIBED = "Unable to reassign an override - Key is not yet described through RadarKeys module.";
 		static const char* UI_POPUP_REMOVE_BINDING = "Remove Binding?";
 		static const char* UI_FMT_REMOVE_CONFIRM = "Remove \"%s\"?";
@@ -417,6 +418,13 @@ namespace RadarKeys {
 
 		static bool IsPlaystationVKeyValue(USHORT vKey) {
 			return vKey >= RawInput::VK_PS_CROSS && vKey <= RawInput::VK_PS_RS_RIGHT;
+		}
+
+		ModKeyBindings::BindSlot SlotOfVKey(USHORT vKey) {
+			if (IsGamepadVKeyValue(vKey) || IsPlaystationVKeyValue(vKey)) {
+				return ModKeyBindings::BindSlot::Pad;
+			}
+			return ModKeyBindings::BindSlot::Kbm;
 		}
 
 		std::string NameForVKey(USHORT vKey) {
@@ -902,7 +910,7 @@ namespace RadarKeys {
 			if (!info.hasDescription) {
 				return info.vKey;
 			}
-			std::string overrideKeyName = ModKeyBindings::GetOverride(info.scriptName, info.functionName);
+			std::string overrideKeyName = ModKeyBindings::GetSlotOverride(info.scriptName, info.functionName, SlotOfVKey(info.vKey));
 			if (overrideKeyName.empty()) {
 				return info.vKey;
 			}
@@ -1294,7 +1302,11 @@ namespace RadarKeys {
 				outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "|" << b.repeatAccelMult << "|" << (b.disabled ? "1" : "0") << "\n";
 			}
 			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
-				outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << (entry.disabled ? "1" : "0") << "\n";
+				if (entry.keyName == entry.padKeyName) {
+					outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << (entry.disabled ? "1" : "0") << "\n";
+				} else {
+					outFile << "MODKEY2|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << entry.padKeyName << "|" << (entry.disabled ? "1" : "0") << "\n";
+				}
 			}
 			outFile.close();
 			if (!outFile) {
@@ -1359,8 +1371,20 @@ namespace RadarKeys {
 					entry.scriptName = trim(parts[1]);
 					entry.functionName = trim(parts[2]);
 					entry.keyName = trim(parts[3]);
+					entry.padKeyName = entry.keyName;
 					entry.disabled = parts.size() >= 5 && trim(parts[4]) == "1";
 					if (!entry.scriptName.empty() && !entry.functionName.empty() && (!entry.keyName.empty() || entry.disabled)) {
+						modKeyEntries.push_back(std::move(entry));
+					}
+				}
+				else if (parts[0] == "MODKEY2" && parts.size() >= 6) {
+					ModKeyBindings::OverrideEntry entry;
+					entry.scriptName = trim(parts[1]);
+					entry.functionName = trim(parts[2]);
+					entry.keyName = trim(parts[3]);
+					entry.padKeyName = trim(parts[4]);
+					entry.disabled = trim(parts[5]) == "1";
+					if (!entry.scriptName.empty() && !entry.functionName.empty() && (!entry.keyName.empty() || !entry.padKeyName.empty() || entry.disabled)) {
 						modKeyEntries.push_back(std::move(entry));
 					}
 				}
@@ -2483,14 +2507,28 @@ namespace RadarKeys {
 					}
 					else {
 						USHORT oldVKey = 0;
+						bool slotMemberFound = false;
+						ModKeyBindings::BindSlot capturedSlot = SlotOfVKey(capturedVKey);
 						for (const auto& row : LuaKeyState::GetTrackedKeyInfo()) {
-							if (row.scriptName == modKeyCaptureScriptName && row.functionName == modKeyCaptureFunctionName) {
+							if (row.scriptName != modKeyCaptureScriptName || row.functionName != modKeyCaptureFunctionName) {
+								continue;
+							}
+							if (!slotMemberFound && SlotOfVKey(row.vKey) == capturedSlot) {
 								oldVKey = row.vKey;
-								break;
+								slotMemberFound = true;
 							}
 						}
-
-						ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(capturedVKey));
+						if (slotMemberFound) {
+							ModKeyBindings::SetSlotOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, capturedSlot, NameForVKey(capturedVKey));
+						} else {
+							for (const auto& row : LuaKeyState::GetTrackedKeyInfo()) {
+								if (row.scriptName == modKeyCaptureScriptName && row.functionName == modKeyCaptureFunctionName) {
+									oldVKey = row.vKey;
+									break;
+								}
+							}
+							ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(capturedVKey));
+						}
 						DebuggerMenu::LogBindEvent("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
 						LogActivity("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
 						if (oldVKey != 0 && oldVKey != capturedVKey) {
@@ -2759,6 +2797,7 @@ namespace RadarKeys {
 					LuaKeyState::TrackedComboKeyInfo comboInfo;
 					bool conflicted = false;
 					USHORT displayVKey = 0;
+					std::vector<LuaKeyState::TrackedKeyInfo> groupMembers;
 				};
 				std::vector<UnifiedRow> rows;
 				rows.reserve(trackedKeys.size() + trackedCombos.size() + bindings.size());
@@ -2768,10 +2807,26 @@ namespace RadarKeys {
 						continue;
 					}
 					USHORT displayVKey = ResolveDisplayVKey(info);
-					bool conflicted = conflictedVKeys.count(displayVKey) > 0;
+					bool conflicted = info.isConflicted || conflictedVKeys.count(displayVKey) > 0;
+					UnifiedRow* existing = nullptr;
+					for (UnifiedRow& r : rows) {
+						if (!r.isManual && !r.isComboScript && r.info.hasDescription
+							&& r.info.scriptName == info.scriptName && r.info.functionName == info.functionName) {
+							existing = &r;
+							break;
+						}
+					}
+					if (existing) {
+						existing->groupMembers.push_back(info);
+						if (conflicted) {
+							existing->conflicted = true;
+						}
+						continue;
+					}
 					UnifiedRow row;
 					row.isManual = false;
-					row.info = std::move(info);
+					row.info = info;
+					row.groupMembers.push_back(info);
 					row.conflicted = conflicted;
 					row.displayVKey = displayVKey;
 					rows.push_back(std::move(row));
@@ -3108,12 +3163,29 @@ namespace RadarKeys {
 					}
 					else {
 						ImVec4 keyNameColor;
-						bool displayKeyPressed = (row.displayVKey == row.info.vKey) ? row.info.isPressed : RawInput::IsKeyHeldReal(row.displayVKey);
-						if (row.info.hasToggleState) {
-							keyNameColor = row.info.toggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
+						bool anyPressed = false;
+						bool anyToggle = false;
+						bool anyToggleEnabled = false;
+						std::vector<std::string> groupNames;
+						for (const LuaKeyState::TrackedKeyInfo& member : row.groupMembers) {
+							USHORT memberDisplayVKey = ResolveDisplayVKey(member);
+							if (RawInput::IsKeyHeldReal(memberDisplayVKey)) {
+								anyPressed = true;
+							}
+							if (member.hasToggleState) {
+								anyToggle = true;
+								anyToggleEnabled = member.toggleEnabled;
+							}
+							std::string memberName = NameForVKey(memberDisplayVKey);
+							if (std::find(groupNames.begin(), groupNames.end(), memberName) == groupNames.end()) {
+								groupNames.push_back(memberName);
+							}
+						}
+						if (anyToggle) {
+							keyNameColor = anyToggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
 						}
 						else {
-							keyNameColor = displayKeyPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+							keyNameColor = anyPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 						}
 
 						auto openReassignPrompt = [&row]() {
@@ -3134,9 +3206,18 @@ namespace RadarKeys {
 							showCapturePrompt = true;
 						};
 
+						std::string groupLabel;
+						for (size_t gi = 0; gi < groupNames.size(); gi++) {
+							if (gi) groupLabel += UI_LBL_KEY_GROUP_SEPARATOR;
+							groupLabel += groupNames[gi];
+						}
+						float groupButtonWidth = ImGui::CalcTextSize(groupLabel.c_str()).x + 24.0f;
+						if (groupButtonWidth < 130.0f) groupButtonWidth = 130.0f;
+						if (groupButtonWidth > 210.0f) groupButtonWidth = 210.0f;
+
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
 						if (row.info.hasDescription) {
-							if (ImGui::Button(NameForVKey(row.displayVKey).c_str(), ImVec2(130, buttonHeight))) {
+							if (ImGui::Button(groupLabel.c_str(), ImVec2(groupButtonWidth, buttonHeight))) {
 								openReassignPrompt();
 							}
 							if (ImGui::IsItemHovered()) {
@@ -3145,7 +3226,7 @@ namespace RadarKeys {
 						}
 						else {
 							ImGui::BeginDisabled();
-							ImGui::Button(NameForVKey(row.displayVKey).c_str(), ImVec2(130, buttonHeight));
+							ImGui::Button(groupLabel.c_str(), ImVec2(groupButtonWidth, buttonHeight));
 							ImGui::EndDisabled();
 							if (ImGui::IsItemHovered()) {
 								ImGui::SetTooltip(UI_TIP_CANNOT_REASSIGN_UNDESCRIBED);
@@ -3201,26 +3282,20 @@ namespace RadarKeys {
 					ImGui::TextDisabled(UI_TXT_CLEARS_REASSIGNMENT);
 					ImGui::Spacing();
 					if (ImGui::Button(UI_BTN_YES, ImVec2(80, 0))) {
-						USHORT resetActiveVKey = 0;
+						ModKeyBindings::SetOverride(pendingResetScriptName, pendingResetFunctionName, "");
 						for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
-							if (info.scriptName == pendingResetScriptName && info.functionName == pendingResetFunctionName) {
-								resetActiveVKey = info.vKey;
-								break;
+							if (info.scriptName != pendingResetScriptName || info.functionName != pendingResetFunctionName) {
+								continue;
+							}
+							USHORT resetNativeVKey = LuaKeyState::FindRedirectSource(info.vKey);
+							if (resetNativeVKey != 0 && resetNativeVKey != info.vKey) {
+								LuaKeyState::ReassignBinding(info.vKey, resetNativeVKey, pendingResetScriptName, pendingResetFunctionName);
 							}
 						}
-						if (resetActiveVKey != 0) {
-							USHORT resetNativeVKey = LuaKeyState::FindRedirectSource(resetActiveVKey);
-							ModKeyBindings::SetOverride(pendingResetScriptName, pendingResetFunctionName, "");
-							if (resetNativeVKey != 0 && resetNativeVKey != resetActiveVKey) {
-								LuaKeyState::ReassignBinding(resetActiveVKey, resetNativeVKey, pendingResetScriptName, pendingResetFunctionName);
-							}
-						} else {
-							ModKeyBindings::SetOverride(pendingResetScriptName, pendingResetFunctionName, "");
-							for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
-								if (cinfo.scriptName == pendingResetScriptName && cinfo.functionName == pendingResetFunctionName) {
-									LuaKeyState::ClearComboRedirect(cinfo.nativeKeys);
-									break;
-								}
+						for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
+							if (cinfo.scriptName == pendingResetScriptName && cinfo.functionName == pendingResetFunctionName) {
+								LuaKeyState::ClearComboRedirect(cinfo.nativeKeys);
+								break;
 							}
 						}
 						ModKeyBindings::SetDisabled(pendingResetScriptName, pendingResetFunctionName, false);
