@@ -73,6 +73,8 @@ namespace RadarKeys {
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UNKNOWN_KEY_FMT = "InjectDescribe: dropped - unrecognized key name '{}'";
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_BAD_RANGE_FMT = "InjectDescribe: dropped - invalid line range {}-{}";
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT = "InjectDescribe: source unreadable, binding armed for fire-time rebuild: {}";
+		static const char* LOG_KEYBINDMENU_INJECT_SOURCE_LOST_AUTO_DISABLED_FMT = "Script-line binding auto-disabled - source unreadable: {}";
+		static const char* LOG_KEYBINDMENU_INJECT_SOURCE_RESTORED_AUTO_ENABLED_FMT = "Script-line binding re-enabled - source restored: {}";
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT = "Updated script-lines binding: {} -> lines {}-{} of {}";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_OLD_FORMAT_MALFORM = "KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_LOADED_FMT_BINDING_S = "KeyBindMenu::LoadBindings: loaded {} binding(s) from {}";
@@ -911,7 +913,7 @@ namespace RadarKeys {
 
 			for (const auto& bind : bindings) {
 				if (bind.vKey != vKey) continue;
-				if (bind.disabled) continue;
+				if (bind.disabled || bind.autoDisabled) continue;
 				bool categoryMatches = preferHold ? (bind.holdSeconds > 0.0f) : (bind.holdSeconds <= 0.0f);
 				if (!categoryMatches) continue;
 
@@ -1151,7 +1153,7 @@ namespace RadarKeys {
 
 					bool hasHoldOptionOnKey = false;
 					for (const auto& bind : bindings) {
-						if (bind.vKey == vKey && bind.holdSeconds > 0.0f && !bind.disabled) {
+						if (bind.vKey == vKey && bind.holdSeconds > 0.0f && !bind.disabled && !bind.autoDisabled) {
 						if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
 								hasHoldOptionOnKey = true;
 								break;
@@ -1379,24 +1381,27 @@ namespace RadarKeys {
 				bind.scriptPathOn = sourcePath;
 				bind.injectLineStart = lineStart;
 				bind.injectLineEnd = lineEnd;
-				BuildInjectFile(sourcePath, lineStart, lineEnd);
+				bind.autoDisabled = BuildInjectFile(sourcePath, lineStart, lineEnd).empty();
 				MarkDisplayCacheDirty();
 				spdlog::info(LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT, keyName, lineStart, lineEnd, sourcePath);
 				break;
 			}
 			if (!exists) {
+				bool armedAutoDisabled = false;
 				std::string injectFile = BuildInjectFile(sourcePath, lineStart, lineEnd);
 				if (injectFile.empty()) {
 					spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT, sourcePath);
 				} else {
 					RunInjectCompileCheck(injectFile);
 				}
+				armedAutoDisabled = injectFile.empty();
 				KeyBind newBind{};
 				newBind.vKey = (USHORT)vKey;
 				newBind.keyName = keyName;
 				newBind.scriptPathOn = sourcePath;
 				newBind.isInject = true;
 				newBind.scriptDescribed = true;
+				newBind.autoDisabled = armedAutoDisabled;
 				newBind.injectScriptName = scriptName;
 				newBind.injectFunctionName = functionName;
 				newBind.injectLineStart = lineStart;
@@ -1427,7 +1432,32 @@ namespace RadarKeys {
 			}
 		}
 
+		bool HasAutoDisabledDescribedInject(const std::string& scriptName, const std::string& functionName) {
+			for (const auto& bind : bindings) {
+				if (!bind.isInject || !bind.scriptDescribed || !bind.autoDisabled) continue;
+				if (bind.injectScriptName == scriptName && bind.injectFunctionName == functionName) return true;
+			}
+			return false;
+		}
+
 		void ProcessInjectDescribes() {
+			static auto lastHealthSweep = std::chrono::steady_clock::now() - std::chrono::seconds(2);
+			auto healthNow = std::chrono::steady_clock::now();
+			if (std::chrono::duration<double>(healthNow - lastHealthSweep).count() >= 1.0) {
+				lastHealthSweep = healthNow;
+				for (auto& bind : bindings) {
+					if (!bind.isInject) continue;
+					std::error_code healthEc;
+					bool sourceReadable = std::filesystem::exists(bind.scriptPathOn, healthEc);
+					if (!sourceReadable && !bind.autoDisabled) {
+						bind.autoDisabled = true;
+						spdlog::warn(LOG_KEYBINDMENU_INJECT_SOURCE_LOST_AUTO_DISABLED_FMT, bind.scriptPathOn);
+					} else if (sourceReadable && bind.autoDisabled) {
+						bind.autoDisabled = false;
+						spdlog::info(LOG_KEYBINDMENU_INJECT_SOURCE_RESTORED_AUTO_ENABLED_FMT, bind.scriptPathOn);
+					}
+				}
+			}
 			std::optional<std::string> payloadOpt = pendingInjectDescribes.pop();
 			while (payloadOpt) {
 				ApplyInjectDescribe(*payloadOpt);
@@ -3325,7 +3355,7 @@ namespace RadarKeys {
 					ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
 					if (row.isManual) {
 						int bindIdx = row.bindIndex;
-						bool isDisabled = bindings[bindIdx].disabled;
+						bool isDisabled = bindings[bindIdx].disabled || bindings[bindIdx].autoDisabled;
 						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
 						bool clicked = ImGui::Button(isDisabled ? UI_BTN_ENABLE : UI_BTN_DISABLE, ImVec2(55, buttonHeight));
 						ImGui::PopStyleColor();
@@ -3385,7 +3415,7 @@ namespace RadarKeys {
 						const std::string& mkFunctionName = row.isComboScript ? row.comboInfo.functionName : row.info.functionName;
 						std::string mkHoldKey = mkScriptName + "\x1f" + mkFunctionName;
 						bool hasOverride = !ModKeyBindings::GetOverride(mkScriptName, mkFunctionName).empty();
-						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName);
+						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName) || HasAutoDisabledDescribedInject(mkScriptName, mkFunctionName);
 						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
 						bool clicked = ImGui::Button(isDisabled ? UI_BTN_ENABLE : UI_BTN_DISABLE, ImVec2(55, buttonHeight));
 						ImGui::PopStyleColor();
