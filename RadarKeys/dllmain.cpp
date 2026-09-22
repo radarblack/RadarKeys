@@ -236,6 +236,28 @@ namespace RadarKeys {
 		return 0;
 	}
 
+	static int l_DescribeKeyLines(lua_State* L) {
+		const char* keyName = LuaToString(L, 1);
+		const char* scriptName = LuaToString(L, 2);
+		const char* functionName = LuaToString(L, 3);
+		const char* sourceScript = LuaToString(L, 4);
+		if (!keyName || !*keyName || !scriptName || !functionName || !sourceScript) {
+			return 0;
+		}
+		const char* startRaw = LuaToString(L, 5);
+		const char* endRaw = LuaToString(L, 6);
+		char* startEnd = nullptr;
+		int lineStart = (startRaw && *startRaw) ? (int)std::strtod(startRaw, &startEnd) : 0;
+		char* endEnd = nullptr;
+		int lineEnd = (endRaw && *endRaw) ? (int)std::strtod(endRaw, &endEnd) : 0;
+		if (lineStart < 1 || lineEnd < lineStart || (startEnd && *startEnd != '\0') || (endEnd && *endEnd != '\0')) {
+			return 0;
+		}
+		std::string payload = std::string(keyName) + "\x1f" + scriptName + "\x1f" + functionName + "\x1f" + sourceScript + "\x1f" + std::to_string(lineStart) + "\x1f" + std::to_string(lineEnd);
+		KeyBindMenu::QueueInjectDescribe(payload);
+		return 0;
+	}
+
 	static int l_DescribeMod(lua_State* L) {
 		const char* scriptName = LuaToString(L, 1);
 		const char* modName = LuaToString(L, 2);
@@ -307,6 +329,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "DebugLog", RadarKeys::l_DebugLog },
 		{ "DescribeKey", RadarKeys::l_DescribeKey },
 		{ "DescribeMod", RadarKeys::l_DescribeMod },
+		{ "DescribeKeyLines", RadarKeys::l_DescribeKeyLines },
 		{ "GetModKeyBinding", RadarKeys::l_GetModKeyBinding },
 		{ NULL, NULL }
 	};
