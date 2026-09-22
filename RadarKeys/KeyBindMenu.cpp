@@ -570,21 +570,7 @@ namespace RadarKeys {
 			return (std::filesystem::path(GetGameDirectory()) / (hasSeparators ? std::filesystem::path(typedPath) : std::filesystem::path("mod") / "modules" / typedPath)).string();
 		}
 
-		std::string InjectFilePathFor(const std::string& sourcePath, int lineStart, int lineEnd) {
-			std::string stem = std::filesystem::path(sourcePath).stem().string();
-			std::string clean;
-			for (char c : stem) {
-				if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
-					clean += c;
-				} else {
-					clean += '_';
-				}
-			}
-			if (clean.empty()) clean = "script";
-			return (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "inject" / (clean + "_" + std::to_string(lineStart) + "_" + std::to_string(lineEnd) + ".lua")).string();
-		}
-
-		std::string BuildInjectFile(const std::string& sourcePath, int lineStart, int lineEnd) {
+		std::string BuildInjectContent(const std::string& sourcePath, int lineStart, int lineEnd) {
 			if (lineStart < 1) return "";
 			std::ifstream inFile(sourcePath);
 			if (!inFile) return "";
@@ -597,17 +583,12 @@ namespace RadarKeys {
 			inFile.close();
 			int lastLine = lineEnd < lineStart ? lineStart : lineEnd;
 			if (lastLine > (int)sourceLines.size()) lastLine = (int)sourceLines.size();
-			std::filesystem::path outPath = InjectFilePathFor(sourcePath, lineStart, lineEnd);
-			std::error_code buildEc;
-			std::filesystem::create_directories(outPath.parent_path(), buildEc);
-			std::ofstream outFile(outPath, std::ios::binary | std::ios::trunc);
-			if (!outFile) return "";
+			std::string content;
 			for (int i = lineStart; i <= lastLine; i++) {
-				outFile << ((i <= (int)sourceLines.size()) ? sourceLines[i - 1] : "") << "\n";
+				content += ((i <= (int)sourceLines.size()) ? sourceLines[i - 1] : "");
+				content += "\n";
 			}
-			outFile.close();
-			if (!outFile) return "";
-			return outPath.string();
+			return content;
 		}
 
 		USHORT menuToggleVKey = VK_F7;
@@ -931,8 +912,8 @@ namespace RadarKeys {
 			return "[" + eq + "[" + path + "]" + eq + "]";
 		}
 
-		void RunInjectCompileCheck(const std::string& injectFile) {
-			LuaBridge::QueueMessageIn("DoScript|local f, ferr = loadfile(" + LuaLongBracketWrap(injectFile) + "); if not f then error('script-lines compile: ' .. tostring(ferr)) end");
+		void RunInjectCompileCheck(const std::string& injectContent) {
+			LuaBridge::QueueMessageIn("InjectCompile|" + injectContent);
 		}
 
 		void FireBinding(const KeyBind& bind) {
@@ -940,16 +921,12 @@ namespace RadarKeys {
 				if (bind.scriptDescribed && ModKeyBindings::IsDisabled(bind.injectScriptName, bind.injectFunctionName)) {
 					return;
 				}
-				std::string injectFile = InjectFilePathFor(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
-				std::error_code injectEc;
-				if (!std::filesystem::exists(injectFile, injectEc)) {
-					injectFile = BuildInjectFile(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
-				}
-				if (injectFile.empty()) {
+				std::string injectContent = BuildInjectContent(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
+				if (injectContent.empty()) {
 					LogActivity("Script-line injection failed - source unreadable: " + bind.scriptPathOn, false);
 					return;
 				}
-				LuaBridge::QueueMessageIn("DoScript|dofile(" + LuaLongBracketWrap(injectFile) + ")");
+				LuaBridge::QueueMessageIn("InjectScript|" + injectContent);
 				LogActivity("Fired script lines " + std::to_string(bind.injectLineStart) + "-" + std::to_string(bind.injectLineEnd) + " of " + bind.scriptPathOn);
 				return;
 			}
@@ -1382,20 +1359,20 @@ namespace RadarKeys {
 				bind.scriptPathOn = sourcePath;
 				bind.injectLineStart = lineStart;
 				bind.injectLineEnd = lineEnd;
-				bind.autoDisabled = BuildInjectFile(sourcePath, lineStart, lineEnd).empty();
+				bind.autoDisabled = BuildInjectContent(sourcePath, lineStart, lineEnd).empty();
 				MarkDisplayCacheDirty();
 				spdlog::info(LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT, keyName, lineStart, lineEnd, sourcePath);
 				break;
 			}
 			if (!exists) {
 				bool armedAutoDisabled = false;
-				std::string injectFile = BuildInjectFile(sourcePath, lineStart, lineEnd);
+				std::string injectContent = BuildInjectContent(sourcePath, lineStart, lineEnd);
 				if (injectFile.empty()) {
 					spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT, sourcePath);
 				} else {
 					RunInjectCompileCheck(injectFile);
 				}
-				armedAutoDisabled = injectFile.empty();
+				armedAutoDisabled = injectContent.empty();
 				KeyBind newBind{};
 				newBind.vKey = (USHORT)vKey;
 				newBind.keyName = keyName;
@@ -1984,14 +1961,6 @@ namespace RadarKeys {
 			LoadBindings();
 			for (const auto& bind : bindings) {
 				if (!bind.IsCombo()) EnsureDispatcherRegistered(bind.vKey);
-			}
-			for (const auto& bind : bindings) {
-				if (!bind.isInject) continue;
-				std::error_code injectBootEc;
-				std::string injectBootFile = InjectFilePathFor(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
-				if (!std::filesystem::exists(injectBootFile, injectBootEc)) {
-					BuildInjectFile(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
-				}
 			}
 			RegisterMenuToggleKey(menuToggleVKey);
 			LogActivity("Menu hotkey set to " + NameForVKey(menuToggleVKey));
@@ -2896,11 +2865,11 @@ namespace RadarKeys {
 						int injectStart = capturedInjectLineStart;
 						int injectEnd = capturedInjectLineEnd;
 						if (injectEnd < injectStart) injectEnd = injectStart;
-						std::string injectFile = BuildInjectFile(injectSourcePath, injectStart, injectEnd);
-						if (injectFile.empty()) {
+						std::string injectContent = BuildInjectContent(injectSourcePath, injectStart, injectEnd);
+						if (injectContent.empty()) {
 							LogActivity("Script-line injection failed - could not read lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath, false);
 						} else {
-							RunInjectCompileCheck(injectFile);
+							RunInjectCompileCheck(injectContent);
 							if (editingBindingIndex != -1 && editingBindingIndex < (int)bindings.size()) {
 								USHORT oldVKey = bindings[editingBindingIndex].vKey;
 								KeyBind editedBind = bindings[editingBindingIndex];
