@@ -172,6 +172,7 @@ namespace RadarKeys {
 		static const char* UI_TIP_CONFLICT_NOT_DESCRIBED = "Another binding is using this same key - it's disabled until resolved.\nUnable to reassign an override - Key is not yet described through RadarKeys module.";
 		static const char* UI_TIP_CLICK_HOLD_RESET = "Click to %s.\nHold for 1.5 seconds to reset to the mod's default key.";
 		static const char* UI_TIP_CLICK_NO_REMOVE = "Click to %s.\nMod keys can't be removed - only disabled.";
+		static const char* UI_TIP_INJECT_SOURCE_MISSING = "Script source for this trigger was not found in the modules folder - Restore the file to re-enable";
 		static const char* UI_BTN_SCRIPT_PLACEHOLDER = "Script";
 		static const char* UI_TIP_REASSIGN_COMBO = "Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder";
 		static const char* UI_TIP_REASSIGN_KEY = "Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder";
@@ -1432,12 +1433,12 @@ namespace RadarKeys {
 			}
 		}
 
-		bool HasAutoDisabledDescribedInject(const std::string& scriptName, const std::string& functionName) {
+		const KeyBind* FindAutoDisabledDescribedInject(const std::string& scriptName, const std::string& functionName) {
 			for (const auto& bind : bindings) {
 				if (!bind.isInject || !bind.scriptDescribed || !bind.autoDisabled) continue;
-				if (bind.injectScriptName == scriptName && bind.injectFunctionName == functionName) return true;
+				if (bind.injectScriptName == scriptName && bind.injectFunctionName == functionName) return &bind;
 			}
-			return false;
+			return nullptr;
 		}
 
 		void ProcessInjectDescribes() {
@@ -3388,7 +3389,12 @@ namespace RadarKeys {
 						}
 
 						if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
-							ImGui::SetTooltip(UI_TIP_CLICK_HOLD_REMOVE, isDisabled ? UI_WORD_ENABLE : UI_WORD_DISABLE);
+							if (bindings[bindIdx].isInject && bindings[bindIdx].autoDisabled) {
+								std::string missingTip = std::string(UI_TIP_INJECT_SOURCE_MISSING) + "\n" + std::filesystem::path(bindings[bindIdx].scriptPathOn).filename().string();
+								ImGui::SetTooltip("%s", missingTip.c_str());
+							} else {
+								ImGui::SetTooltip(UI_TIP_CLICK_HOLD_REMOVE, isDisabled ? UI_WORD_ENABLE : UI_WORD_DISABLE);
+							}
 						}
 					}
 					else if (row.conflicted) {
@@ -3415,7 +3421,7 @@ namespace RadarKeys {
 						const std::string& mkFunctionName = row.isComboScript ? row.comboInfo.functionName : row.info.functionName;
 						std::string mkHoldKey = mkScriptName + "\x1f" + mkFunctionName;
 						bool hasOverride = !ModKeyBindings::GetOverride(mkScriptName, mkFunctionName).empty();
-						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName) || HasAutoDisabledDescribedInject(mkScriptName, mkFunctionName);
+						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName) || (FindAutoDisabledDescribedInject(mkScriptName, mkFunctionName) != nullptr);
 						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
 						bool clicked = ImGui::Button(isDisabled ? UI_BTN_ENABLE : UI_BTN_DISABLE, ImVec2(55, buttonHeight));
 						ImGui::PopStyleColor();
@@ -3449,9 +3455,15 @@ namespace RadarKeys {
 							LogActivity((!isDisabled ? std::string("Disabled mod key: ") : std::string("Enabled mod key: ")) + mkScriptName + " [" + mkFunctionName + "]");
 						}
 						if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
-							ImGui::SetTooltip(hasOverride
-								? UI_TIP_CLICK_HOLD_RESET
-								: UI_TIP_CLICK_NO_REMOVE, isDisabled ? UI_WORD_ENABLE : UI_WORD_DISABLE);
+							const KeyBind* missingInject = FindAutoDisabledDescribedInject(mkScriptName, mkFunctionName);
+							if (missingInject) {
+								std::string missingTip = std::string(UI_TIP_INJECT_SOURCE_MISSING) + "\n" + std::filesystem::path(missingInject->scriptPathOn).filename().string();
+								ImGui::SetTooltip("%s", missingTip.c_str());
+							} else {
+								ImGui::SetTooltip(hasOverride
+									? UI_TIP_CLICK_HOLD_RESET
+									: UI_TIP_CLICK_NO_REMOVE, isDisabled ? UI_WORD_ENABLE : UI_WORD_DISABLE);
+							}
 						}
 					}
 					else {
