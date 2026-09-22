@@ -88,6 +88,17 @@ local this = {}
 			return
 		end
 		for _, message in ipairs(messages) do
+			if message:sub(1, 13) == "InjectScript|" then
+				RunDoScript(message:sub(14))
+			elseif message:sub(1, 14) == "InjectCompile|" then
+				local chunk, cerr = loadstring(message:sub(15))
+				if chunk then
+					RK.MenuMessage("DoScriptResult", "0|DoScriptResult|1|")
+				else
+					InfCore.Log(tostring(cerr))
+					RK.MenuMessage("DoScriptResult", "0|DoScriptResult|0|" .. tostring(cerr))
+				end
+			else
 			local parts = {}
 			for part in string.gmatch(message, "[^|]+") do
 				table.insert(parts, part)
@@ -128,6 +139,7 @@ local this = {}
 			else
 				InfCore.Log("RadarKeys_Core: unknown command '" .. tostring(cmd) .. "'")
 			end
+		end
 		end
 	end
 
