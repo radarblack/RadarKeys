@@ -208,6 +208,9 @@ namespace RadarKeys {
 			ApplyPlaystationTriggerFeed(result, dwUserIndex, pState);
 			return result;
 		}
+typedef FARPROC(WINAPI* GetProcAddress_t)(HMODULE, LPCSTR);
+static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
+
 
 		static void TryHookXInputIATForTriggerFeed() {
 			if (g_origXInputGetStateIatFeed) {
@@ -274,9 +277,6 @@ namespace RadarKeys {
 				}
 			}
 		}
-
-		typedef FARPROC(WINAPI* GetProcAddress_t)(HMODULE, LPCSTR);
-		static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 
 		static FARPROC WINAPI HookedGetProcAddressTriggerFeed(HMODULE hModule, LPCSTR lpProcName) {
 			FARPROC proc = g_origGetProcAddressTramp(hModule, lpProcName);
