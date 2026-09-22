@@ -55,6 +55,8 @@ namespace RadarKeys {
 		static const char* LOG_RAWINPUT_PLAYSTATION_TRIGGER_FEED_ENGAGED = "RawInput: PlayStation trigger feed ENGAGED (L2/R2 to XInput)";
 		static const char* LOG_RAWINPUT_HOOKED_XINPUTGETSTATE_IAT_TRIGGER_FEED = "RawInput: hooked XInputGetState IAT in the game import table for PlayStation trigger feed";
 		static const char* LOG_RAWINPUT_FAILED_HOOK_XINPUTGETSTATE_IAT_TRIGGER_FEED = "RawInput: failed to hook XInputGetState IAT for PlayStation trigger feed";
+		static const char* LOG_RAWINPUT_HOOKED_GETPROCADDRESS_XINPUT_TRIGGER_FEED = "RawInput: intercepted XInputGetState runtime resolution in {} - PlayStation trigger feed armed";
+		static const char* LOG_RAWINPUT_XINPUTGETSTATE_MINHOOK_FAILED_FMT = "RawInput: MinHook could not hook XInputGetState in {} ({}) - recognition polling only";
 
 		bool ignore[vKeyMax] = { false }; // don't process key, set up in InitIgnoreKeys (written once, before input starts)
 		std::atomic<unsigned char> blockGameKeys[vKeyMax]{}; // block game from recieving message
@@ -272,6 +274,87 @@ namespace RadarKeys {
 			}
 		}
 
+		typedef FARPROC(WINAPI* GetProcAddress_t)(HMODULE, LPCSTR);
+		static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
+
+		static FARPROC WINAPI HookedGetProcAddressTriggerFeed(HMODULE hModule, LPCSTR lpProcName) {
+			FARPROC proc = g_origGetProcAddressTramp(hModule, lpProcName);
+			if (!proc || !lpProcName || strcmp(lpProcName, "XInputGetState") != 0) {
+				return proc;
+			}
+			if (reinterpret_cast<void*>(proc) == reinterpret_cast<void*>(&HookedXInputGetStateIatFeed)) {
+				return proc;
+			}
+			for (int s = 0; s < kMaxXInputModules; ++s) {
+				if (g_xinputHookTargets[s] == reinterpret_cast<void*>(proc)) {
+					return proc;
+				}
+			}
+			wchar_t path[MAX_PATH] = L"";
+			DWORD n = GetModuleFileNameW(hModule, path, MAX_PATH);
+			if (n == 0 || n >= MAX_PATH) {
+				return proc;
+			}
+			bool isXinput = false;
+			for (DWORD i = 0; i < n; ++i) {
+				wchar_t c = path[i];
+				if (c >= L'A' && c <= L'Z') {
+					c = static_cast<wchar_t>(c - (L'A' - L'a'));
+				}
+				path[i] = c;
+			}
+			const wchar_t* base = path;
+			for (DWORD i = 0; i < n; ++i) {
+				if (path[i] == L'\\') {
+					base = path + i + 1;
+				}
+			}
+			isXinput = wcsstr(base, L"xinput") != nullptr;
+			if (!isXinput) {
+				return proc;
+			}
+			if (!g_origXInputGetStateIatFeed) {
+				g_origXInputGetStateIatFeed = reinterpret_cast<XInputGetStateFunc>(proc);
+			}
+			static std::atomic<unsigned char> resolutionLogged{ 0 };
+			if (resolutionLogged.load(std::memory_order_relaxed) == 0) {
+				unsigned char expected = 0;
+				if (resolutionLogged.compare_exchange_strong(expected, 1)) {
+					char narrow[MAX_PATH] = "";
+					size_t ni = 0;
+					for (DWORD i2 = 0; base[i2] != 0 && ni < MAX_PATH - 1; ++i2) {
+						narrow[ni++] = static_cast<char>(base[i2]);
+					}
+					narrow[ni] = 0;
+					spdlog::info(LOG_RAWINPUT_HOOKED_GETPROCADDRESS_XINPUT_TRIGGER_FEED, narrow);
+				}
+			}
+			return reinterpret_cast<FARPROC>(&HookedXInputGetStateIatFeed);
+		}
+
+		static void TryHookGetProcAddressForTriggerFeed() {
+			if (g_origGetProcAddressTramp) {
+				return;
+			}
+			HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+			if (!kernel32) {
+				return;
+			}
+			void* target = reinterpret_cast<void*>(::GetProcAddress(kernel32, "GetProcAddress"));
+			if (!target || target == reinterpret_cast<void*>(&HookedGetProcAddressTriggerFeed)) {
+				return;
+			}
+			if (MH_CreateHook(target, reinterpret_cast<LPVOID>(&HookedGetProcAddressTriggerFeed),
+				reinterpret_cast<LPVOID*>(&g_origGetProcAddressTramp)) == MH_OK &&
+				MH_EnableHook(target) == MH_OK) {
+				spdlog::default_logger()->flush();
+			} else {
+				MH_RemoveHook(target);
+				g_origGetProcAddressTramp = nullptr;
+			}
+		}
+
+
 		void EnsureXInputHook() {
 			static ULONGLONG lastModuleScanTick = 0;
 			const ULONGLONG moduleScanNow = GetTickCount64();
@@ -296,19 +379,23 @@ namespace RadarKeys {
 				if (!module || seenModules.find(module) != seenModules.end()) {
 					continue;
 				}
-				void* target = reinterpret_cast<void*>(GetProcAddress(module, "XInputGetState"));
-				if (!target || g_xinputModuleCount >= kMaxXInputModules) {
+				FARPROC scannedProc = g_origGetProcAddressTramp ? g_origGetProcAddressTramp(module, "XInputGetState") : ::GetProcAddress(module, "XInputGetState");
+				void* target = reinterpret_cast<void*>(scannedProc);
+				if (!target || target == reinterpret_cast<void*>(&HookedXInputGetStateIatFeed) || g_xinputModuleCount >= kMaxXInputModules) {
 					continue;
 				}
 				seenModules.insert(module);
 				int slot = g_xinputModuleCount;
-				bool hooked = MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
-					reinterpret_cast<LPVOID*>(&g_origXInputGetState[slot])) == MH_OK &&
-					MH_EnableHook(target) == MH_OK;
+				MH_STATUS createStatus = MH_CreateHook(target, reinterpret_cast<LPVOID>(g_xinputDetours[slot]),
+					reinterpret_cast<LPVOID*>(&g_origXInputGetState[slot]));
+				MH_STATUS enableStatus = (createStatus == MH_OK) ? MH_EnableHook(target) : MH_UNKNOWN;
+				bool hooked = (createStatus == MH_OK && enableStatus == MH_OK);
 				if (hooked) {
 					g_xinputHookTargets[slot] = target;
 				}
 				if (!hooked) {
+					spdlog::warn(LOG_RAWINPUT_XINPUTGETSTATE_MINHOOK_FAILED_FMT, kModuleNamesNarrow[nameIndex],
+						MH_StatusToString(createStatus != MH_OK ? createStatus : enableStatus));
 					MH_RemoveHook(target);
 					g_origXInputGetState[slot] = reinterpret_cast<XInputGetStateFunc>(target);
 				}
@@ -318,6 +405,7 @@ namespace RadarKeys {
 					kModuleNamesNarrow[nameIndex], slot, hooked ? "hooked for gamepad suppression" : "recognition polling only");
 				spdlog::default_logger()->flush();
 			}
+		TryHookGetProcAddressForTriggerFeed();
 		TryHookXInputIATForTriggerFeed();
 		}
 
