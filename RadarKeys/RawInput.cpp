@@ -68,6 +68,7 @@ namespace RadarKeys {
 		bool IsKeyboardBlockedToGame() { return g_keyboardBlockedToGame.load() != false; }
 		bool IsMouseBlockedToGame() { return g_mouseBlockedToGame.load() != false; }
 		void SetGamepadBlockedToGame(bool blocked) { g_gamepadBlockedToGame.store(blocked ? 1 : 0); }
+		bool IsGamepadCaptureSuppressed() { return g_gamepadBlockedToGame.load() != false; }
 
 		std::list<std::pair<ActionHandle, ButtonAction>>* buttonActions[vKeyMax] = { nullptr };
 		ActionHandle nextActionHandle = 1;
@@ -235,16 +236,16 @@ namespace RadarKeys {
 				if (_strnicmp(dllName, "xinput", 6) != 0) {
 					continue;
 				}
-				IMAGE_THUNK_DATA* names = desc->OriginalFirstThunk ? reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->OriginalFirstThunk) : nullptr;
+				HMODULE module = GetModuleHandleA(dllName);
+				if (!module) {
+					continue;
+				}
+				FARPROC getState = g_origGetProcAddressTramp ? g_origGetProcAddressTramp(module, "XInputGetState") : ::GetProcAddress(module, "XInputGetState");
+				if (!getState) {
+					continue;
+				}
 				IMAGE_THUNK_DATA* thunks = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->FirstThunk);
 				for (int idx = 0; thunks[idx].u1.Function != 0; ++idx) {
-					if (!names || (names[idx].u1.Ordinal & IMAGE_ORDINAL_FLAG) != 0) {
-						continue;
-					}
-					IMAGE_IMPORT_BY_NAME* byName = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(base + names[idx].u1.AddressOfData);
-					if (strcmp(reinterpret_cast<const char*>(byName->Name), "XInputGetState") != 0) {
-						continue;
-					}
 					void* current = reinterpret_cast<void*>(thunks[idx].u1.Function);
 					if (current == reinterpret_cast<void*>(&HookedXInputGetStateIatFeed)) {
 						continue;
@@ -256,7 +257,7 @@ namespace RadarKeys {
 							break;
 						}
 					}
-					if (coveredByMinHook) {
+					if (coveredByMinHook || current != reinterpret_cast<void*>(getState)) {
 						continue;
 					}
 					if (!g_origXInputGetStateIatFeed) {
@@ -1274,6 +1275,8 @@ namespace RadarKeys {
 			if (vKey >= vKeyMax) return false;
 			return realStateHeld[vKey];
 		}
+		bool IsPlaystationL2Held() { return realStateHeld[VK_PS_L2].load(std::memory_order_relaxed) != 0; }
+		bool IsPlaystationR2Held() { return realStateHeld[VK_PS_R2].load(std::memory_order_relaxed) != 0; }
 
 		void OnFocusLost() {
 			for (int i = 0; i < vKeyMax; ++i) {
