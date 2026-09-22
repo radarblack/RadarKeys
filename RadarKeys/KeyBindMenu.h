@@ -30,6 +30,9 @@ namespace RadarKeys {
 			bool isInject = false;
 			int injectLineStart = 0;
 			int injectLineEnd = 0;
+			bool scriptDescribed = false;
+			std::string injectScriptName;
+			std::string injectFunctionName;
 
 			// lua script pass
 			std::string functionOn;
@@ -48,6 +51,8 @@ namespace RadarKeys {
 		void Init(const std::string& defaultMenuKeyName);
 		void InitDiagnostics();
 		void Draw(bool* p_open);
+		void QueueInjectDescribe(const std::string& payload);
+		void ProcessInjectDescribes();
 		void Update();
 		void LogCleanShutdown();
 		void LogActivity(const std::string& message, bool success = true);
