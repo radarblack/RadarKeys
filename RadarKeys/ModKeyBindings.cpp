@@ -98,7 +98,7 @@ namespace RadarKeys {
 					if (seen[scriptEntry.first].count(funcEntry.first)) {
 						continue;
 					}
-					result.push_back(OverrideEntry{ scriptEntry.first, funcEntry.first, "", true });
+					result.push_back(OverrideEntry{ scriptEntry.first, funcEntry.first, "", "", true });
 				}
 			}
 			return result;
