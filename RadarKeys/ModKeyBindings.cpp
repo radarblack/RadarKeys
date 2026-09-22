@@ -14,7 +14,12 @@ namespace RadarKeys {
 		static const char* LOG_MODKEYBINDINGS_MIGRATED_FMT_SCRIPT_S_WORTH = "ModKeyBindings: migrated {} script(s) worth of overrides from legacy {}";
 		static const char* LOG_MODKEYBINDINGS_LOADFROMENTRIES_LOADED_OVERRIDES_FMT_ = "ModKeyBindings::LoadFromEntries: loaded overrides for {} script(s){}";
 
-		static std::map<std::string, std::map<std::string, std::string>> overrides;
+		struct SlotOverride {
+			std::string kbm;
+			std::string pad;
+		};
+
+		static std::map<std::string, std::map<std::string, SlotOverride>> overrides;
 		static std::map<std::string, std::map<std::string, bool>> disabledMap;
 		static bool loaded = false;
 		static std::recursive_mutex g_overridesMutex;
@@ -55,7 +60,8 @@ namespace RadarKeys {
 					continue;
 				}
 
-				overrides[currentScript][functionName] = keyName;
+				overrides[currentScript][functionName].kbm = keyName;
+				overrides[currentScript][functionName].pad = keyName;
 				foundAny = true;
 			}
 
@@ -80,7 +86,7 @@ namespace RadarKeys {
 			for (const auto& scriptEntry : overrides) {
 				for (const auto& funcEntry : scriptEntry.second) {
 					bool disabled = IsDisabled(scriptEntry.first, funcEntry.first);
-					result.push_back(OverrideEntry{ scriptEntry.first, funcEntry.first, funcEntry.second, disabled });
+					result.push_back(OverrideEntry{ scriptEntry.first, funcEntry.first, funcEntry.second.kbm, funcEntry.second.pad, disabled });
 					seen[scriptEntry.first][funcEntry.first] = true;
 				}
 			}
@@ -107,7 +113,10 @@ namespace RadarKeys {
 					continue;
 				}
 				if (!e.keyName.empty()) {
-					overrides[e.scriptName][e.functionName] = e.keyName;
+					overrides[e.scriptName][e.functionName].kbm = e.keyName;
+				}
+				if (!e.padKeyName.empty()) {
+					overrides[e.scriptName][e.functionName].pad = e.padKeyName;
 				}
 				if (e.disabled) {
 					disabledMap[e.scriptName][e.functionName] = true;
@@ -141,7 +150,23 @@ namespace RadarKeys {
 			if (funcIt == scriptIt->second.end()) {
 				return "";
 			}
-			return funcIt->second;
+			return funcIt->second.kbm.empty() ? funcIt->second.pad : funcIt->second.kbm;
+		}
+
+		std::string GetSlotOverride(const std::string& scriptName, const std::string& functionName, BindSlot slot) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			if (!loaded) {
+				Load();
+			}
+			auto scriptIt = overrides.find(scriptName);
+			if (scriptIt == overrides.end()) {
+				return "";
+			}
+			auto funcIt = scriptIt->second.find(functionName);
+			if (funcIt == scriptIt->second.end()) {
+				return "";
+			}
+			return (slot == BindSlot::Pad) ? funcIt->second.pad : funcIt->second.kbm;
 		}
 
 		void SetOverride(const std::string& scriptName, const std::string& functionName, const std::string& keyName) {
@@ -156,7 +181,8 @@ namespace RadarKeys {
 					if (scriptIt->second.empty()) overrides.erase(scriptIt);
 				}
 			} else {
-				overrides[scriptName][functionName] = keyName;
+				overrides[scriptName][functionName].kbm = keyName;
+				overrides[scriptName][functionName].pad = keyName;
 			}
 			KeyBindMenu::SaveBindings();
 		}
@@ -173,8 +199,38 @@ namespace RadarKeys {
 					if (scriptIt->second.empty()) overrides.erase(scriptIt);
 				}
 			} else {
-				overrides[scriptName][functionName] = keyName;
+				overrides[scriptName][functionName].kbm = keyName;
+				overrides[scriptName][functionName].pad = keyName;
 			}
+		}
+
+		void SetSlotOverrideWithoutSave(const std::string& scriptName, const std::string& functionName, BindSlot slot, const std::string& keyName) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			if (!loaded) {
+				Load();
+			}
+			if (keyName.empty()) {
+				auto scriptIt = overrides.find(scriptName);
+				if (scriptIt != overrides.end()) {
+					auto funcIt = scriptIt->second.find(functionName);
+					if (funcIt != scriptIt->second.end()) {
+						if (slot == BindSlot::Pad) funcIt->second.pad.clear();
+						else funcIt->second.kbm.clear();
+						if (funcIt->second.kbm.empty() && funcIt->second.pad.empty()) {
+							scriptIt->second.erase(funcIt);
+							if (scriptIt->second.empty()) overrides.erase(scriptIt);
+						}
+					}
+				}
+			} else {
+				if (slot == BindSlot::Pad) overrides[scriptName][functionName].pad = keyName;
+				else overrides[scriptName][functionName].kbm = keyName;
+			}
+		}
+
+		void SetSlotOverride(const std::string& scriptName, const std::string& functionName, BindSlot slot, const std::string& keyName) {
+			SetSlotOverrideWithoutSave(scriptName, functionName, slot, keyName);
+			KeyBindMenu::SaveBindings();
 		}
 
 		void SetDisabledWithoutSave(const std::string& scriptName, const std::string& functionName, bool disabled) {
