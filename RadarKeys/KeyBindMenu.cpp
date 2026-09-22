@@ -88,6 +88,9 @@ namespace RadarKeys {
 		static const char* UI_LBL_BIND_TYPE = "Bind Type:";
 		static const char* UI_RADIO_SINGLE_KEY = "Single Key";
 		static const char* UI_RADIO_MULTI_KEY_COMBO = "Multi-Key Combo";
+		static const char* UI_RADIO_SCRIPT_LINES = "Script Lines";
+		static const char* UI_LBL_LINE_START = "Line Start:";
+		static const char* UI_LBL_LINE_END = "Line End:";
 		static const char* UI_LBL_KEY = "Key";
 		static const char* UI_LBL_PRESS = "PRESS";
 		static const char* UI_LBL_HOLD = "HOLD";
@@ -543,6 +546,9 @@ namespace RadarKeys {
 				snprintf(buf, sizeof(buf), " (hold %.1fs)", bind.holdSeconds);
 				result += buf;
 			}
+			if (bind.isInject) {
+				result += " (lines " + std::to_string(bind.injectLineStart) + "-" + std::to_string(bind.injectLineEnd) + ")";
+			}
 			return result;
 		}
 
@@ -557,6 +563,50 @@ namespace RadarKeys {
 			if (std::filesystem::path(typedPath).is_absolute()) return typedPath;
 			bool hasSeparators = typedPath.find('/') != std::string::npos || typedPath.find('\\') != std::string::npos;
 			return (std::filesystem::path(GetGameDirectory()) / (hasSeparators ? std::filesystem::path(typedPath) : std::filesystem::path("mod") / "modules" / typedPath)).string();
+		}
+
+		std::string InjectFilePathFor(const std::string& sourcePath, int lineStart, int lineEnd) {
+			std::string stem = std::filesystem::path(sourcePath).stem().string();
+			std::string clean;
+			for (char c : stem) {
+				if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+					clean += c;
+				} else {
+					clean += '_';
+				}
+			}
+			if (clean.empty()) clean = "script";
+			return (std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys" / "inject" / (clean + "_" + std::to_string(lineStart) + "_" + std::to_string(lineEnd) + ".lua")).string();
+		}
+
+		std::string BuildInjectFile(const std::string& sourcePath, int lineStart, int lineEnd) {
+			if (lineStart < 1) return "";
+			std::ifstream inFile(sourcePath);
+			if (!inFile) return "";
+			std::vector<std::string> sourceLines;
+			std::string sourceLine;
+			while (std::getline(inFile, sourceLine)) {
+				while (!sourceLine.empty() && sourceLine.back() == '\r') sourceLine.pop_back();
+				sourceLines.push_back(sourceLine);
+			}
+			inFile.close();
+			int lastLine = lineEnd < lineStart ? lineStart : lineEnd;
+			if (lastLine > (int)sourceLines.size()) lastLine = (int)sourceLines.size();
+			std::filesystem::path outPath = InjectFilePathFor(sourcePath, lineStart, lineEnd);
+			std::error_code buildEc;
+			std::filesystem::create_directories(outPath.parent_path(), buildEc);
+			std::ofstream outFile(outPath, std::ios::binary | std::ios::trunc);
+			if (!outFile) return "";
+			for (int i = lineStart; i <= lastLine; i++) {
+				outFile << ((i <= (int)sourceLines.size()) ? sourceLines[i - 1] : "") << "\n";
+			}
+			outFile.close();
+			if (!outFile) return "";
+			return outPath.string();
+		}
+
+		void RunInjectCompileCheck(const std::string& injectFile) {
+			LuaBridge::QueueMessageIn("DoScript|local f, ferr = loadfile(" + LuaLongBracketWrap(injectFile) + "); if not f then error('script-lines compile: ' .. tostring(ferr)) end");
 		}
 
 		USHORT menuToggleVKey = VK_F7;
@@ -869,6 +919,20 @@ namespace RadarKeys {
 		}
 
 		void FireBinding(const KeyBind& bind) {
+			if (bind.isInject) {
+				std::string injectFile = InjectFilePathFor(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
+				std::error_code injectEc;
+				if (!std::filesystem::exists(injectFile, injectEc)) {
+					injectFile = BuildInjectFile(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
+				}
+				if (injectFile.empty()) {
+					LogActivity("Script-line injection failed - source unreadable: " + bind.scriptPathOn, false);
+					return;
+				}
+				LuaBridge::QueueMessageIn("DoScript|dofile(" + LuaLongBracketWrap(injectFile) + ")");
+				LogActivity("Fired script lines " + std::to_string(bind.injectLineStart) + "-" + std::to_string(bind.injectLineEnd) + " of " + bind.scriptPathOn);
+				return;
+			}
 			std::string targetPath = bind.scriptPathOn;
 			std::string targetFunc = bind.functionTap;
 
@@ -1277,6 +1341,11 @@ namespace RadarKeys {
 					genericOff.erase(0, gameDirStr.length());
 				}
 
+				if (b.isInject) {
+					outFile << "INJECT|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|" << (b.isInstant ? "1|" : "0|") << b.instantTriggerType << "|" << b.repeatAccelMult << "|" << (b.disabled ? "1|" : "0|") << b.injectLineStart << "|" << b.injectLineEnd << "|" << genericOn << "\n";
+					continue;
+				}
+
 				if (b.IsCombo()) {
 					std::string keysJoined;
 					for (size_t i = 0; i < b.comboKeys.size(); i++) {
@@ -1387,6 +1456,57 @@ namespace RadarKeys {
 					if (!entry.scriptName.empty() && !entry.functionName.empty() && (!entry.keyName.empty() || !entry.padKeyName.empty() || entry.disabled)) {
 						modKeyEntries.push_back(std::move(entry));
 					}
+				}
+				else if (parts[0] == "INJECT" && parts.size() >= 13) {
+					std::string injectKeyName = trim(parts[1]);
+					int injectVKey = VKeyForName(injectKeyName);
+					if (injectVKey == -1) {
+						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_KEY_NAME_FMT, injectKeyName);
+						LogActivity("Unknown Key name '" + injectKeyName + "', skipping script-line binding", false);
+						continue;
+					}
+					float injectHoldSeconds = 0.0f;
+					try { injectHoldSeconds = std::stof(trim(parts[5])); }
+					catch (...) { injectHoldSeconds = 0.0f; }
+					if (!std::isfinite(injectHoldSeconds) || injectHoldSeconds < 0.0f) injectHoldSeconds = 0.0f;
+					bool injectIsInstant = trim(parts[6]) == "1";
+					int injectInstantType = 0;
+					try { injectInstantType = std::stoi(trim(parts[7])); }
+					catch (...) { injectInstantType = 0; }
+					if (injectInstantType < 0 || injectInstantType > 2) injectInstantType = 0;
+					float injectRepeatMult = 1.0f;
+					try { injectRepeatMult = std::stof(trim(parts[8])); }
+					catch (...) { injectRepeatMult = 1.0f; }
+					if (!std::isfinite(injectRepeatMult) || injectRepeatMult < kMinRepeatAccelMult) injectRepeatMult = kMinRepeatAccelMult;
+					else if (injectRepeatMult > (float)kMaxRepeatSpeedMult) injectRepeatMult = (float)kMaxRepeatSpeedMult;
+					bool injectDisabled = trim(parts[9]) == "1";
+					int injectLineStart = 0;
+					int injectLineEnd = 0;
+					try { injectLineStart = std::stoi(trim(parts[10])); }
+					catch (...) { injectLineStart = 0; }
+					try { injectLineEnd = std::stoi(trim(parts[11])); }
+					catch (...) { injectLineEnd = 0; }
+					if (injectLineStart < 1 || injectLineEnd < injectLineStart) {
+						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_MALFORMED_LINE_FMT, line);
+						LogActivity("Skipped malformed INJECT line while loading bindings: " + line, false);
+						continue;
+					}
+					KeyBind newInjectBind{};
+					newInjectBind.vKey = (USHORT)injectVKey;
+					newInjectBind.needCtrl = trim(parts[2]) == "1";
+					newInjectBind.needShift = trim(parts[3]) == "1";
+					newInjectBind.needAlt = trim(parts[4]) == "1";
+					newInjectBind.keyName = injectKeyName;
+					newInjectBind.holdSeconds = injectHoldSeconds;
+					newInjectBind.isInstant = injectIsInstant;
+					newInjectBind.instantTriggerType = injectInstantType;
+					newInjectBind.repeatAccelMult = injectRepeatMult;
+					newInjectBind.disabled = injectDisabled;
+					newInjectBind.scriptPathOn = ResolveScriptPath(trim(parts[12]));
+					newInjectBind.isInject = true;
+					newInjectBind.injectLineStart = injectLineStart;
+					newInjectBind.injectLineEnd = injectLineEnd;
+					bindings.push_back(newInjectBind);
 				}
 				else if (parts[0] == "COMBO2" && parts.size() >= 6) {
 					std::vector<std::string> keyNames = split(trim(parts[1]), ",");
@@ -1706,6 +1826,14 @@ namespace RadarKeys {
 			for (const auto& bind : bindings) {
 				if (!bind.IsCombo()) EnsureDispatcherRegistered(bind.vKey);
 			}
+			for (const auto& bind : bindings) {
+				if (!bind.isInject) continue;
+				std::error_code injectBootEc;
+				std::string injectBootFile = InjectFilePathFor(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
+				if (!std::filesystem::exists(injectBootFile, injectBootEc)) {
+					BuildInjectFile(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
+				}
+			}
 			RegisterMenuToggleKey(menuToggleVKey);
 			LogActivity("Menu hotkey set to " + NameForVKey(menuToggleVKey));
 		}
@@ -1730,6 +1858,9 @@ namespace RadarKeys {
 		static std::string modKeyCaptureScriptName;
 		static std::string modKeyCaptureFunctionName;
 		static bool captureIsCombo = false;
+		static bool captureIsInject = false;
+		static int capturedInjectLineStart = 1;
+		static int capturedInjectLineEnd = 1;
 		static std::vector<USHORT> capturedComboKeys;
 		static std::vector<USHORT> comboHoldKeys;
 		static std::chrono::steady_clock::time_point comboHoldStartTime;
@@ -1760,6 +1891,9 @@ namespace RadarKeys {
 			capturedInstantUserSet = false;
 			ResetComboCaptureState();
 			captureIsCombo = false;
+			captureIsInject = false;
+			capturedInjectLineStart = 1;
+			capturedInjectLineEnd = 1;
 			showCapturePrompt = isAssigningMenuToggleKey = isAssigningModKey = false; editingBindingIndex = -1;
 			LogActivity(LOG_KEY_ASSIGNMENT_PROMPT_CANCELLED);
 		}
@@ -2004,13 +2138,19 @@ namespace RadarKeys {
 
 			if (!isAssigningMenuToggleKey && !isAssigningModKey) {
 				bool wasCombo = captureIsCombo;
+				bool wasInject = captureIsInject;
 				ImGui::TextUnformatted(UI_LBL_BIND_TYPE); ImGui::SameLine();
-				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo)) captureIsCombo = false;
+				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo && !captureIsInject)) { captureIsCombo = false; captureIsInject = false; }
 				ImGui::SameLine();
-				if (ImGui::RadioButton(UI_RADIO_MULTI_KEY_COMBO, captureIsCombo)) captureIsCombo = true;
+				if (ImGui::RadioButton(UI_RADIO_MULTI_KEY_COMBO, captureIsCombo)) { captureIsCombo = true; captureIsInject = false; }
+				ImGui::SameLine();
+				if (ImGui::RadioButton(UI_RADIO_SCRIPT_LINES, captureIsInject)) { captureIsInject = true; captureIsCombo = false; }
 				if (captureIsCombo != wasCombo) {
 					capturedVKey = 0;
 					ResetComboCaptureState();
+				}
+				if (captureIsInject != wasInject) {
+					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 				}
 				ImGui::Separator();
 			}
@@ -2244,7 +2384,7 @@ namespace RadarKeys {
 			ImGui::SetCursorPos(ImVec2(optionsColX, captureColTopY));
 
 			ImGui::BeginGroup();
-			if (!isAssigningMenuToggleKey) {
+			if (!isAssigningMenuToggleKey && !captureIsInject) {
 				if (isAssigningModKey) ImGui::BeginDisabled();
 
 				if (capturedInstantMode) ImGui::BeginDisabled();
@@ -2386,7 +2526,23 @@ namespace RadarKeys {
 				float elementWidth = 145.0f;
 				float targetCursorPosX = rightEdgeX - elementWidth - 8.0f;
 
-				if (capturedToggleMode) {
+				if (captureIsInject) {
+					ImGui::Text(UI_LBL_SCRIPT_PATH);
+					ImGui::SetNextItemWidth(-1);
+					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
+					ImGui::AlignTextToFramePadding();
+					ImGui::Text(UI_LBL_LINE_START); ImGui::SameLine();
+					ImGui::SetNextItemWidth(100);
+					ImGui::InputInt("##injectLineStart", &capturedInjectLineStart);
+					if (capturedInjectLineStart < 1) capturedInjectLineStart = 1;
+					ImGui::AlignTextToFramePadding();
+					ImGui::Text(UI_LBL_LINE_END); ImGui::SameLine();
+					ImGui::SetNextItemWidth(100);
+					ImGui::InputInt("##injectLineEnd", &capturedInjectLineEnd);
+					if (capturedInjectLineEnd < 1) capturedInjectLineEnd = 1;
+					ImGui::Separator(); ImGui::Spacing();
+				}
+				else if (capturedToggleMode) {
 					ImGui::AlignTextToFramePadding();
 					ImGui::Text(UI_LBL_SCRIPT_MODE); ImGui::SameLine();
 					ImGui::RadioButton(UI_RADIO_SINGLE, &capturedToggleType, 0); ImGui::SameLine();
@@ -2467,9 +2623,12 @@ namespace RadarKeys {
 			}
 		
 			bool pathsValid = (capturedToggleMode && capturedToggleType != 0) ? (isUpperPathValid && isLowerPathValid) : isUpperPathValid;
+			if (captureIsInject) {
+				pathsValid = isUpperPathValid && capturedInjectLineStart >= 1 && capturedInjectLineEnd >= capturedInjectLineStart;
+			}
 			bool functionsValid = true;
 			
-			if (!isAssigningMenuToggleKey && !isAssigningModKey) {
+			if (!isAssigningMenuToggleKey && !isAssigningModKey && !captureIsInject) {
 				if (capturedToggleMode) {
 					if (capturedToggleType == 0) {
 						if (capturedHasFuncOn && capturedFuncOnBuffer[0] == '\0') functionsValid = false;
@@ -2573,7 +2732,60 @@ namespace RadarKeys {
 					std::string finalFuncOff = (capturedToggleMode && capturedHasFuncOff) ? capturedFuncOffBuffer : "";
 					std::string finalFuncTap = (!capturedToggleMode && capturedHasFuncOn) ? capturedFuncTapBuffer : "";
 
-					if (captureIsCombo) {
+					if (captureIsInject) {
+						std::string injectSourcePath = ResolveScriptPath(capturedScriptPathOnBuffer);
+						int injectStart = capturedInjectLineStart;
+						int injectEnd = capturedInjectLineEnd;
+						if (injectEnd < injectStart) injectEnd = injectStart;
+						std::string injectFile = BuildInjectFile(injectSourcePath, injectStart, injectEnd);
+						if (injectFile.empty()) {
+							LogActivity("Script-line injection failed - could not read lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath, false);
+						} else {
+							RunInjectCompileCheck(injectFile);
+							if (editingBindingIndex != -1 && editingBindingIndex < (int)bindings.size()) {
+								USHORT oldVKey = bindings[editingBindingIndex].vKey;
+								KeyBind editedBind = bindings[editingBindingIndex];
+								editedBind.vKey = capturedVKey;
+								editedBind.needCtrl = capturedCtrl;
+								editedBind.needShift = capturedShift;
+								editedBind.needAlt = capturedAlt;
+								editedBind.keyName = NameForVKey(capturedVKey);
+								editedBind.isToggle = false;
+								editedBind.scriptPathOn = injectSourcePath;
+								editedBind.scriptPathOff = "";
+								editedBind.functionOn = "";
+								editedBind.functionOff = "";
+								editedBind.functionTap = "";
+								editedBind.isInject = true;
+								editedBind.injectLineStart = injectStart;
+								editedBind.injectLineEnd = injectEnd;
+								bindings[editingBindingIndex] = editedBind;
+								RemoveDispatcherIfUnused(oldVKey);
+								EnsureDispatcherRegistered(capturedVKey);
+								SaveBindings();
+								MarkDisplayCacheDirty();
+								LogActivity("Edited script-line binding -> " + CombinedDisplayName(editedBind));
+							} else {
+								KeyBind newInjectBind{};
+								newInjectBind.vKey = capturedVKey;
+								newInjectBind.needCtrl = capturedCtrl;
+								newInjectBind.needShift = capturedShift;
+								newInjectBind.needAlt = capturedAlt;
+								newInjectBind.keyName = NameForVKey(capturedVKey);
+								newInjectBind.scriptPathOn = injectSourcePath;
+								newInjectBind.isInject = true;
+								newInjectBind.injectLineStart = injectStart;
+								newInjectBind.injectLineEnd = injectEnd;
+								bindings.push_back(newInjectBind);
+								EnsureDispatcherRegistered(capturedVKey);
+								SaveBindings();
+								MarkDisplayCacheDirty();
+								DebuggerMenu::LogBindEvent("Bound " + newInjectBind.keyName + " -> script lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath);
+								LogActivity("Bound " + newInjectBind.keyName + " to script lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath);
+							}
+						}
+					}
+					else if (captureIsCombo) {
 						if (editingBindingIndex != -1 && editingBindingIndex < (int)bindings.size()) {
 							KeyBind editedBind{};
 							editedBind.comboKeys = capturedComboKeys;
@@ -2624,6 +2836,9 @@ namespace RadarKeys {
 					capturedInstantUserSet = false;
 					ResetComboCaptureState();
 					captureIsCombo = false;
+					captureIsInject = false;
+					capturedInjectLineStart = 1;
+					capturedInjectLineEnd = 1;
 				}
 				capturedVKey = 0; capturedHoldSeconds = 0.0f; 
 				showCapturePrompt = isAssigningMenuToggleKey = isAssigningModKey = false; editingBindingIndex = -1;
@@ -2670,6 +2885,11 @@ namespace RadarKeys {
 				    } else {
 				        entry.detailText = holdPrefix + "Toggle: " + fileOn + funcOnStr + " <-> " + fileOff + funcOffStr;
 				    }
+				} else if (bind.isInject) {
+					std::string injectFileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
+					char injectLineBuf[48];
+					snprintf(injectLineBuf, sizeof(injectLineBuf), "Lines %d-%d -> ", bind.injectLineStart, bind.injectLineEnd);
+					entry.detailText = std::string(injectLineBuf) + injectFileOn;
 				} else {
 					std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
 					std::string funcTapStr = bind.functionTap.empty() ? "" : " [" + bind.functionTap + "]";
@@ -3104,6 +3324,9 @@ namespace RadarKeys {
 							capturedInstantUserSet = true;
 							capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 							capturedHasFuncOff = !bindings[i].functionOff.empty();
+							captureIsInject = bindings[i].isInject;
+							capturedInjectLineStart = bindings[i].isInject ? bindings[i].injectLineStart : 1;
+							capturedInjectLineEnd = bindings[i].isInject ? bindings[i].injectLineEnd : 1;
 
 							CopyPrefillTruncWarn(capturedScriptPathOnBuffer, sizeof(capturedScriptPathOnBuffer), bindings[i].scriptPathOn, "script path (on)");
 							CopyPrefillTruncWarn(capturedScriptPathOffBuffer, sizeof(capturedScriptPathOffBuffer), bindings[i].scriptPathOff, "script path (off)");
@@ -3390,6 +3613,9 @@ namespace RadarKeys {
 			if (ImGui::Button(UI_BTN_ADD_NEW_BINDING, ImVec2(165, 24))) {
 				editingBindingIndex = -1;
 				captureIsCombo = false;
+				captureIsInject = false;
+				capturedInjectLineStart = 1;
+				capturedInjectLineEnd = 1;
 				ResetComboCaptureState();
 				capturedVKey = 0;
 				capturedInstantMode = false;
