@@ -411,6 +411,19 @@ namespace RadarKeys {
 			return nullptr;
 		}
 
+		static LONG TriggerFeedAxisMax(const DeviceInfo& info, size_t idx) {
+			if (idx < 32 && info.perOffset[idx].known && info.perOffset[idx].maxV > info.perOffset[idx].minV) {
+				return info.perOffset[idx].maxV;
+			}
+			if (info.deviceRange.known && info.deviceRange.maxV > info.deviceRange.minV) {
+				return info.deviceRange.maxV;
+			}
+			if (idx < 32 && info.observed[idx].known) {
+				return info.observed[idx].maxV;
+			}
+			return 32767;
+		}
+
 		static HRESULT STDMETHODCALLTYPE Hooked_GetDeviceState(IDirectInputDevice8* self,
 			DWORD cbData, LPVOID lpvData) {
 			GetDeviceState_t origGetDeviceState = OrigGetDeviceState(self);
@@ -485,6 +498,23 @@ namespace RadarKeys {
 				}
 			}
 
+			if (!selfOpened && kind == DeviceKind::Joystick && cbData >= 20 &&
+				!RawInput::IsGamepadCaptureSuppressed() &&
+				(RawInput::IsPlaystationL2Held() || RawInput::IsPlaystationR2Held())) {
+				const bool l2 = RawInput::IsPlaystationL2Held();
+				const bool r2 = RawInput::IsPlaystationR2Held();
+				std::lock_guard<std::mutex> lock(g_mutex);
+				auto it = g_deviceInfo.find(self);
+				if (it != g_deviceInfo.end() && it->second.isPlaystation) {
+					LONG* axes = reinterpret_cast<LONG*>(lpvData);
+					if (l2) {
+						axes[3] = TriggerFeedAxisMax(it->second, 3);
+					}
+					if (r2) {
+						axes[4] = TriggerFeedAxisMax(it->second, 4);
+					}
+				}
+			}
 			if (selfOpened || !ShouldBlock(kind)) {
 				return hr;
 			}
