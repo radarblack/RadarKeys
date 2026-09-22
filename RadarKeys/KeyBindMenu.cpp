@@ -605,10 +605,6 @@ namespace RadarKeys {
 			return outPath.string();
 		}
 
-		void RunInjectCompileCheck(const std::string& injectFile) {
-			LuaBridge::QueueMessageIn("DoScript|local f, ferr = loadfile(" + LuaLongBracketWrap(injectFile) + "); if not f then error('script-lines compile: ' .. tostring(ferr)) end");
-		}
-
 		USHORT menuToggleVKey = VK_F7;
 		RawInput::ActionHandle menuToggleHandle = 0;
 		bool menuOpen = false;
@@ -916,6 +912,10 @@ namespace RadarKeys {
 			std::string eq;
 			while (path.find("]" + eq + "]") != std::string::npos) eq += "=";
 			return "[" + eq + "[" + path + "]" + eq + "]";
+		}
+
+		void RunInjectCompileCheck(const std::string& injectFile) {
+			LuaBridge::QueueMessageIn("DoScript|local f, ferr = loadfile(" + LuaLongBracketWrap(injectFile) + "); if not f then error('script-lines compile: ' .. tostring(ferr)) end");
 		}
 
 		void FireBinding(const KeyBind& bind) {
