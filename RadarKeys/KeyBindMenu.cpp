@@ -69,6 +69,11 @@ namespace RadarKeys {
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INVALID_COMBO_LINE = "KeyBindMenu::LoadBindings: skipping invalid COMBO line: {}";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_BIND_LI = "KeyBindMenu::LoadBindings: skipping incomplete BIND line: {}";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_KEY_NAME_FMT = "KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding";
+		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_MALFORMED_FMT = "InjectDescribe: dropped malformed payload (fields: {})";
+		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UNKNOWN_KEY_FMT = "InjectDescribe: dropped - unrecognized key name '{}'";
+		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_BAD_RANGE_FMT = "InjectDescribe: dropped - invalid line range {}-{}";
+		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT = "InjectDescribe: source unreadable, binding armed for fire-time rebuild: {}";
+		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT = "Updated script-lines binding: {} -> lines {}-{} of {}";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_OLD_FORMAT_MALFORM = "KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_LOADED_FMT_BINDING_S = "KeyBindMenu::LoadBindings: loaded {} binding(s) from {}";
 		static const char* LOG_RADARKEYS_KEYBINDMENU_INITIALIZING = "RadarKeys KeyBindMenu initializing";
@@ -1320,11 +1325,13 @@ namespace RadarKeys {
 		void ApplyInjectDescribe(const std::string& payload) {
 			std::vector<std::string> fields = split(payload, "\x1f");
 			if (fields.size() < 6) {
+				spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_MALFORMED_FMT, (int)fields.size());
 				return;
 			}
 			std::string keyName = fields[0];
 			int vKey = VKeyForName(keyName);
 			if (vKey == -1) {
+				spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_UNKNOWN_KEY_FMT, keyName);
 				return;
 			}
 			int lineStart = 0;
@@ -1334,6 +1341,7 @@ namespace RadarKeys {
 			std::stringstream ssEnd(fields[5]);
 			ssEnd >> lineEnd;
 			if (lineStart < 1 || lineEnd < lineStart) {
+				spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_BAD_RANGE_FMT, lineStart, lineEnd);
 				return;
 			}
 			std::string scriptName = fields[1];
@@ -1361,14 +1369,16 @@ namespace RadarKeys {
 				bind.injectLineEnd = lineEnd;
 				BuildInjectFile(sourcePath, lineStart, lineEnd);
 				MarkDisplayCacheDirty();
+				spdlog::info(LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT, keyName, lineStart, lineEnd, sourcePath);
 				break;
 			}
 			if (!exists) {
 				std::string injectFile = BuildInjectFile(sourcePath, lineStart, lineEnd);
 				if (injectFile.empty()) {
-					return;
+					spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT, sourcePath);
+				} else {
+					RunInjectCompileCheck(injectFile);
 				}
-				RunInjectCompileCheck(injectFile);
 				KeyBind newBind{};
 				newBind.vKey = (USHORT)vKey;
 				newBind.keyName = keyName;
