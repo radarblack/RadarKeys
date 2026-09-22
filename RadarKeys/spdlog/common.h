@@ -152,7 +152,7 @@ enum level_enum
 #if !defined(SPDLOG_LEVEL_NAMES)
 #define SPDLOG_LEVEL_NAMES                                                                                                                 \
     {                                                                                                                                      \
-        "trace", "debug", "info", "warning", "error", "critical", "off"                                                                    \
+        "trac", "dbug", "info", "warn", "erro", "crit", "off"                                                                              \
     }
 #endif
 
