@@ -546,9 +546,6 @@ namespace RadarKeys {
 				snprintf(buf, sizeof(buf), " (hold %.1fs)", bind.holdSeconds);
 				result += buf;
 			}
-			if (bind.isInject) {
-				result += " (lines " + std::to_string(bind.injectLineStart) + "-" + std::to_string(bind.injectLineEnd) + ")";
-			}
 			return result;
 		}
 
@@ -920,6 +917,9 @@ namespace RadarKeys {
 
 		void FireBinding(const KeyBind& bind) {
 			if (bind.isInject) {
+				if (bind.scriptDescribed && ModKeyBindings::IsDisabled(bind.injectScriptName, bind.injectFunctionName)) {
+					return;
+				}
 				std::string injectFile = InjectFilePathFor(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
 				std::error_code injectEc;
 				if (!std::filesystem::exists(injectFile, injectEc)) {
@@ -1313,6 +1313,111 @@ namespace RadarKeys {
 			LuaKeyState::RetireIfUndescribed(vKey);
 		}
 
+		static SafeQueue<std::string> pendingInjectDescribes;
+		static std::map<std::string, std::chrono::steady_clock::time_point> injectDescribeTouch;
+		constexpr double kInjectDescribeStaleSeconds = 5.0;
+
+		void ApplyInjectDescribe(const std::string& payload) {
+			std::vector<std::string> fields = split(payload, "\x1f");
+			if (fields.size() < 6) {
+				return;
+			}
+			std::string keyName = fields[0];
+			int vKey = VKeyForName(keyName);
+			if (vKey == -1) {
+				return;
+			}
+			int lineStart = 0;
+			int lineEnd = 0;
+			std::stringstream ssStart(fields[4]);
+			ssStart >> lineStart;
+			std::stringstream ssEnd(fields[5]);
+			ssEnd >> lineEnd;
+			if (lineStart < 1 || lineEnd < lineStart) {
+				return;
+			}
+			std::string scriptName = fields[1];
+			std::string functionName = fields[2];
+			std::string sourcePath = ResolveScriptPath(fields[3]);
+			std::string slotTag = (SlotOfVKey((USHORT)vKey) == ModKeyBindings::BindSlot::Pad) ? "pad" : "kbm";
+			std::string identity = scriptName + "\x1f" + functionName + "\x1f" + slotTag;
+			bool exists = false;
+			for (auto& bind : bindings) {
+				if (!bind.isInject || !bind.scriptDescribed) continue;
+				std::string bindSlot = (SlotOfVKey(bind.vKey) == ModKeyBindings::BindSlot::Pad) ? "pad" : "kbm";
+				if (bind.injectScriptName != scriptName || bind.injectFunctionName != functionName || bindSlot != slotTag) continue;
+				exists = true;
+				if (bind.vKey == (USHORT)vKey && bind.scriptPathOn == sourcePath && bind.injectLineStart == lineStart && bind.injectLineEnd == lineEnd) {
+					break;
+				}
+				if (bind.vKey != (USHORT)vKey) {
+					RemoveDispatcherIfUnused(bind.vKey);
+					bind.vKey = (USHORT)vKey;
+					bind.keyName = keyName;
+					EnsureDispatcherRegistered(bind.vKey);
+				}
+				bind.scriptPathOn = sourcePath;
+				bind.injectLineStart = lineStart;
+				bind.injectLineEnd = lineEnd;
+				BuildInjectFile(sourcePath, lineStart, lineEnd);
+				MarkDisplayCacheDirty();
+				break;
+			}
+			if (!exists) {
+				std::string injectFile = BuildInjectFile(sourcePath, lineStart, lineEnd);
+				if (injectFile.empty()) {
+					return;
+				}
+				RunInjectCompileCheck(injectFile);
+				KeyBind newBind{};
+				newBind.vKey = (USHORT)vKey;
+				newBind.keyName = keyName;
+				newBind.scriptPathOn = sourcePath;
+				newBind.isInject = true;
+				newBind.scriptDescribed = true;
+				newBind.injectScriptName = scriptName;
+				newBind.injectFunctionName = functionName;
+				newBind.injectLineStart = lineStart;
+				newBind.injectLineEnd = lineEnd;
+				bindings.push_back(newBind);
+				EnsureDispatcherRegistered(newBind.vKey);
+				MarkDisplayCacheDirty();
+				LogActivity("Bound " + keyName + " to script lines " + std::to_string(lineStart) + "-" + std::to_string(lineEnd) + " of " + sourcePath);
+			}
+			injectDescribeTouch[identity] = std::chrono::steady_clock::now();
+		}
+
+		void SweepStaleScriptInjects() {
+			const auto now = std::chrono::steady_clock::now();
+			bool removedAny = false;
+			for (int i = (int)bindings.size() - 1; i >= 0; i--) {
+				if (!bindings[i].isInject || !bindings[i].scriptDescribed) continue;
+				std::string bindSlot = (SlotOfVKey(bindings[i].vKey) == ModKeyBindings::BindSlot::Pad) ? "pad" : "kbm";
+				auto it = injectDescribeTouch.find(bindings[i].injectScriptName + "\x1f" + bindings[i].injectFunctionName + "\x1f" + bindSlot);
+				if (it == injectDescribeTouch.end() || std::chrono::duration<double>(now - it->second).count() > kInjectDescribeStaleSeconds) {
+					RemoveDispatcherIfUnused(bindings[i].vKey);
+					bindings.erase(bindings.begin() + i);
+					removedAny = true;
+				}
+			}
+			if (removedAny) {
+				MarkDisplayCacheDirty();
+			}
+		}
+
+		void ProcessInjectDescribes() {
+			std::optional<std::string> payloadOpt = pendingInjectDescribes.pop();
+			while (payloadOpt) {
+				ApplyInjectDescribe(*payloadOpt);
+				payloadOpt = pendingInjectDescribes.pop();
+			}
+			SweepStaleScriptInjects();
+		}
+
+		void QueueInjectDescribe(const std::string& payload) {
+			pendingInjectDescribes.push(payload);
+		}
+
 		void SaveBindings() {
 			EnsureBindsDirectory();
 			std::string bindsPath = GetBindsFileName();
@@ -1342,6 +1447,7 @@ namespace RadarKeys {
 				}
 
 				if (b.isInject) {
+					if (b.scriptDescribed) continue;
 					outFile << "INJECT|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|" << (b.isInstant ? "1|" : "0|") << b.instantTriggerType << "|" << b.repeatAccelMult << "|" << (b.disabled ? "1|" : "0|") << b.injectLineStart << "|" << b.injectLineEnd << "|" << genericOn << "\n";
 					continue;
 				}
@@ -3074,6 +3180,7 @@ namespace RadarKeys {
 					rows.push_back(std::move(row));
 				}
 				for (int i = 0; i < (int)bindings.size(); i++) {
+					if (bindings[i].isInject && bindings[i].scriptDescribed) continue;
 					UnifiedRow row;
 					row.isManual = true;
 					row.bindIndex = i;
