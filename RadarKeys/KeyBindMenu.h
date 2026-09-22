@@ -1,6 +1,7 @@
 #pragma once
 #include "windowsapi.h"
 #include "RawInput.h"
+#include "ModKeyBindings.h"
 #include <string>
 #include <vector>
 #include <chrono>
@@ -51,6 +52,7 @@ namespace RadarKeys {
 
 		std::string NameForVKey(USHORT vKey);
 		int VKeyForName(const std::string& name);
+		ModKeyBindings::BindSlot SlotOfVKey(USHORT vKey);
 
 		std::vector<USHORT> ParseComboKeyNames(const std::string& raw);
 
