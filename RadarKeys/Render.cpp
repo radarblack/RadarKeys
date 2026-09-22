@@ -264,6 +264,7 @@ namespace RadarKeys {
 
 		void DrawUI() {
 			LuaBridge::ProcessMessages();
+			KeyBindMenu::ProcessInjectDescribes();
 
 			auto& io = ImGui::GetIO();
 			bool unlock = IsUnlockCursor();
