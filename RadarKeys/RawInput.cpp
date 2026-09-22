@@ -279,7 +279,13 @@ namespace RadarKeys {
 
 		static FARPROC WINAPI HookedGetProcAddressTriggerFeed(HMODULE hModule, LPCSTR lpProcName) {
 			FARPROC proc = g_origGetProcAddressTramp(hModule, lpProcName);
-			if (!proc || !lpProcName || strcmp(lpProcName, "XInputGetState") != 0) {
+			if (!proc || !lpProcName) {
+				return proc;
+			}
+			if (reinterpret_cast<uintptr_t>(lpProcName) <= 0xFFFFu) {
+				return proc;
+			}
+			if (lpProcName[0] != 'X' || strcmp(lpProcName, "XInputGetState") != 0) {
 				return proc;
 			}
 			if (reinterpret_cast<void*>(proc) == reinterpret_cast<void*>(&HookedXInputGetStateIatFeed)) {
