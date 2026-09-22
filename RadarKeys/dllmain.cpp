@@ -32,7 +32,6 @@ namespace RadarKeys {
 		static const char* LOG_RADARKEYS_KEY_QUERY_UNRECOGNIZED_KEY_NAME = "RadarKeys key query: unrecognized key name '{}'";
 		static const char* LOG_RADARKEYS_COMBO_QUERY_UNRECOGNIZED_MALFORMED_COMBO = "RadarKeys combo query: unrecognized or malformed combo string '{}'";
 		static const char* LOG_RADARKEYS_KEY_QUERY_INVALID_HOLD_SECONDS = "RadarKeys key query: invalid hold-seconds arg '{}'";
-		static const char* LOG_RADARKEYS_DESCRIBEKEYLINES_QUEUED_FMT = "DescribeKeyLines: queued key:{} lines {}-{} of {} [{} / {}]";
 		static const char* LOG_RADARKEYS_DESCRIBEKEYLINES_REJECTED_NULL_ARGS = "DescribeKeyLines: rejected - missing or empty key, script, function or source argument";
 		static const char* LOG_RADARKEYS_DESCRIBEKEYLINES_REJECTED_BAD_LINES_FMT = "DescribeKeyLines: rejected - invalid line range start:'{}' end:'{}'";
 
@@ -260,7 +259,6 @@ namespace RadarKeys {
 		}
 		std::string payload = std::string(keyName) + "\x1f" + scriptName + "\x1f" + functionName + "\x1f" + sourceScript + "\x1f" + std::to_string(lineStart) + "\x1f" + std::to_string(lineEnd);
 		KeyBindMenu::QueueInjectDescribe(payload);
-		spdlog::info(LOG_RADARKEYS_DESCRIBEKEYLINES_QUEUED_FMT, keyName, lineStart, lineEnd, sourceScript, scriptName, functionName);
 		return 0;
 	}
 
