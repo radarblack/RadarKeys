@@ -1032,6 +1032,7 @@ namespace RadarKeys {
 				for (const auto& bind : bindings) {
 					if (bind.IsCombo()) continue;
 					if (bind.vKey != activeVKey) continue;
+					if (bind.isInject && bind.injectScriptName == info.scriptName && bind.injectFunctionName == info.functionName) continue;
 					if (IsSingleTriggerConflict(ManualTriggerMask(bind), info)) {
 						conflicted.insert(activeVKey);
 						break;
