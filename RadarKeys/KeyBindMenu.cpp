@@ -740,6 +740,11 @@ namespace RadarKeys {
 
 		bool IsModSingleAssignmentAvailable(USHORT vKey, const std::string& scriptName, const std::string& functionName) {
 			if (IsReservedVKey(vKey)) return false;
+			for (const auto& bind : bindings) {
+				if (!bind.isInject || !bind.scriptDescribed || bind.vKey != vKey) continue;
+				if (bind.injectScriptName == scriptName && bind.injectFunctionName == functionName) continue;
+				return false;
+			}
 			unsigned modMask = GetModSingleTriggerMask(scriptName, functionName);
 			if (modMask == Trigger_None) return true;
 
@@ -760,6 +765,13 @@ namespace RadarKeys {
 		bool IsModComboAssignmentAvailable(const std::vector<USHORT>& comboKeys, const std::string& scriptName, const std::string& functionName) {
 			for (USHORT k : comboKeys) {
 				if (IsReservedVKey(k)) return false;
+			}
+			for (const auto& bind : bindings) {
+				if (!bind.isInject || !bind.scriptDescribed) continue;
+				if (bind.injectScriptName == scriptName && bind.injectFunctionName == functionName) continue;
+				for (USHORT k : comboKeys) {
+					if (bind.vKey == k) return false;
+				}
 			}
 			unsigned modMask = GetModComboTriggerMask(scriptName, functionName);
 			if (modMask == Trigger_None) return true;
