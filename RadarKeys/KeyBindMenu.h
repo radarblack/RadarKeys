@@ -27,6 +27,9 @@ namespace RadarKeys {
 			float repeatAccelMult = 1.0f;
 			double runtimeRepeatSpeedMult = 1.0;
 			bool disabled = false;
+			bool isInject = false;
+			int injectLineStart = 0;
+			int injectLineEnd = 0;
 
 			// lua script pass
 			std::string functionOn;
