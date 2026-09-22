@@ -41,6 +41,8 @@ namespace RadarKeys {
 		constexpr USHORT VK_PS_RS_RIGHT   = 0x0117;
 
 		bool IsKeyHeldReal(USHORT vKey);
+		bool IsPlaystationL2Held();
+		bool IsPlaystationR2Held();
 		bool ProcessMouseButtons(PRAWINPUT pRaw);
 		typedef std::function<void(BUTTONEVENT buttonEvent)> ButtonAction;
 		typedef unsigned long long ActionHandle;
@@ -55,6 +57,7 @@ namespace RadarKeys {
 		void BlockKeyboard();
 		void UnBlockKeyboard();
 		void SetGamepadBlockedToGame(bool blocked);
+		bool IsGamepadCaptureSuppressed();
 		void PollGamepad();
 		void PollPlaystation();
 		bool IsAnyGamepadConnected();
