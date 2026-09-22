@@ -222,7 +222,7 @@ namespace RadarKeys {
 			public:
 			explicit BootStampSink(spdlog::sink_ptr downstream)
 			: downstream_(std::move(downstream)) {
-				downstream_->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
+				downstream_->set_pattern("[%l] %v");
 			}
 			protected:
 			void sink_it_(const spdlog::details::log_msg& msg) override {
