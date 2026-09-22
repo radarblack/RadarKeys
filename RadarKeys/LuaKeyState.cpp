@@ -142,7 +142,7 @@ namespace RadarKeys {
 			std::string overrideName = ModKeyBindings::GetSlotOverride(scriptName, functionName, KeyBindMenu::SlotOfVKey(nativeVKey));
 			if (!overrideName.empty()) {
 				int resolved = KeyBindMenu::VKeyForName(overrideName);
-				if (resolved > 0 && ValidVKey((USHORT)resolved)) {
+				if (resolved > 0 && ValidVKey((USHORT)resolved) && KeyBindMenu::SlotOfVKey((USHORT)resolved) == KeyBindMenu::SlotOfVKey(nativeVKey)) {
 					desired = (USHORT)resolved;
 				}
 			}
