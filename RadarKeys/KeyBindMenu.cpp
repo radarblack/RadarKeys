@@ -2161,7 +2161,7 @@ namespace RadarKeys {
 					if (bestInstantPriority < 0) bestInstantPriority = 0;
 					triggerLabel = "On Press";
 				} else {
-					triggerLabel = "(not observed yet)";
+					triggerLabel = "Script Inject - On Press";
 				}
 
 				if (row.hasToggleState) {
