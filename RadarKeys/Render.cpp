@@ -22,26 +22,26 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 namespace RadarKeys {
 	namespace Render {
-	static const char* LOG_ENSURERENDERTARGET_GETBUFFER_FMT_FAILED_0X_08X = "EnsureRenderTarget: GetBuffer({}) failed: 0x{:08X}";
-	static const char* LOG_ENSURERENDERTARGET_CREATERENDERTARGETVIEW_FAILED_0X_ = "EnsureRenderTarget: CreateRenderTargetView failed: 0x{:08X}";
-	static const char* LOG_ATTEMPTING_FRAME_INITIALIZE = "Attempting to frame initialize";
-	static const char* LOG_DEVICE_SWAPCHAIN_NULL_DIRECTX_12_MAY = "Device or SwapChain null. DirectX 12 may be in use. A crash may occur.";
-	static const char* LOG_FRAMEINITIALIZE_SWAP_CHAIN_HAS_NO_OUTPUT = "FrameInitialize: swap chain has no output window - input hook skipped";
-	static const char* LOG_CREATING_RENDER_TARGET = "Creating render target";
-	static const char* LOG_WINDOW_HANDLE_0_X = "Window Handle: {0:x}";
-	static const char* LOG_INITIALIZING_IMGUI = "Initializing ImGui";
-	static const char* LOG_INITIALIZING_IMGUI_WIN32 = "Initializing ImGui Win32";
-	static const char* LOG_FAILED_INITIALIZE_IMGUI = "Failed to initialize ImGui.";
-	static const char* LOG_INITIALIZING_IMGUI_D3D11 = "Initializing ImGui D3D11";
-	static const char* LOG_INPUT_UNLOCK_FMT_MAINMENU_FMT_DEBUGGER = "Input unlock: {} (mainMenu={}, debugger={})";
-	static const char* LOG_KEYBOARD_BLOCK_GAME_FMT_UNLOCK_FMT = "Keyboard block-to-game: {} (unlock={}, captureSuppressKeyboard={}, mainMenu={}, debugger={})";
-	static const char* LOG_MOUSE_BLOCK_GAME_FMT_UNLOCK_FMT = "Mouse block-to-game: {} (unlock={}, captureSuppressMouse={}, mainMenu={}, debugger={})";
-	static const char* LOG_GAMEPAD_BLOCK_GAME_FMT_UNLOCK_FMT = "Gamepad block-to-game: {} (unlock={}, captureSuppressGamepad={}, mainMenu={}, debugger={})";
-	static const char* LOG_FAILED_FRAME_INITIALIZE_RADARKEYS = "Failed to frame initialize RadarKeys";
-	static const char* LOG_RADARKEYS_FRAME_INITIALIZED = "RadarKeys frame initialized";
-	static const char* LOG_ONRESET = "OnReset";
-	static const char* LOG_ONRESET_DONE = "OnReset done";
-	static const char* LOG_HOOKED_D3D11 = "Hooked D3D11";
+	static const char* LOG_ENSURERENDERTARGET_GETBUFFER_FMT_FAILED_0X_08X = "Render: EnsureRenderTarget: GetBuffer({}) failed: 0x{:08X}";
+	static const char* LOG_ENSURERENDERTARGET_CREATERENDERTARGETVIEW_FAILED_0X_ = "Render: EnsureRenderTarget: CreateRenderTargetView failed: 0x{:08X}";
+	static const char* LOG_ATTEMPTING_FRAME_INITIALIZE = "Render: Attempting to frame initialize";
+	static const char* LOG_DEVICE_SWAPCHAIN_NULL_DIRECTX_12_MAY = "Render: Device or SwapChain null. DirectX 12 may be in use. A crash may occur.";
+	static const char* LOG_FRAMEINITIALIZE_SWAP_CHAIN_HAS_NO_OUTPUT = "Render: FrameInitialize: swap chain has no output window - input hook skipped";
+	static const char* LOG_CREATING_RENDER_TARGET = "Render: Creating render target";
+	static const char* LOG_WINDOW_HANDLE_0_X = "Render: Window Handle: {0:x}";
+	static const char* LOG_INITIALIZING_IMGUI = "Render: Initializing ImGui";
+	static const char* LOG_INITIALIZING_IMGUI_WIN32 = "Render: Initializing ImGui Win32";
+	static const char* LOG_FAILED_INITIALIZE_IMGUI = "Render: Failed to initialize ImGui.";
+	static const char* LOG_INITIALIZING_IMGUI_D3D11 = "Render: Initializing ImGui D3D11";
+	static const char* LOG_INPUT_UNLOCK_FMT_MAINMENU_FMT_DEBUGGER = "Render: Input unlock: {} (mainMenu={}, debugger={})";
+	static const char* LOG_KEYBOARD_BLOCK_GAME_FMT_UNLOCK_FMT = "Render: Keyboard block-to-game: {} (unlock={}, captureSuppressKeyboard={}, mainMenu={}, debugger={})";
+	static const char* LOG_MOUSE_BLOCK_GAME_FMT_UNLOCK_FMT = "Render: Mouse block-to-game: {} (unlock={}, captureSuppressMouse={}, mainMenu={}, debugger={})";
+	static const char* LOG_GAMEPAD_BLOCK_GAME_FMT_UNLOCK_FMT = "Render: Gamepad block-to-game: {} (unlock={}, captureSuppressGamepad={}, mainMenu={}, debugger={})";
+	static const char* LOG_FAILED_FRAME_INITIALIZE_RADARKEYS = "Render: Failed to frame initialize RadarKeys";
+	static const char* LOG_RADARKEYS_FRAME_INITIALIZED = "RadarKeys: frame initialized";
+	static const char* LOG_ONRESET = "Render: OnReset";
+	static const char* LOG_ONRESET_DONE = "Render: OnReset done";
+	static const char* LOG_HOOKED_D3D11 = "Render: Hooked D3D11";
 
 
 		std::unique_ptr<D3D11Hook> d3d11Hook;
@@ -60,7 +60,7 @@ namespace RadarKeys {
 		}
 
 		void CleanupRenderTarget() {
-			spdlog::trace("CleanupRenderTarget");
+			spdlog::trace("Render: CleanupRenderTarget");
 
 			for (ID3D11RenderTargetView* rtv : backBufferRTVs) {
 				if (rtv != nullptr) {
