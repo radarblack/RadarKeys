@@ -39,4 +39,8 @@ namespace RadarKeys {
 	inline std::string& trim(std::string& s, const char* t = " \t\n\r\f\v") {
 		return ltrim(rtrim(s, t), t);
 	}
+	inline std::string FileNameOnly(const std::string& path) {
+		size_t pos = path.find_last_of("/\\");
+		return pos == std::string::npos ? path : path.substr(pos + 1);
+	}
 }
