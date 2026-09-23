@@ -53,8 +53,8 @@ namespace RadarKeys {
 		static const char* LOG_RADARKEYS_DIAGNOSTICS_SINGLE_LOG_FMT_PREVIOUS = "RadarKeys: diagnostics: single log at {} (previous session preserved at {})";
 		static const char* LOG_INITDIAGNOSTICS_FAILED_FMT_DIAGNOSTICS_STAY_DEFAULT = "KeyBindMenu: InitDiagnostics failed ({}); diagnostics stay on the default sink";
 		static const char* LOG_KEYBINDMENU_COULDN_T_CREATE_FMT_DIRECTORY = "KeyBindMenu: couldn't create {} directory: {}";
-		static const char* LOG_OK_FMT = "[OK] {}";
-		static const char* LOG_FAIL_FMT = "[FAIL] {}";
+		static const char* LOG_OK_FMT = "[OK]{}";
+		static const char* LOG_FAIL_FMT = "[FAIL]{}";
 		static const char* LOG_STATE_CLEAN_EXIT = "[STATE] CLEAN_EXIT";
 		static const char* LOG_KEYBINDMENU_MAIN_MENU_FMT_F7 = "KeyBindMenu: main menu {} (F7)";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_BIND_LI = "KeyBindMenu::LoadBindings: skipping incomplete BIND line: {}";
