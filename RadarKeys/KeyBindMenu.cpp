@@ -2359,25 +2359,22 @@ namespace RadarKeys {
 				modKeyInfo = captureIsCombo
 					? ComputeComboModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName)
 					: ComputeModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
-				capturedToggleMode = modKeyInfo.anyToggle;
-				capturedLongPressMode = modKeyInfo.anyLongPress;
-				capturedHoldSeconds = (float)modKeyInfo.longPressSeconds;
-				capturedInstantMode = modKeyInfo.anyInstant;
-				capturedInstantTriggerType = modKeyInfo.instantType;
 
 				ImGui::TextWrapped(UI_FMT_SCRIPT_FUNCTION_BRACKETS, modKeyCaptureScriptName.c_str(), modKeyCaptureFunctionName.c_str());
 				ImGui::Separator();
 			}
 
-			if (!isAssigningMenuToggleKey && !isAssigningModKey) {
+			if (!isAssigningMenuToggleKey) {
 				bool wasCombo = captureIsCombo;
 				bool wasInject = captureIsInject;
 				ImGui::TextUnformatted(UI_LBL_BIND_TYPE); ImGui::SameLine();
 				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo && !captureIsInject)) { captureIsCombo = false; captureIsInject = false; }
 				ImGui::SameLine();
 				if (ImGui::RadioButton(UI_RADIO_MULTI_KEY_COMBO, captureIsCombo)) { captureIsCombo = true; captureIsInject = false; }
-				ImGui::SameLine();
-				if (ImGui::RadioButton(UI_RADIO_SCRIPT_LINES, captureIsInject)) { captureIsInject = true; captureIsCombo = false; }
+				if (!isAssigningModKey) {
+					ImGui::SameLine();
+					if (ImGui::RadioButton(UI_RADIO_SCRIPT_LINES, captureIsInject)) { captureIsInject = true; captureIsCombo = false; }
+				}
 				if (captureIsCombo != wasCombo) {
 					capturedVKey = 0;
 					ResetComboCaptureState();
@@ -2619,21 +2616,28 @@ namespace RadarKeys {
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey && !captureIsInject) {
 
-				if (capturedInstantMode) ImGui::BeginDisabled();
+				if (capturedInstantMode && !isAssigningModKey) ImGui::BeginDisabled();
 				if (isAssigningModKey) ImGui::BeginDisabled();
 				ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
 				if (isAssigningModKey && ImGui::IsItemHovered()) {
 					ImGui::SetTooltip(UI_TIP_TOGGLE_SCRIPT_UNAVAILABLE);
 				}
 				if (isAssigningModKey) ImGui::EndDisabled();
-				if (capturedInstantMode && ImGui::IsItemHovered()) {
+				if (capturedInstantMode && !isAssigningModKey && ImGui::IsItemHovered()) {
 					ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 				}
-				ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode);
-				if (capturedInstantMode && ImGui::IsItemHovered()) {
-					ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
+				if (isAssigningModKey) {
+					if (ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode)) {
+						capturedInstantMode = !capturedLongPressMode;
+						capturedInstantUserSet = true;
+					}
+				} else {
+					ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode);
+					if (capturedInstantMode && ImGui::IsItemHovered()) {
+						ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
+					}
 				}
-				if (capturedInstantMode) ImGui::EndDisabled();
+				if (capturedInstantMode && !isAssigningModKey) ImGui::EndDisabled();
 				
 				if (capturedLongPressMode) {
 				    ImGui::SetNextItemWidth(75);
@@ -2644,14 +2648,23 @@ namespace RadarKeys {
 				}
 
 				bool toggleOrLongPress = capturedToggleMode || capturedLongPressMode;
-				if (toggleOrLongPress) ImGui::BeginDisabled();
-				if (ImGui::Checkbox(UI_CHK_INSTANT, &capturedInstantMode)) {
-					capturedInstantUserSet = true;
+				if (!isAssigningModKey && toggleOrLongPress) ImGui::BeginDisabled();
+				if (isAssigningModKey) {
+					bool instantSelected = capturedInstantMode;
+					if (ImGui::Checkbox(UI_CHK_INSTANT, &instantSelected)) {
+						capturedInstantMode = true;
+						capturedLongPressMode = false;
+						capturedInstantUserSet = true;
+					}
+				} else {
+					if (ImGui::Checkbox(UI_CHK_INSTANT, &capturedInstantMode)) {
+						capturedInstantUserSet = true;
+					}
+					if (toggleOrLongPress && ImGui::IsItemHovered()) {
+						ImGui::SetTooltip(UI_TIP_UNCHECK_TOGGLE_FIRST);
+					}
 				}
-				if (toggleOrLongPress) ImGui::EndDisabled();
-				if (toggleOrLongPress && ImGui::IsItemHovered()) {
-					ImGui::SetTooltip(UI_TIP_UNCHECK_TOGGLE_FIRST);
-				}
+				if (!isAssigningModKey && toggleOrLongPress) ImGui::EndDisabled();
 
 				if (capturedInstantMode) {
 					static const char* instantTriggerLabels[] = { UI_OPT_ON_PRESS, UI_OPT_ON_RELEASE, UI_OPT_REPEAT };
@@ -3635,6 +3648,16 @@ namespace RadarKeys {
 							editingBindingIndex = -1;
 							isAssigningMenuToggleKey = false;
 							isAssigningModKey = true;
+							ModKeyReadOnlyInfo seededInfo = captureIsCombo
+								? ComputeComboModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName)
+								: ComputeModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
+							capturedToggleMode = false;
+							capturedLongPressMode = seededInfo.anyLongPress;
+							capturedHoldSeconds = (float)seededInfo.longPressSeconds;
+							capturedInstantMode = seededInfo.anyInstant || !seededInfo.anyLongPress;
+							capturedInstantTriggerType = seededInfo.instantType;
+							capturedRepeatAccelMult = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).repeatAccelMult;
+							capturedInstantUserSet = false;
 							requestCaptureFocus = true;
 							showCapturePrompt = true;
 						};
@@ -3690,6 +3713,16 @@ namespace RadarKeys {
 							editingBindingIndex = -1;
 							isAssigningMenuToggleKey = false;
 							isAssigningModKey = true;
+							ModKeyReadOnlyInfo seededInfo = captureIsCombo
+								? ComputeComboModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName)
+								: ComputeModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
+							capturedToggleMode = false;
+							capturedLongPressMode = seededInfo.anyLongPress;
+							capturedHoldSeconds = (float)seededInfo.longPressSeconds;
+							capturedInstantMode = seededInfo.anyInstant || !seededInfo.anyLongPress;
+							capturedInstantTriggerType = seededInfo.instantType;
+							capturedRepeatAccelMult = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).repeatAccelMult;
+							capturedInstantUserSet = false;
 							requestCaptureFocus = true;
 							showCapturePrompt = true;
 						};
