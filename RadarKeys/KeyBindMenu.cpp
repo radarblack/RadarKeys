@@ -98,6 +98,7 @@ namespace RadarKeys {
 		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
 		static const char* UI_CHK_TOGGLE = "Toggle";
 		static const char* UI_TIP_UNCHECK_INSTANT_FIRST = "Uncheck Instant first to use Toggle or Long Press.";
+		static const char* UI_TIP_TOGGLE_SCRIPT_UNAVAILABLE = "Toggle is not available for script bindings";
 		static const char* UI_CHK_LONG_PRESS = "Long Press";
 		static const char* UI_BTN_MINUS = " - ";
 		static const char* UI_BTN_PLUS = " + ";
@@ -110,7 +111,6 @@ namespace RadarKeys {
 			"Acceleration multiplier for the Repeat interval.\n"
 			"- ? > 1.00: Faster\n"
 			"- ? < 1.00: Slower";
-		static const char* UI_TXT_DETECTED_READ_ONLY = "Detected from the script - read only";
 		static const char* UI_LBL_READY = "[ READY ]";
 		static const char* UI_LBL_UNFIT = "[ UNFIT ]";
 		static const char* UI_TIP_COMBO_VALID = "The key combination is valid. Key assignment can finalize.";
@@ -2618,10 +2618,13 @@ namespace RadarKeys {
 
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey && !captureIsInject) {
-				if (isAssigningModKey) ImGui::BeginDisabled();
 
 				if (capturedInstantMode) ImGui::BeginDisabled();
+				if (isAssigningModKey) ImGui::BeginDisabled();
 				ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
+				if (isAssigningModKey && ImGui::IsItemHovered()) {
+					ImGui::SetTooltip(UI_TIP_TOGGLE_SCRIPT_UNAVAILABLE);
+				}
 				if (capturedInstantMode && ImGui::IsItemHovered()) {
 					ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 				}
@@ -2666,10 +2669,6 @@ namespace RadarKeys {
 					}
 				}
 
-				if (isAssigningModKey) {
-					ImGui::EndDisabled();
-					ImGui::TextDisabled(UI_TXT_DETECTED_READ_ONLY);
-				}
 			}
 			
 			bool comboAvailable = false;
