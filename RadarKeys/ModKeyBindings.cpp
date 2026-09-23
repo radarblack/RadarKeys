@@ -4,6 +4,7 @@
 #include "Util.h"
 #include "spdlog/spdlog.h"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -17,6 +18,9 @@ namespace RadarKeys {
 		struct SlotOverride {
 			std::string kbm;
 			std::string pad;
+			int triggerType = 0;
+			float holdSeconds = 0.0f;
+			float repeatAccelMult = 1.0f;
 		};
 
 		static std::map<std::string, std::map<std::string, SlotOverride>> overrides;
@@ -86,7 +90,16 @@ namespace RadarKeys {
 			for (const auto& scriptEntry : overrides) {
 				for (const auto& funcEntry : scriptEntry.second) {
 					bool disabled = IsDisabled(scriptEntry.first, funcEntry.first);
-					result.push_back(OverrideEntry{ scriptEntry.first, funcEntry.first, funcEntry.second.kbm, funcEntry.second.pad, disabled });
+					OverrideEntry entry;
+					entry.scriptName = scriptEntry.first;
+					entry.functionName = funcEntry.first;
+					entry.keyName = funcEntry.second.kbm;
+					entry.padKeyName = funcEntry.second.pad;
+					entry.disabled = disabled;
+					entry.triggerType = funcEntry.second.triggerType;
+					entry.holdSeconds = funcEntry.second.holdSeconds;
+					entry.repeatAccelMult = funcEntry.second.repeatAccelMult;
+					result.push_back(entry);
 					seen[scriptEntry.first][funcEntry.first] = true;
 				}
 			}
@@ -118,6 +131,11 @@ namespace RadarKeys {
 				if (!e.padKeyName.empty()) {
 					overrides[e.scriptName][e.functionName].pad = e.padKeyName;
 				}
+				if (e.triggerType != 0 || e.holdSeconds > 0.0f || e.repeatAccelMult != 1.0f) {
+					overrides[e.scriptName][e.functionName].triggerType = e.triggerType;
+					overrides[e.scriptName][e.functionName].holdSeconds = e.holdSeconds;
+					overrides[e.scriptName][e.functionName].repeatAccelMult = e.repeatAccelMult;
+				}
 				if (e.disabled) {
 					disabledMap[e.scriptName][e.functionName] = true;
 				}
@@ -135,6 +153,52 @@ namespace RadarKeys {
 			if (migrated) {
 				KeyBindMenu::SaveBindings();
 			}
+		}
+
+		TriggerConfig GetTriggerConfig(const std::string& scriptName, const std::string& functionName) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			if (!loaded) {
+				Load();
+			}
+			TriggerConfig config;
+			auto scriptIt = overrides.find(scriptName);
+			if (scriptIt == overrides.end()) {
+				return config;
+			}
+			auto funcIt = scriptIt->second.find(functionName);
+			if (funcIt == scriptIt->second.end()) {
+				return config;
+			}
+			config.triggerType = funcIt->second.triggerType;
+			config.holdSeconds = funcIt->second.holdSeconds;
+			config.repeatAccelMult = funcIt->second.repeatAccelMult;
+			return config;
+		}
+
+		void SetTriggerConfigWithoutSave(const std::string& scriptName, const std::string& functionName, int triggerType, float holdSeconds, float repeatAccelMult) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			if (!loaded) {
+				Load();
+			}
+			if (triggerType < 0 || triggerType > 2) {
+				triggerType = 0;
+			}
+			if (!std::isfinite(holdSeconds) || holdSeconds < 0.0f) {
+				holdSeconds = 0.0f;
+			}
+			if (!std::isfinite(repeatAccelMult) || repeatAccelMult < 0.1f) {
+				repeatAccelMult = 0.1f;
+			} else if (repeatAccelMult > 20.0f) {
+				repeatAccelMult = 20.0f;
+			}
+			overrides[scriptName][functionName].triggerType = triggerType;
+			overrides[scriptName][functionName].holdSeconds = holdSeconds;
+			overrides[scriptName][functionName].repeatAccelMult = repeatAccelMult;
+		}
+
+		bool HasTriggerConfig(const std::string& scriptName, const std::string& functionName) {
+			TriggerConfig config = GetTriggerConfig(scriptName, functionName);
+			return config.triggerType != 0 || config.holdSeconds > 0.0f || config.repeatAccelMult != 1.0f;
 		}
 
 		std::string GetOverride(const std::string& scriptName, const std::string& functionName) {
@@ -216,7 +280,7 @@ namespace RadarKeys {
 					if (funcIt != scriptIt->second.end()) {
 						if (slot == BindSlot::Pad) funcIt->second.pad.clear();
 						else funcIt->second.kbm.clear();
-						if (funcIt->second.kbm.empty() && funcIt->second.pad.empty()) {
+						if (funcIt->second.kbm.empty() && funcIt->second.pad.empty() && funcIt->second.triggerType == 0 && funcIt->second.holdSeconds == 0.0f && funcIt->second.repeatAccelMult == 1.0f) {
 							scriptIt->second.erase(funcIt);
 							if (scriptIt->second.empty()) overrides.erase(scriptIt);
 						}
