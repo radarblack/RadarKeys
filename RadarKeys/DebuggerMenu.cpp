@@ -1,4 +1,5 @@
 #include "DebuggerMenu.h"
+#include "Util.h"
 #include "LuaBridge.h"
 #include "KeyBindMenu.h"
 #include "spdlog/spdlog.h"
@@ -80,11 +81,11 @@ namespace RadarKeys {
 				return exists;
 			}
 			if (!exists) {
-				KeyBindMenu::LogActivity("[SCR][DLL] missing - SKIP: " + scriptPath, false);
+				KeyBindMenu::LogActivity("[SCR][DLL] missing - SKIP: " + FileNameOnly(scriptPath), false);
 				AddLogEntry("[DLL] missing - SKIP: " + scriptPath);
 				return false;
 			}
-			KeyBindMenu::LogActivity("[SCR][DLL] attempt: " + scriptPath);
+			KeyBindMenu::LogActivity("[SCR][DLL] attempt: " + FileNameOnly(scriptPath));
 			AddLogEntry("[DLL] attempt: " + scriptPath);
 			return true;
 		}
