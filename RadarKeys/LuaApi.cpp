@@ -4,14 +4,14 @@
 #include <atomic>
 
 namespace RadarKeys {
-			static const char* LOG_RESOLVELUAAPI_ONE_MORE_LUA_FUNCTION_ADDRESSES = "ResolveLuaApi: one or more Lua function addresses failed to resolve - game version may not match the day3900-en address table this build uses";
-			static const char* LOG_RESOLVELUAAPI_DIRECT_NON_QUEUED_LUA_CALL = "ResolveLuaApi: direct (non-queued) Lua call path is available";
-			static const char* LOG_RESOLVELUAAPI_DIRECT_LUA_CALL_PATH_UNAVAILABLE = "ResolveLuaApi: direct Lua call path unavailable (ADDR_lua_getfield/pcall/settop/type not set) - manual key binds will use the queued path";
-			static const char* LOG_RESOLVELUAAPI_DIRECT_LUA_CALL_PATH_COMPILED = "ResolveLuaApi: direct Lua call path compiled out (RADARKEYS_ALLOW_DIRECT_LUA_CALL=0) - manual key binds use the Lua-thread queued path";
-			static const char* LOG_REGISTERLUALIBRARY_REGISTERED_FMT = "RegisterLuaLibrary: registered {}";
-			static const char* LOG_LUAAPICAPTURESTATE_CAPTURED_MAIN_LUA_STATE_DIRECT = "LuaApiCaptureState: captured main lua_State for direct calls";
-			static const char* LOG_LUACALLGLOBALFUNCTION_DIRECT_OFF_THREAD_LUA_CALLS = "LuaCallGlobalFunction: direct (off-thread) Lua calls are compiled out (RADARKEYS_ALLOW_DIRECT_LUA_CALL=0); using queued CallFunction path";
-			static const char* LOG_LUACALLGLOBALFUNCTION_FMT_RAISED_ERROR_FMT = "LuaCallGlobalFunction: '{}' raised an error: {}";
+			static const char* LOG_RESOLVELUAAPI_ONE_MORE_LUA_FUNCTION_ADDRESSES = "LuaApi: ResolveLuaApi: one or more Lua function addresses failed to resolve - game version may not match the day3900-en address table this build uses";
+			static const char* LOG_RESOLVELUAAPI_DIRECT_NON_QUEUED_LUA_CALL = "LuaApi: ResolveLuaApi: direct (non-queued) Lua call path is available";
+			static const char* LOG_RESOLVELUAAPI_DIRECT_LUA_CALL_PATH_UNAVAILABLE = "LuaApi: ResolveLuaApi: direct Lua call path unavailable (ADDR_lua_getfield/pcall/settop/type not set) - manual key binds will use the queued path";
+			static const char* LOG_RESOLVELUAAPI_DIRECT_LUA_CALL_PATH_COMPILED = "LuaApi: ResolveLuaApi: direct Lua call path compiled out (RADARKEYS_ALLOW_DIRECT_LUA_CALL=0) - manual key binds use the Lua-thread queued path";
+			static const char* LOG_REGISTERLUALIBRARY_REGISTERED_FMT = "LuaApi: RegisterLuaLibrary: registered {}";
+			static const char* LOG_LUAAPICAPTURESTATE_CAPTURED_MAIN_LUA_STATE_DIRECT = "LuaApi: LuaApiCaptureState: captured main lua_State for direct calls";
+			static const char* LOG_LUACALLGLOBALFUNCTION_DIRECT_OFF_THREAD_LUA_CALLS = "LuaApi: LuaCallGlobalFunction: direct (off-thread) Lua calls are compiled out (RADARKEYS_ALLOW_DIRECT_LUA_CALL=0); using queued CallFunction path";
+			static const char* LOG_LUACALLGLOBALFUNCTION_FMT_RAISED_ERROR_FMT = "LuaApi: LuaCallGlobalFunction: '{}' raised an error: {}";
 
 
 	FoxLuaRegisterLibrary_t g_FoxLuaRegisterLibrary = nullptr;
