@@ -5,8 +5,8 @@
 #include "WindowsMessageHook.hpp"
 
 using namespace std;
-static const char* LOG_INITIALIZING_WINDOWSMESSAGEHOOK = "Initializing WindowsMessageHook";
-static const char* LOG_HOOKED_WINDOWS_MESSAGE_HANDLER = "Hooked Windows message handler";
+static const char* LOG_INITIALIZING_WINDOWSMESSAGEHOOK = "WindowsMessageHook: Initializing WindowsMessageHook";
+static const char* LOG_HOOKED_WINDOWS_MESSAGE_HANDLER = "WindowsMessageHook: Hooked Windows message handler";
 
 static WindowsMessageHook* g_windows_message_hook{ nullptr };
 std::recursive_mutex g_proc_mutex{};
