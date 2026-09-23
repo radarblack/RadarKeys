@@ -989,7 +989,7 @@ namespace RadarKeys {
 				if (bind.scriptDescribed && ModKeyBindings::IsDisabled(bind.injectScriptName, bind.injectFunctionName)) {
 					return;
 				}
-				if (bind.scriptDescribed && ModKeyBindings::GetOverride(bind.injectScriptName, bind.injectFunctionName).empty()) {
+				if (bind.scriptDescribed && ModKeyBindings::GetOverride(bind.injectScriptName, bind.injectFunctionName).empty() && !ModKeyBindings::HasTriggerConfig(bind.injectScriptName, bind.injectFunctionName)) {
 					std::string keyNames;
 					if (bind.IsCombo()) {
 						for (size_t i = 0; i < bind.comboKeys.size(); ++i) {
@@ -1432,6 +1432,18 @@ namespace RadarKeys {
 				bind.injectLineStart = lineStart;
 				bind.injectLineEnd = lineEnd;
 				bind.autoDisabled = BuildInjectContent(sourcePath, lineStart, lineEnd).empty();
+				ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
+				if (storedTrigger.triggerType == 2) {
+					bind.isInstant = true;
+					bind.instantTriggerType = 2;
+					bind.holdSeconds = 0.0f;
+					bind.repeatAccelMult = storedTrigger.repeatAccelMult;
+				} else {
+					bind.isInstant = (storedTrigger.triggerType == 1);
+					bind.instantTriggerType = storedTrigger.triggerType;
+					bind.holdSeconds = (storedTrigger.triggerType == 0) ? storedTrigger.holdSeconds : 0.0f;
+					bind.repeatAccelMult = 1.0f;
+				}
 				MarkDisplayCacheDirty();
 				spdlog::info(LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT, keyName, lineStart, lineEnd, FileNameOnly(sourcePath));
 				break;
@@ -1456,6 +1468,18 @@ namespace RadarKeys {
 				newBind.injectFunctionName = functionName;
 				newBind.injectLineStart = lineStart;
 				newBind.injectLineEnd = lineEnd;
+				ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
+				if (storedTrigger.triggerType == 2) {
+					newBind.isInstant = true;
+					newBind.instantTriggerType = 2;
+					newBind.holdSeconds = 0.0f;
+					newBind.repeatAccelMult = storedTrigger.repeatAccelMult;
+				} else {
+					newBind.isInstant = (storedTrigger.triggerType == 1);
+					newBind.instantTriggerType = storedTrigger.triggerType;
+					newBind.holdSeconds = (storedTrigger.triggerType == 0) ? storedTrigger.holdSeconds : 0.0f;
+					newBind.repeatAccelMult = 1.0f;
+				}
 				bindings.push_back(newBind);
 				EnsureDispatcherRegistered(newBind.vKey);
 				MarkDisplayCacheDirty();
@@ -1579,10 +1603,10 @@ namespace RadarKeys {
 				outFile << "|" << (b.isInstant ? "1" : "0") << "|" << b.instantTriggerType << "|" << b.repeatAccelMult << "|" << (b.disabled ? "1" : "0") << "\n";
 			}
 			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
-				if (entry.keyName == entry.padKeyName) {
+				if (entry.keyName == entry.padKeyName && entry.triggerType == 0 && entry.holdSeconds == 0.0f && entry.repeatAccelMult == 1.0f) {
 					outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << (entry.disabled ? "1" : "0") << "\n";
 				} else {
-					outFile << "MODKEY2|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << entry.padKeyName << "|" << (entry.disabled ? "1" : "0") << "\n";
+					outFile << "MODKEY2|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << entry.padKeyName << "|" << (entry.disabled ? "1" : "0") << "|" << entry.triggerType << "|" << entry.holdSeconds << "|" << entry.repeatAccelMult << "\n";
 				}
 			}
 			outFile.close();
@@ -1655,7 +1679,23 @@ namespace RadarKeys {
 					entry.keyName = trim(parts[3]);
 					entry.padKeyName = trim(parts[4]);
 					entry.disabled = trim(parts[5]) == "1";
-					if (!entry.scriptName.empty() && !entry.functionName.empty() && (!entry.keyName.empty() || !entry.padKeyName.empty() || entry.disabled)) {
+					if (parts.size() >= 7) {
+						try { entry.triggerType = std::stoi(trim(parts[6])); }
+						catch (...) { entry.triggerType = 0; }
+						if (entry.triggerType < 0 || entry.triggerType > 2) entry.triggerType = 0;
+					}
+					if (parts.size() >= 8) {
+						try { entry.holdSeconds = std::stof(trim(parts[7])); }
+						catch (...) { entry.holdSeconds = 0.0f; }
+						if (!std::isfinite(entry.holdSeconds) || entry.holdSeconds < 0.0f) entry.holdSeconds = 0.0f;
+					}
+					if (parts.size() >= 9) {
+						try { entry.repeatAccelMult = std::stof(trim(parts[8])); }
+						catch (...) { entry.repeatAccelMult = 1.0f; }
+						if (!std::isfinite(entry.repeatAccelMult) || entry.repeatAccelMult < 0.1f) entry.repeatAccelMult = 0.1f;
+						else if (entry.repeatAccelMult > 20.0f) entry.repeatAccelMult = 20.0f;
+					}
+					if (!entry.scriptName.empty() && !entry.functionName.empty() && (!entry.keyName.empty() || !entry.padKeyName.empty() || entry.disabled || entry.triggerType != 0 || entry.holdSeconds > 0.0f)) {
 						modKeyEntries.push_back(std::move(entry));
 					}
 				}
@@ -2230,7 +2270,15 @@ namespace RadarKeys {
 					if (bestInstantPriority < 0) bestInstantPriority = 0;
 					triggerLabel = "On Press";
 				} else {
-					triggerLabel = "Script Inject - On Press";
+					std::string triggerText = "On Press";
+					for (const auto& b : bindings) {
+						if (!b.isInject || !b.scriptDescribed || b.injectScriptName != row.scriptName || b.injectFunctionName != row.functionName) continue;
+						if (b.isInstant && b.instantTriggerType == 1) triggerText = "On Release";
+						else if (b.isInstant && b.instantTriggerType == 2) triggerText = "Repeat";
+						else if (b.holdSeconds > 0.0f) { char holdBuf[32]; snprintf(holdBuf, sizeof(holdBuf), "%.1fs", b.holdSeconds); triggerText = std::string("Long Press (") + holdBuf + ")"; }
+						break;
+					}
+					triggerLabel = "Script Inject - " + triggerText;
 				}
 
 				if (row.hasToggleState) {
@@ -2837,13 +2885,24 @@ namespace RadarKeys {
 			ImGui::SetCursorPosY(bottomAnchorY);
 
 			if (!canFinalize) ImGui::BeginDisabled();
+			auto applyTriggerToDescribedBinds = [&]() {
+				for (auto& b : bindings) {
+					if (!b.isInject || !b.scriptDescribed || b.injectScriptName != modKeyCaptureScriptName || b.injectFunctionName != modKeyCaptureFunctionName) continue;
+					b.isInstant = (capturedInstantTriggerType == 1 || capturedInstantTriggerType == 2);
+					b.instantTriggerType = capturedInstantTriggerType;
+					b.holdSeconds = (capturedInstantTriggerType == 0) ? capturedHoldSeconds : 0.0f;
+					b.repeatAccelMult = (capturedInstantTriggerType == 2) ? capturedRepeatAccelMult : 1.0f;
+				}
+			};
 			if (ImGui::Button(UI_BTN_FINALIZE, ImVec2(145, buttonHeight))) {
 				if (isAssigningModKey) {
 					if (captureIsCombo) {
 						std::string comboKeyName = ComboKeysDisplayName(capturedComboKeys);
+						ModKeyBindings::SetTriggerConfigWithoutSave(modKeyCaptureScriptName, modKeyCaptureFunctionName, capturedInstantTriggerType, capturedHoldSeconds, capturedRepeatAccelMult);
 						ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, comboKeyName);
 						DebuggerMenu::LogBindEvent("Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
 						LogActivity("KeyBindMenu: Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
+						applyTriggerToDescribedBinds();
 						MarkDisplayCacheDirty();
 
 						ResetComboCaptureState();
@@ -2853,6 +2912,7 @@ namespace RadarKeys {
 						USHORT oldVKey = 0;
 						bool slotMemberFound = false;
 						ModKeyBindings::BindSlot capturedSlot = SlotOfVKey(capturedVKey);
+						ModKeyBindings::SetTriggerConfigWithoutSave(modKeyCaptureScriptName, modKeyCaptureFunctionName, capturedInstantTriggerType, capturedHoldSeconds, capturedRepeatAccelMult);
 						for (const auto& row : LuaKeyState::GetTrackedKeyInfo()) {
 							if (row.scriptName != modKeyCaptureScriptName || row.functionName != modKeyCaptureFunctionName) {
 								continue;
@@ -2878,6 +2938,7 @@ namespace RadarKeys {
 						if (oldVKey != 0 && oldVKey != capturedVKey) {
 							LuaKeyState::ReassignBinding(oldVKey, capturedVKey, modKeyCaptureScriptName, modKeyCaptureFunctionName);
 						}
+						applyTriggerToDescribedBinds();
 						MarkDisplayCacheDirty();
 					}
 
@@ -3703,6 +3764,14 @@ namespace RadarKeys {
 					ImGui::Spacing();
 					if (ImGui::Button(UI_BTN_YES, ImVec2(80, 0))) {
 						ModKeyBindings::SetOverride(pendingResetScriptName, pendingResetFunctionName, "");
+						for (auto& b : bindings) {
+							if (!b.isInject || !b.scriptDescribed || b.injectScriptName != pendingResetScriptName || b.injectFunctionName != pendingResetFunctionName) continue;
+							b.isInstant = false;
+							b.instantTriggerType = 0;
+							b.holdSeconds = 0.0f;
+							b.repeatAccelMult = 1.0f;
+						}
+						MarkDisplayCacheDirty();
 						for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
 							if (info.scriptName != pendingResetScriptName || info.functionName != pendingResetFunctionName) {
 								continue;
