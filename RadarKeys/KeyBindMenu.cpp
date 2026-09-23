@@ -58,6 +58,7 @@ namespace RadarKeys {
 		static const char* LOG_FAIL_FMT = "[FAIL]{}";
 		static const char* LOG_STATE_CLEAN_EXIT = "[STATE] CLEAN_EXIT";
 		static const char* LOG_LOGSINK_INITIALIZATION_COMPLETE = "[STATE] Initialization complete - player activity follows (last 50 kept)";
+		static const char* LOG_KEYBINDMENU_FUNCTION_NOT_TRIGGERED_NOT_REASSIGNED = "KeyBindMenu: Function not triggered for now - the mod script's assigned key has not been reassigned yet (assign a new binding in the menu to enable firing) - key: ";
 		static const char* LOG_KEYBINDMENU_MAIN_MENU_FMT_F7 = "KeyBindMenu: main menu {} (F7)";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_BIND_LI = "KeyBindMenu::LoadBindings: skipping incomplete BIND line: {}";
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_MALFORMED_FMT = "KeyBindMenu: InjectDescribe: dropped malformed payload (fields: {})";
@@ -986,6 +987,19 @@ namespace RadarKeys {
 			MarkActivityLogLive();
 			if (bind.isInject) {
 				if (bind.scriptDescribed && ModKeyBindings::IsDisabled(bind.injectScriptName, bind.injectFunctionName)) {
+					return;
+				}
+				if (bind.scriptDescribed && ModKeyBindings::GetOverride(bind.injectScriptName, bind.injectFunctionName).empty()) {
+					std::string keyNames;
+					if (bind.IsCombo()) {
+						for (size_t i = 0; i < bind.comboKeys.size(); ++i) {
+							if (i > 0) keyNames += " + ";
+							keyNames += NameForVKey(bind.comboKeys[i]);
+						}
+					} else {
+						keyNames = bind.keyName.empty() ? NameForVKey(bind.vKey) : bind.keyName;
+					}
+					LogActivity(std::string(LOG_KEYBINDMENU_FUNCTION_NOT_TRIGGERED_NOT_REASSIGNED) + keyNames);
 					return;
 				}
 				std::string injectContent = BuildInjectContent(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
