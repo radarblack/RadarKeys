@@ -145,7 +145,7 @@ namespace RadarKeys {
 		static const char* UI_TIP_CAPTURE_SUPPRESSION =
 			"While this menu (or the Debugger overlay) is open, checking a device here hides it from the game right\n"
 			"away so Venom Snake doesn't move, aim or fire - unchecking it restores that device right away too.\n"
-			"Suppression only ever applies while this window is visibly open. Closing it always restores all input to the game.\n";
+			"Suppression only ever applies while this window is visibly open. Closing it always restores all input to the game.";
 		static const char* UI_HDR_KEY_BINDINGS = "Key Bindings";
 		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Described information will be displayed when the script names are hovered by the mouse.";
 		static const char* UI_TXT_NO_KEYS_ASSIGNED = "(No Keys are assigned yet.)";
@@ -160,10 +160,10 @@ namespace RadarKeys {
 		static const char* UI_TIP_CONFLICT_NOT_DESCRIBED = "Another binding is using this same key - it's disabled until resolved.\nUnable to reassign an override - Key is not yet described through RadarKeys module.";
 		static const char* UI_TIP_CLICK_HOLD_RESET = "Click to %s.\nHold for 1.5 seconds to reset to the mod's default key.";
 		static const char* UI_TIP_CLICK_NO_REMOVE = "Click to %s.\nMod keys can't be removed - only disabled.";
-		static const char* UI_TIP_INJECT_SOURCE_MISSING = "Script source for this trigger was not found in the modules folder - Restore the file to re-enable";
+		static const char* UI_TIP_INJECT_SOURCE_MISSING = "Script source for this trigger was not found in the modules folder - Restore the file to re-enable.";
 		static const char* UI_BTN_SCRIPT_PLACEHOLDER = "Script";
-		static const char* UI_TIP_REASSIGN_COMBO = "Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder";
-		static const char* UI_TIP_REASSIGN_KEY = "Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder";
+		static const char* UI_TIP_REASSIGN_COMBO = "Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder.";
+		static const char* UI_TIP_REASSIGN_KEY = "Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder.";
 		static const char* UI_LBL_KEY_GROUP_SEPARATOR = " / ";
 		static const char* UI_TIP_CANNOT_REASSIGN_UNDESCRIBED = "Unable to reassign an override - Key is not yet described through RadarKeys module.";
 		static const char* UI_POPUP_REMOVE_BINDING = "Remove Binding?";
