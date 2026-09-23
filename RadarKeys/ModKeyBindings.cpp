@@ -66,7 +66,7 @@ namespace RadarKeys {
 			}
 
 			if (foundAny) {
-				spdlog::info(LOG_MODKEYBINDINGS_MIGRATED_FMT_SCRIPT_S_WORTH, overrides.size(), legacyPath.string());
+				spdlog::info(LOG_MODKEYBINDINGS_MIGRATED_FMT_SCRIPT_S_WORTH, overrides.size(), FileNameOnly(legacyPath.string()));
 			}
 			return foundAny;
 		}
