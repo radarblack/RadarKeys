@@ -349,7 +349,7 @@ namespace RadarKeys {
 					spdlog::info("KeyBindMenu: Verbose (trace-level) logging ENABLED (marker file: mod/radarKeys/radarkeys_verbose_log.txt)");
 				}
 				spdlog::info(LOG_RADARKEYS_DIAGNOSTICS_SINGLE_LOG_FMT_PREVIOUS,
-				logPath.string(), prevPath.string());
+				FileNameOnly(logPath.string()), FileNameOnly(prevPath.string()));
 			} catch (const std::exception& e) {
 				spdlog::warn(LOG_INITDIAGNOSTICS_FAILED_FMT_DIAGNOSTICS_STAY_DEFAULT, e.what());
 			}
@@ -363,7 +363,7 @@ namespace RadarKeys {
 			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 			std::filesystem::create_directories(bindsDir, ec);
 			if (ec) {
-				spdlog::warn(LOG_KEYBINDMENU_COULDN_T_CREATE_FMT_DIRECTORY, bindsDir.string(), ec.message());
+				spdlog::warn(LOG_KEYBINDMENU_COULDN_T_CREATE_FMT_DIRECTORY, FileNameOnly(bindsDir.string()), ec.message());
 				return false;
 			}
 			ensured = true;
@@ -1004,11 +1004,11 @@ namespace RadarKeys {
 				}
 				std::string injectContent = BuildInjectContent(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
 				if (injectContent.empty()) {
-					LogActivity("KeyBindMenu: Script-line injection failed - source unreadable: " + bind.scriptPathOn, false);
+					LogActivity("KeyBindMenu: Script-line injection failed - source unreadable: " + FileNameOnly(bind.scriptPathOn), false);
 					return;
 				}
 				LuaBridge::QueueMessageIn("InjectScript|" + injectContent);
-				LogActivity("KeyBindMenu: Fired script lines " + std::to_string(bind.injectLineStart) + "-" + std::to_string(bind.injectLineEnd) + " of " + bind.scriptPathOn);
+				LogActivity("KeyBindMenu: Fired script lines " + std::to_string(bind.injectLineStart) + "-" + std::to_string(bind.injectLineEnd) + " of " + FileNameOnly(bind.scriptPathOn));
 				return;
 			}
 			std::string targetPath = bind.scriptPathOn;
@@ -1021,22 +1021,22 @@ namespace RadarKeys {
 			}
 
 			if (!DebuggerMenu::LogScriptAttempt(targetPath)) {
-				LogActivity("KeyBindMenu: Script not found: " + targetPath, false);
+				LogActivity("KeyBindMenu: Script not found: " + FileNameOnly(targetPath), false);
 				return;
 			}
 
 			if (targetFunc.empty()) {
 				LuaBridge::QueueMessageIn("DoScript|dofile(" + LuaLongBracketWrap(targetPath) + ")");
-				LogActivity("KeyBindMenu: Fired script " + targetPath);
+				LogActivity("KeyBindMenu: Fired script " + FileNameOnly(targetPath));
 				return;
 			}
 
 			switch (LuaCallGlobalFunction(targetFunc)) {
 				case LuaDirectCallResult::Success:
-					LogActivity("KeyBindMenu: Fired script " + targetPath + " [" + targetFunc + "] (direct)");
+					LogActivity("KeyBindMenu: Fired script " + FileNameOnly(targetPath) + " [" + targetFunc + "] (direct)");
 					return;
 				case LuaDirectCallResult::RuntimeError:
-					LogActivity("KeyBindMenu: Script error firing " + targetPath + " [" + targetFunc + "]", false);
+					LogActivity("KeyBindMenu: Script error firing " + FileNameOnly(targetPath) + " [" + targetFunc + "]", false);
 					return;
 				case LuaDirectCallResult::NotFound:
 				case LuaDirectCallResult::NotAvailable:
@@ -1045,7 +1045,7 @@ namespace RadarKeys {
 
 			std::string luaPayload = "CallFunction|" + targetFunc + "|" + targetPath;
 			LuaBridge::QueueMessageIn(luaPayload);
-			LogActivity("KeyBindMenu: Fired script " + targetPath + " [" + targetFunc + "] (queued)");
+			LogActivity("KeyBindMenu: Fired script " + FileNameOnly(targetPath) + " [" + targetFunc + "] (queued)");
 		}
 
 		USHORT ResolveDisplayVKey(const LuaKeyState::TrackedKeyInfo& info) {
@@ -1433,14 +1433,14 @@ namespace RadarKeys {
 				bind.injectLineEnd = lineEnd;
 				bind.autoDisabled = BuildInjectContent(sourcePath, lineStart, lineEnd).empty();
 				MarkDisplayCacheDirty();
-				spdlog::info(LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT, keyName, lineStart, lineEnd, sourcePath);
+				spdlog::info(LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT, keyName, lineStart, lineEnd, FileNameOnly(sourcePath));
 				break;
 			}
 			if (!exists) {
 				bool armedAutoDisabled = false;
 				std::string injectContent = BuildInjectContent(sourcePath, lineStart, lineEnd);
 				if (injectContent.empty()) {
-					spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT, sourcePath);
+					spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT, FileNameOnly(sourcePath));
 				} else {
 					RunInjectCompileCheck(injectContent);
 				}
@@ -1459,7 +1459,7 @@ namespace RadarKeys {
 				bindings.push_back(newBind);
 				EnsureDispatcherRegistered(newBind.vKey);
 				MarkDisplayCacheDirty();
-				LogActivity("KeyBindMenu: Bound " + keyName + " to script lines " + std::to_string(lineStart) + "-" + std::to_string(lineEnd) + " of " + sourcePath);
+				LogActivity("KeyBindMenu: Bound " + keyName + " to script lines " + std::to_string(lineStart) + "-" + std::to_string(lineEnd) + " of " + FileNameOnly(sourcePath));
 			}
 			injectDescribeTouch[identity] = std::chrono::steady_clock::now();
 			MarkActivityLogLive();
@@ -1502,10 +1502,10 @@ namespace RadarKeys {
 					bool sourceReadable = std::filesystem::exists(bind.scriptPathOn, healthEc);
 					if (!sourceReadable && !bind.autoDisabled) {
 						bind.autoDisabled = true;
-						spdlog::warn(LOG_KEYBINDMENU_INJECT_SOURCE_LOST_AUTO_DISABLED_FMT, bind.scriptPathOn);
+						spdlog::warn(LOG_KEYBINDMENU_INJECT_SOURCE_LOST_AUTO_DISABLED_FMT, FileNameOnly(bind.scriptPathOn));
 					} else if (sourceReadable && bind.autoDisabled) {
 						bind.autoDisabled = false;
-						spdlog::info(LOG_KEYBINDMENU_INJECT_SOURCE_RESTORED_AUTO_ENABLED_FMT, bind.scriptPathOn);
+						spdlog::info(LOG_KEYBINDMENU_INJECT_SOURCE_RESTORED_AUTO_ENABLED_FMT, FileNameOnly(bind.scriptPathOn));
 					}
 				}
 			}
@@ -1528,7 +1528,7 @@ namespace RadarKeys {
 			std::string bakPath = bindsPath + ".bak";
 			std::ofstream outFile(tmpPath);
 			if (!outFile) {
-				LogActivity("KeyBindMenu: Save bindings failed: couldn't open " + tmpPath + " for writing", false);
+				LogActivity("KeyBindMenu: Save bindings failed: couldn't open " + FileNameOnly(tmpPath) + " for writing", false);
 				return;
 			}
 			
@@ -1587,7 +1587,7 @@ namespace RadarKeys {
 			}
 			outFile.close();
 			if (!outFile) {
-				LogActivity("KeyBindMenu: Save bindings failed while writing " + tmpPath, false);
+				LogActivity("KeyBindMenu: Save bindings failed while writing " + FileNameOnly(tmpPath), false);
 				return;
 			}
 			{
@@ -1598,11 +1598,11 @@ namespace RadarKeys {
 				}
 				std::filesystem::rename(tmpPath, bindsPath, ec);
 				if (ec) {
-					LogActivity("KeyBindMenu: Save bindings failed: couldn't replace " + bindsPath + " (" + ec.message() + ")", false);
+					LogActivity("KeyBindMenu: Save bindings failed: couldn't replace " + FileNameOnly(bindsPath) + " (" + ec.message() + ")", false);
 					return;
 				}
 			}
-			LogActivity("KeyBindMenu: Saved " + std::to_string(bindings.size()) + " binding(s) to " + bindsPath);
+			LogActivity("KeyBindMenu: Saved " + std::to_string(bindings.size()) + " binding(s) to " + FileNameOnly(bindsPath));
 		}
 
 		void LoadBindings() {
@@ -1875,7 +1875,7 @@ namespace RadarKeys {
 				}
 			}
 			ModKeyBindings::LoadFromEntries(modKeyEntries);
-			LogActivity("KeyBindMenu: Loaded " + std::to_string(bindings.size()) + " binding(s) from " + GetBindsFileName());
+			LogActivity("KeyBindMenu: Loaded " + std::to_string(bindings.size()) + " binding(s) from " + FileNameOnly(GetBindsFileName()));
 			MarkDisplayCacheDirty();
 		}
 
@@ -2924,7 +2924,7 @@ namespace RadarKeys {
 						if (injectEnd < injectStart) injectEnd = injectStart;
 						std::string injectContent = BuildInjectContent(injectSourcePath, injectStart, injectEnd);
 						if (injectContent.empty()) {
-							LogActivity("KeyBindMenu: Script-line injection failed - could not read lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath, false);
+							LogActivity("KeyBindMenu: Script-line injection failed - could not read lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + FileNameOnly(injectSourcePath), false);
 						} else {
 							RunInjectCompileCheck(injectContent);
 							if (editingBindingIndex != -1 && editingBindingIndex < (int)bindings.size()) {
@@ -2966,7 +2966,7 @@ namespace RadarKeys {
 								SaveBindings();
 								MarkDisplayCacheDirty();
 								DebuggerMenu::LogBindEvent("Bound " + newInjectBind.keyName + " -> script lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath);
-								LogActivity("KeyBindMenu: Bound " + newInjectBind.keyName + " to script lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath);
+								LogActivity("KeyBindMenu: Bound " + newInjectBind.keyName + " to script lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + FileNameOnly(injectSourcePath));
 							}
 						}
 					}
