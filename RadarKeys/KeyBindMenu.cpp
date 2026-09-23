@@ -2254,7 +2254,31 @@ namespace RadarKeys {
 				}
 
 				std::string triggerLabel;
-				if (row.usesHoldTime) {
+				const KeyBind* rowBind = nullptr;
+				for (const auto& b : bindings) {
+					if (!b.isInject || !b.scriptDescribed || b.injectScriptName != row.scriptName || b.injectFunctionName != row.functionName) continue;
+					if (b.vKey != row.vKey) continue;
+					rowBind = &b;
+					break;
+				}
+				if (rowBind != nullptr) {
+					if (rowBind->holdSeconds > 0.0f) {
+						result.anyLongPress = true;
+						result.longPressSeconds = rowBind->holdSeconds;
+						char holdBuf[32];
+						snprintf(holdBuf, sizeof(holdBuf), "%.1fs", rowBind->holdSeconds);
+						triggerLabel = std::string("Long Press (") + holdBuf + ")";
+					} else if (rowBind->isInstant && rowBind->instantTriggerType == 2) {
+						if (bestInstantPriority < 2) bestInstantPriority = 2;
+						triggerLabel = "Repeat";
+					} else if (rowBind->isInstant && rowBind->instantTriggerType == 1) {
+						if (bestInstantPriority < 1) bestInstantPriority = 1;
+						triggerLabel = "On Release";
+					} else {
+						if (bestInstantPriority < 0) bestInstantPriority = 0;
+						triggerLabel = "On Press";
+					}
+				} else if (row.usesHoldTime) {
 					result.anyLongPress = true;
 					result.longPressSeconds = row.lastHoldSeconds;
 					char buf[32];
@@ -2890,7 +2914,8 @@ namespace RadarKeys {
 			
 			bool captureReady = captureIsCombo ? !capturedComboKeys.empty() : (capturedVKey != 0);
 			bool assignmentIsValid = comboAvailable;
-			bool canFinalize = captureReady && (assignmentIsValid && (isAssigningMenuToggleKey || isAssigningModKey || (pathsValid && functionsValid)));
+			bool holdValid = !capturedLongPressMode || capturedHoldSeconds > 0.0f;
+			bool canFinalize = captureReady && holdValid && (assignmentIsValid && (isAssigningMenuToggleKey || isAssigningModKey || (pathsValid && functionsValid)));
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float buttonHeight = 30.0f;
 			float bottomAnchorY = ImGui::GetWindowHeight() - paddingY - buttonHeight;
