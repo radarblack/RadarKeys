@@ -2625,6 +2625,7 @@ namespace RadarKeys {
 				if (isAssigningModKey && ImGui::IsItemHovered()) {
 					ImGui::SetTooltip(UI_TIP_TOGGLE_SCRIPT_UNAVAILABLE);
 				}
+				if (isAssigningModKey) ImGui::EndDisabled();
 				if (capturedInstantMode && ImGui::IsItemHovered()) {
 					ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 				}
@@ -2884,24 +2885,32 @@ namespace RadarKeys {
 			ImGui::SetCursorPosY(bottomAnchorY);
 
 			if (!canFinalize) ImGui::BeginDisabled();
-			auto applyTriggerToDescribedBinds = [&]() {
+			auto applyTriggerChoice = [&]() {
+				int triggerType = capturedInstantMode ? capturedInstantTriggerType : 0;
+				float holdSeconds = 0.0f;
+				float repeatMult = 1.0f;
+				if (capturedInstantMode) {
+					if (triggerType == 2) repeatMult = capturedRepeatAccelMult;
+				} else if (capturedLongPressMode && !capturedToggleMode) {
+					holdSeconds = capturedHoldSeconds;
+				}
+				ModKeyBindings::SetTriggerConfigWithoutSave(modKeyCaptureScriptName, modKeyCaptureFunctionName, triggerType, holdSeconds, repeatMult);
 				for (auto& b : bindings) {
 					if (!b.isInject || !b.scriptDescribed || b.injectScriptName != modKeyCaptureScriptName || b.injectFunctionName != modKeyCaptureFunctionName) continue;
-					b.isInstant = (capturedInstantTriggerType == 1 || capturedInstantTriggerType == 2);
-					b.instantTriggerType = capturedInstantTriggerType;
-					b.holdSeconds = (capturedInstantTriggerType == 0) ? capturedHoldSeconds : 0.0f;
-					b.repeatAccelMult = (capturedInstantTriggerType == 2) ? capturedRepeatAccelMult : 1.0f;
+					b.isInstant = (triggerType == 1 || triggerType == 2);
+					b.instantTriggerType = triggerType;
+					b.holdSeconds = holdSeconds;
+					b.repeatAccelMult = repeatMult;
 				}
 			};
 			if (ImGui::Button(UI_BTN_FINALIZE, ImVec2(145, buttonHeight))) {
 				if (isAssigningModKey) {
 					if (captureIsCombo) {
 						std::string comboKeyName = ComboKeysDisplayName(capturedComboKeys);
-						ModKeyBindings::SetTriggerConfigWithoutSave(modKeyCaptureScriptName, modKeyCaptureFunctionName, capturedInstantTriggerType, capturedHoldSeconds, capturedRepeatAccelMult);
 						ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, comboKeyName);
 						DebuggerMenu::LogBindEvent("Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
 						LogActivity("KeyBindMenu: Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
-						applyTriggerToDescribedBinds();
+						applyTriggerChoice();
 						MarkDisplayCacheDirty();
 
 						ResetComboCaptureState();
@@ -2911,7 +2920,6 @@ namespace RadarKeys {
 						USHORT oldVKey = 0;
 						bool slotMemberFound = false;
 						ModKeyBindings::BindSlot capturedSlot = SlotOfVKey(capturedVKey);
-						ModKeyBindings::SetTriggerConfigWithoutSave(modKeyCaptureScriptName, modKeyCaptureFunctionName, capturedInstantTriggerType, capturedHoldSeconds, capturedRepeatAccelMult);
 						for (const auto& row : LuaKeyState::GetTrackedKeyInfo()) {
 							if (row.scriptName != modKeyCaptureScriptName || row.functionName != modKeyCaptureFunctionName) {
 								continue;
@@ -2937,7 +2945,7 @@ namespace RadarKeys {
 						if (oldVKey != 0 && oldVKey != capturedVKey) {
 							LuaKeyState::ReassignBinding(oldVKey, capturedVKey, modKeyCaptureScriptName, modKeyCaptureFunctionName);
 						}
-						applyTriggerToDescribedBinds();
+						applyTriggerChoice();
 						MarkDisplayCacheDirty();
 					}
 
