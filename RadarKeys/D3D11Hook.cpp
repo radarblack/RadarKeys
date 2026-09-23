@@ -5,12 +5,12 @@
 
 using namespace std;
 
-static const char* LOG_HOOKING_D3D11 = "Hooking D3D11";
-static const char* LOG_FAILED_CREATE_DUMMY_WINDOW_D3D11_HOOK = "Failed to create dummy window for D3D11 hook. GetLastError={0:x}";
-static const char* LOG_CREATING_DUMMY_D3D11_DEVICE = "Creating dummy D3D11 device.";
-static const char* LOG_FAILED_CREATE_DUMMY_D3D11_DEVICE_HRESULT = "Failed to create dummy D3D11 device. HRESULT={0:x} max_feature={1:x}";
-static const char* LOG_CREATED_DUMMY_D3D11_DEVICE_HRESULT_0 = "Created dummy D3D11 device. HRESULT={0:x} max_feature={1:x}";
-static const char* LOG_RELEASED_DUMMY_D3D11_DEVICE = "Released dummy D3D11 device";
+static const char* LOG_HOOKING_D3D11 = "D3D11Hook: Hooking D3D11";
+static const char* LOG_FAILED_CREATE_DUMMY_WINDOW_D3D11_HOOK = "D3D11Hook: Failed to create dummy window for D3D11 hook. GetLastError={0:x}";
+static const char* LOG_CREATING_DUMMY_D3D11_DEVICE = "D3D11Hook: Creating dummy D3D11 device.";
+static const char* LOG_FAILED_CREATE_DUMMY_D3D11_DEVICE_HRESULT = "D3D11Hook: Failed to create dummy D3D11 device. HRESULT={0:x} max_feature={1:x}";
+static const char* LOG_CREATED_DUMMY_D3D11_DEVICE_HRESULT_0 = "D3D11Hook: Created dummy D3D11 device. HRESULT={0:x} max_feature={1:x}";
+static const char* LOG_RELEASED_DUMMY_D3D11_DEVICE = "D3D11Hook: Released dummy D3D11 device";
 
 static D3D11Hook* g_d3d11_hook = nullptr;
 
