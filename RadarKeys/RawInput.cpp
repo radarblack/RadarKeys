@@ -47,11 +47,11 @@ namespace RadarKeys {
 		static const char* LOG_RAWINPUT_PLAYSTATION_XINPUT_BRIDGE_FMT_XINPUTSLOTS = "RawInput: PlayStation XInput bridge {} (xinputSlots={}, directInputPlaystationDevice={}, sonyGamepadInSystem={})";
 		static const char* LOG_RAWINPUT_PROCESSKEY_IGNORING_OUT_RANGE_VKEY = "RawInput::ProcessKey: ignoring out-of-range VKey {}";
 		static const char* LOG_RAWINPUT_REGISTERACTION_INVALID_VKEY_FMT = "RawInput::RegisterAction: invalid VKey {}";
-		static const char* LOG_RAWINPUT_REGISTERACTION_VKEY_FMT = "RawInput RegisterAction for vKey:{}";
-		static const char* LOG_RAWINPUT_UNREGISTERACTION_NO_ACTIONS_VKEY_FMT = "RawInput UnRegisterAction: No actions for vKey {}";
-		static const char* LOG_RAWINPUT_UNREGISTERACTION_REMOVED_HANDLE_FMT_FROM = "RawInput UnRegisterAction: removed handle {} from vKey {}";
-		static const char* LOG_RAWINPUT_UNREGISTERACTION_HANDLE_FMT_NOT_FOUND = "RawInput UnRegisterAction: handle {} not found for vKey {}";
-		static const char* LOG_RAWINPUT_INITIALIZEINPUT = "Rawinput InitializeInput";
+		static const char* LOG_RAWINPUT_REGISTERACTION_VKEY_FMT = "RawInput: RegisterAction for vKey:{}";
+		static const char* LOG_RAWINPUT_UNREGISTERACTION_NO_ACTIONS_VKEY_FMT = "RawInput: UnRegisterAction: No actions for vKey {}";
+		static const char* LOG_RAWINPUT_UNREGISTERACTION_REMOVED_HANDLE_FMT_FROM = "RawInput: UnRegisterAction: removed handle {} from vKey {}";
+		static const char* LOG_RAWINPUT_UNREGISTERACTION_HANDLE_FMT_NOT_FOUND = "RawInput: UnRegisterAction: handle {} not found for vKey {}";
+		static const char* LOG_RAWINPUT_INITIALIZEINPUT = "RawInput: InitializeInput";
 		static const char* LOG_RAWINPUT_PLAYSTATION_TRIGGER_FEED_ENGAGED = "RawInput: PlayStation trigger feed ENGAGED (L2/R2 to XInput)";
 		static const char* LOG_RAWINPUT_HOOKED_XINPUTGETSTATE_IAT_TRIGGER_FEED = "RawInput: hooked XInputGetState IAT in the game import table for PlayStation trigger feed";
 		static const char* LOG_RAWINPUT_FAILED_HOOK_XINPUTGETSTATE_IAT_TRIGGER_FEED = "RawInput: failed to hook XInputGetState IAT for PlayStation trigger feed";
@@ -911,7 +911,7 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
 
 		void ProcessKey(PRAWINPUT pRaw) {
-			//spdlog::trace("ProcessKey");//DEBUG
+			//spdlog::trace("RawInput: ProcessKey");//DEBUG
 			USHORT vKey = pRaw->data.keyboard.VKey;
 			if (vKey >= vKeyMax) {
 				spdlog::warn(LOG_RAWINPUT_PROCESSKEY_IGNORING_OUT_RANGE_VKEY, vKey);
@@ -1063,7 +1063,7 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 				}
 			}
 			if (!snapshot.empty()) {
-				spdlog::trace("RawInput DoActions for vKey:{}", vKey);
+				spdlog::trace("RawInput: DoActions for vKey:{}", vKey);
 				for (ButtonAction& action : snapshot) {
 					action(buttonEvent);
 				}
