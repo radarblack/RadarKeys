@@ -50,32 +50,32 @@ namespace RadarKeys {
 
 		// ==================== UI Strings ====================
 		static const char* LOG_WARNING_PREVIOUS_SESSION_DID_NOT_CLOSE = "[WARNING] The previous session did not close cleanly (Crashed or Terminated Abruptly).";
-		static const char* LOG_RADARKEYS_DIAGNOSTICS_SINGLE_LOG_FMT_PREVIOUS = "RadarKeys diagnostics: single log at {} (previous session preserved at {})";
-		static const char* LOG_INITDIAGNOSTICS_FAILED_FMT_DIAGNOSTICS_STAY_DEFAULT = "InitDiagnostics failed ({}); diagnostics stay on the default sink";
+		static const char* LOG_RADARKEYS_DIAGNOSTICS_SINGLE_LOG_FMT_PREVIOUS = "RadarKeys: diagnostics: single log at {} (previous session preserved at {})";
+		static const char* LOG_INITDIAGNOSTICS_FAILED_FMT_DIAGNOSTICS_STAY_DEFAULT = "KeyBindMenu: InitDiagnostics failed ({}); diagnostics stay on the default sink";
 		static const char* LOG_KEYBINDMENU_COULDN_T_CREATE_FMT_DIRECTORY = "KeyBindMenu: couldn't create {} directory: {}";
 		static const char* LOG_OK_FMT = "[OK] {}";
 		static const char* LOG_FAIL_FMT = "[FAIL] {}";
 		static const char* LOG_STATE_CLEAN_EXIT = "[STATE] CLEAN_EXIT";
 		static const char* LOG_KEYBINDMENU_MAIN_MENU_FMT_F7 = "KeyBindMenu: main menu {} (F7)";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_BIND_LI = "KeyBindMenu::LoadBindings: skipping incomplete BIND line: {}";
-		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_MALFORMED_FMT = "InjectDescribe: dropped malformed payload (fields: {})";
-		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UNKNOWN_KEY_FMT = "InjectDescribe: dropped - unrecognized key name '{}'";
-		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_BAD_RANGE_FMT = "InjectDescribe: dropped - invalid line range {}-{}";
-		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT = "InjectDescribe: source unreadable, binding armed for fire-time rebuild: {}";
-		static const char* LOG_KEYBINDMENU_INJECT_SOURCE_LOST_AUTO_DISABLED_FMT = "Script-line binding auto-disabled - source unreadable: {}";
-		static const char* LOG_KEYBINDMENU_INJECT_SOURCE_RESTORED_AUTO_ENABLED_FMT = "Script-line binding re-enabled - source restored: {}";
-		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT = "Updated script-lines binding: {} -> lines {}-{} of {}";
-		static const char* LOG_RADARKEYS_KEYBINDMENU_INITIALIZING = "RadarKeys KeyBindMenu initializing";
-		static const char* LOG_KEY_ASSIGNMENT_PROMPT_CANCELLED = "Key Assignment Prompt cancelled";
-		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_KEY = "Multi-key combo capture cancelled - a key was released before the hold completed";
-		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_MORE = "Multi-key combo capture cancelled - more than 3 keys held";
-		static const char* LOG_SINGLE_KEY_CAPTURE_CANCELLED_KEY_RELEASED = "Single-key capture cancelled - key was released before the hold completed";
+		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_MALFORMED_FMT = "KeyBindMenu: InjectDescribe: dropped malformed payload (fields: {})";
+		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UNKNOWN_KEY_FMT = "KeyBindMenu: InjectDescribe: dropped - unrecognized key name '{}'";
+		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_BAD_RANGE_FMT = "KeyBindMenu: InjectDescribe: dropped - invalid line range {}-{}";
+		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT = "KeyBindMenu: InjectDescribe: source unreadable, binding armed for fire-time rebuild: {}";
+		static const char* LOG_KEYBINDMENU_INJECT_SOURCE_LOST_AUTO_DISABLED_FMT = "KeyBindMenu: Script-line binding auto-disabled - source unreadable: {}";
+		static const char* LOG_KEYBINDMENU_INJECT_SOURCE_RESTORED_AUTO_ENABLED_FMT = "KeyBindMenu: Script-line binding re-enabled - source restored: {}";
+		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT = "KeyBindMenu: Updated script-lines binding: {} -> lines {}-{} of {}";
+		static const char* LOG_RADARKEYS_KEYBINDMENU_INITIALIZING = "KeyBindMenu: initializing";
+		static const char* LOG_KEY_ASSIGNMENT_PROMPT_CANCELLED = "KeyBindMenu: Key Assignment Prompt cancelled";
+		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_KEY = "KeyBindMenu: Multi-key combo capture cancelled - a key was released before the hold completed";
+		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_MORE = "KeyBindMenu: Multi-key combo capture cancelled - more than 3 keys held";
+		static const char* LOG_SINGLE_KEY_CAPTURE_CANCELLED_KEY_RELEASED = "KeyBindMenu: Single-key capture cancelled - key was released before the hold completed";
 		static const char* LOG_KEYBINDMENU_CAPTURED_SINGLE_KEY_VKEY_FMT = "KeyBindMenu: captured single key vKey={} name=\"{}\" ctrl={} shift={} alt={}";
-		static const char* LOG_KEYBIND_HAS_BEEN_RESET = "Keybind has been reset";
-		static const char* LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET = "Multi-key combo has been reset";
+		static const char* LOG_KEYBIND_HAS_BEEN_RESET = "KeyBindMenu: Keybind has been reset";
+		static const char* LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET = "KeyBindMenu: Multi-key combo has been reset";
 		static const char* LOG_KEYBINDMENU_DEBUGGER_OVERLAY_FMT = "KeyBindMenu: Debugger overlay {}";
-		static const char* LOG_MENU_KEY_REASSIGNMENT_PROMPT_OPENED = "Menu Key Reassignment Prompt opened";
-		static const char* LOG_KEY_ASSIGNMENT_BINDING_PROMPT_OPENED = "Key Assignment Binding Prompt opened";
+		static const char* LOG_MENU_KEY_REASSIGNMENT_PROMPT_OPENED = "KeyBindMenu: Menu Key Reassignment Prompt opened";
+		static const char* LOG_KEY_ASSIGNMENT_BINDING_PROMPT_OPENED = "KeyBindMenu: Key Assignment Binding Prompt opened";
 
 		static const char* UI_FMT_SCRIPT_FUNCTION_BRACKETS = "%s [%s]";
 		static const char* UI_LBL_BIND_TYPE = "Bind Type:";
@@ -268,7 +268,7 @@ namespace RadarKeys {
 					spdlog::warn(LOG_WARNING_PREVIOUS_SESSION_DID_NOT_CLOSE);
 				}
 				if (verboseRequested) {
-					spdlog::info("Verbose (trace-level) logging ENABLED (marker file: mod/radarKeys/radarkeys_verbose_log.txt)");
+					spdlog::info("KeyBindMenu: Verbose (trace-level) logging ENABLED (marker file: mod/radarKeys/radarkeys_verbose_log.txt)");
 				}
 				spdlog::info(LOG_RADARKEYS_DIAGNOSTICS_SINGLE_LOG_FMT_PREVIOUS,
 				logPath.string(), prevPath.string());
@@ -909,11 +909,11 @@ namespace RadarKeys {
 				}
 				std::string injectContent = BuildInjectContent(bind.scriptPathOn, bind.injectLineStart, bind.injectLineEnd);
 				if (injectContent.empty()) {
-					LogActivity("Script-line injection failed - source unreadable: " + bind.scriptPathOn, false);
+					LogActivity("KeyBindMenu: Script-line injection failed - source unreadable: " + bind.scriptPathOn, false);
 					return;
 				}
 				LuaBridge::QueueMessageIn("InjectScript|" + injectContent);
-				LogActivity("Fired script lines " + std::to_string(bind.injectLineStart) + "-" + std::to_string(bind.injectLineEnd) + " of " + bind.scriptPathOn);
+				LogActivity("KeyBindMenu: Fired script lines " + std::to_string(bind.injectLineStart) + "-" + std::to_string(bind.injectLineEnd) + " of " + bind.scriptPathOn);
 				return;
 			}
 			std::string targetPath = bind.scriptPathOn;
@@ -926,22 +926,22 @@ namespace RadarKeys {
 			}
 
 			if (!DebuggerMenu::LogScriptAttempt(targetPath)) {
-				LogActivity("Script not found: " + targetPath, false);
+				LogActivity("KeyBindMenu: Script not found: " + targetPath, false);
 				return;
 			}
 
 			if (targetFunc.empty()) {
 				LuaBridge::QueueMessageIn("DoScript|dofile(" + LuaLongBracketWrap(targetPath) + ")");
-				LogActivity("Fired script " + targetPath);
+				LogActivity("KeyBindMenu: Fired script " + targetPath);
 				return;
 			}
 
 			switch (LuaCallGlobalFunction(targetFunc)) {
 				case LuaDirectCallResult::Success:
-					LogActivity("Fired script " + targetPath + " [" + targetFunc + "] (direct)");
+					LogActivity("KeyBindMenu: Fired script " + targetPath + " [" + targetFunc + "] (direct)");
 					return;
 				case LuaDirectCallResult::RuntimeError:
-					LogActivity("Script error firing " + targetPath + " [" + targetFunc + "]", false);
+					LogActivity("KeyBindMenu: Script error firing " + targetPath + " [" + targetFunc + "]", false);
 					return;
 				case LuaDirectCallResult::NotFound:
 				case LuaDirectCallResult::NotAvailable:
@@ -950,7 +950,7 @@ namespace RadarKeys {
 
 			std::string luaPayload = "CallFunction|" + targetFunc + "|" + targetPath;
 			LuaBridge::QueueMessageIn(luaPayload);
-			LogActivity("Fired script " + targetPath + " [" + targetFunc + "] (queued)");
+			LogActivity("KeyBindMenu: Fired script " + targetPath + " [" + targetFunc + "] (queued)");
 		}
 
 		USHORT ResolveDisplayVKey(const LuaKeyState::TrackedKeyInfo& info) {
@@ -1364,7 +1364,7 @@ namespace RadarKeys {
 				bindings.push_back(newBind);
 				EnsureDispatcherRegistered(newBind.vKey);
 				MarkDisplayCacheDirty();
-				LogActivity("Bound " + keyName + " to script lines " + std::to_string(lineStart) + "-" + std::to_string(lineEnd) + " of " + sourcePath);
+				LogActivity("KeyBindMenu: Bound " + keyName + " to script lines " + std::to_string(lineStart) + "-" + std::to_string(lineEnd) + " of " + sourcePath);
 			}
 			injectDescribeTouch[identity] = std::chrono::steady_clock::now();
 		}
@@ -1432,7 +1432,7 @@ namespace RadarKeys {
 			std::string bakPath = bindsPath + ".bak";
 			std::ofstream outFile(tmpPath);
 			if (!outFile) {
-				LogActivity("Save bindings failed: couldn't open " + tmpPath + " for writing", false);
+				LogActivity("KeyBindMenu: Save bindings failed: couldn't open " + tmpPath + " for writing", false);
 				return;
 			}
 			
@@ -1491,7 +1491,7 @@ namespace RadarKeys {
 			}
 			outFile.close();
 			if (!outFile) {
-				LogActivity("Save bindings failed while writing " + tmpPath, false);
+				LogActivity("KeyBindMenu: Save bindings failed while writing " + tmpPath, false);
 				return;
 			}
 			{
@@ -1502,17 +1502,17 @@ namespace RadarKeys {
 				}
 				std::filesystem::rename(tmpPath, bindsPath, ec);
 				if (ec) {
-					LogActivity("Save bindings failed: couldn't replace " + bindsPath + " (" + ec.message() + ")", false);
+					LogActivity("KeyBindMenu: Save bindings failed: couldn't replace " + bindsPath + " (" + ec.message() + ")", false);
 					return;
 				}
 			}
-			LogActivity("Saved " + std::to_string(bindings.size()) + " binding(s) to " + bindsPath);
+			LogActivity("KeyBindMenu: Saved " + std::to_string(bindings.size()) + " binding(s) to " + bindsPath);
 		}
 
 		void LoadBindings() {
 			std::ifstream inFile(GetBindsFileName());
 			if (!inFile) {
-				LogActivity("No existing bindings file yet at " + GetBindsFileName() + " (fine on first run)");
+				LogActivity("KeyBindMenu: No existing bindings file yet at " + GetBindsFileName() + " (fine on first run)");
 				ModKeyBindings::LoadFromEntries({});
 				return;
 			}
@@ -1523,7 +1523,7 @@ namespace RadarKeys {
 				if ((line = trim(line)).empty()) continue;
 				std::vector<std::string> parts = split(line, "|");
 				if (parts.size() < 2) {
-					LogActivity("Skipped malformed line while loading bindings: " + line, false);
+					LogActivity("KeyBindMenu: Skipped malformed line while loading bindings: " + line, false);
 					continue;
 				}
 
@@ -1531,7 +1531,7 @@ namespace RadarKeys {
 					int vKey = VKeyForName(trim(parts[1]));
 					if (vKey != -1) menuToggleVKey = (USHORT)vKey;
 					else {
-						LogActivity("Unknown MENUKEY name '" + parts[1] + "', keeping default", false);
+						LogActivity("KeyBindMenu: Unknown MENUKEY name '" + parts[1] + "', keeping default", false);
 					}
 				}
 				else if (parts[0] == "CAPTUREBLOCK" && parts.size() >= 3) {
@@ -1567,7 +1567,7 @@ namespace RadarKeys {
 					std::string injectKeyName = trim(parts[1]);
 					int injectVKey = VKeyForName(injectKeyName);
 					if (injectVKey == -1) {
-						LogActivity("Unknown Key name '" + injectKeyName + "', skipping script-line binding", false);
+						LogActivity("KeyBindMenu: Unknown Key name '" + injectKeyName + "', skipping script-line binding", false);
 						continue;
 					}
 					float injectHoldSeconds = 0.0f;
@@ -1592,7 +1592,7 @@ namespace RadarKeys {
 					try { injectLineEnd = std::stoi(trim(parts[11])); }
 					catch (...) { injectLineEnd = 0; }
 					if (injectLineStart < 1 || injectLineEnd < injectLineStart) {
-						LogActivity("Skipped malformed INJECT line while loading bindings: " + line, false);
+						LogActivity("KeyBindMenu: Skipped malformed INJECT line while loading bindings: " + line, false);
 						continue;
 					}
 					KeyBind newInjectBind{};
@@ -1622,7 +1622,7 @@ namespace RadarKeys {
 						comboKeys.push_back((USHORT)vk);
 					}
 					if (!allValid) {
-						LogActivity("Skipped invalid COMBO2 line while loading bindings: " + line, false);
+						LogActivity("KeyBindMenu: Skipped invalid COMBO2 line while loading bindings: " + line, false);
 						continue;
 					}
 
@@ -1645,7 +1645,7 @@ namespace RadarKeys {
 						funcTap = trim(parts[5]);
 						instantFieldStart = 6;
 					} else {
-						LogActivity("Skipped incomplete COMBO2 line while loading bindings: " + line, false);
+						LogActivity("KeyBindMenu: Skipped incomplete COMBO2 line while loading bindings: " + line, false);
 						continue;
 					}
 
@@ -1691,7 +1691,7 @@ namespace RadarKeys {
 						comboKeys.push_back((USHORT)vk);
 					}
 					if (!allValid) {
-						LogActivity("Skipped invalid COMBO line while loading bindings: " + line, false);
+						LogActivity("KeyBindMenu: Skipped invalid COMBO line while loading bindings: " + line, false);
 						continue;
 					}
 
@@ -1711,7 +1711,7 @@ namespace RadarKeys {
 					}
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
 					if (vKey == -1) {
-						LogActivity("Unknown Key name '" + keyName + "', skipping binding", false);
+						LogActivity("KeyBindMenu: Unknown Key name '" + keyName + "', skipping binding", false);
 						continue;
 					}
 					
@@ -1775,11 +1775,11 @@ namespace RadarKeys {
 					bindings.push_back(b);
 				}
 				else if (parts[0] == "BIND") {
-					LogActivity("Skipped old-format/malformed BIND line: " + line, false);
+					LogActivity("KeyBindMenu: Skipped old-format/malformed BIND line: " + line, false);
 				}
 			}
 			ModKeyBindings::LoadFromEntries(modKeyEntries);
-			LogActivity("Loaded " + std::to_string(bindings.size()) + " binding(s) from " + GetBindsFileName());
+			LogActivity("KeyBindMenu: Loaded " + std::to_string(bindings.size()) + " binding(s) from " + GetBindsFileName());
 			MarkDisplayCacheDirty();
 		}
 
@@ -1797,7 +1797,7 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("Bound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
-			LogActivity("Bound " + CombinedDisplayName(bindings.back()) + " (toggle: " + (isToggle ? "YES" : "NO") + ")");
+			LogActivity("KeyBindMenu: Bound " + CombinedDisplayName(bindings.back()) + " (toggle: " + (isToggle ? "YES" : "NO") + ")");
 		}
 
 		void AddComboBinding(const std::vector<USHORT>& comboKeys, bool isToggle, const std::string& pathOn, const std::string& pathOff, const std::string& funcOn, const std::string& funcOff, const std::string& funcTap, float holdSeconds, bool isInstant, int instantTriggerType, float repeatAccelMult = 1.0f) {
@@ -1818,12 +1818,12 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("Bound combo " + CombinedDisplayName(bindings.back()));
-			LogActivity("Bound combo " + CombinedDisplayName(bindings.back()));
+			LogActivity("KeyBindMenu: Bound combo " + CombinedDisplayName(bindings.back()));
 		}
 
 		void RemoveBinding(int index) {
 			if (index < 0 || index >= (int)bindings.size()) {
-				LogActivity("Attempted to remove binding at invalid index " + std::to_string(index), false);
+				LogActivity("KeyBindMenu: Attempted to remove binding at invalid index " + std::to_string(index), false);
 				return;
 			}
 			
@@ -1835,7 +1835,7 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("Unbound " + removedDesc);
-			LogActivity("Unbound " + removedDesc);
+			LogActivity("KeyBindMenu: Unbound " + removedDesc);
 		}
 
 		void RemoveAllBindings() {
@@ -1853,7 +1853,7 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("unbound all (" + std::to_string(count) + " binding(s))");
-			LogActivity("Cleared all bindings (" + std::to_string(count) + " binding(s))");
+			LogActivity("KeyBindMenu: Cleared all bindings (" + std::to_string(count) + " binding(s))");
 		}
 
 		void DisableAllBindingsAndModKeys() {
@@ -1881,7 +1881,7 @@ namespace RadarKeys {
 
 			if (modKeyCount > 0) SaveBindings();
 			MarkDisplayCacheDirty();
-			LogActivity("Disabled all hotkeys (" + std::to_string(manualCount) + " manual, " + std::to_string(modKeyCount) + " mod key(s))");
+			LogActivity("KeyBindMenu: Disabled all hotkeys (" + std::to_string(manualCount) + " manual, " + std::to_string(modKeyCount) + " mod key(s))");
 		}
 
 		void ResetAndRemoveAllBindingsAndModKeys() {
@@ -1908,7 +1908,7 @@ namespace RadarKeys {
 			size_t removedCount = bindings.size();
 			RemoveAllBindings();
 
-			LogActivity("Reset " + std::to_string(resetCount) + " mod key override(s) to default and removed " + std::to_string(removedCount) + " manual binding(s)");
+			LogActivity("KeyBindMenu: Reset " + std::to_string(resetCount) + " mod key override(s) to default and removed " + std::to_string(removedCount) + " manual binding(s)");
 		}
 
 		void Init(const std::string& defaultMenuKeyName) {
@@ -1916,7 +1916,7 @@ namespace RadarKeys {
 			int defaultVKey = VKeyForName(defaultMenuKeyName);
 			if (defaultVKey != -1) menuToggleVKey = (USHORT)defaultVKey;
 			else if (!defaultMenuKeyName.empty()) {
-				LogActivity("Unknown menu hotkey '" + defaultMenuKeyName + "', using default F7", false);
+				LogActivity("KeyBindMenu: Unknown menu hotkey '" + defaultMenuKeyName + "', using default F7", false);
 			}
 
 			LoadBindings();
@@ -1924,7 +1924,7 @@ namespace RadarKeys {
 				if (!bind.IsCombo()) EnsureDispatcherRegistered(bind.vKey);
 			}
 			RegisterMenuToggleKey(menuToggleVKey);
-			LogActivity("Menu hotkey set to " + NameForVKey(menuToggleVKey));
+			LogActivity("KeyBindMenu: Menu hotkey set to " + NameForVKey(menuToggleVKey));
 		}
 
 		static USHORT capturedVKey = 0;
@@ -2036,7 +2036,7 @@ namespace RadarKeys {
 					if (currentlyHeld.size() >= 2 && currentlyHeld.size() <= 3) {
 						comboHoldKeys = currentlyHeld;
 						comboHoldStartTime = std::chrono::steady_clock::now();
-						LogActivity("Multi-key combo capture adjusted: now holding " + ComboKeysDisplayName(currentlyHeld));
+						LogActivity("KeyBindMenu: Multi-key combo capture adjusted: now holding " + ComboKeysDisplayName(currentlyHeld));
 					} else {
 						comboHoldActive = false;
 						comboHoldKeys.clear();
@@ -2066,7 +2066,7 @@ namespace RadarKeys {
 					capturedInstantMode = true;
 					capturedInstantTriggerType = 0;
 				}
-				LogActivity("Multi-key combo captured: " + ComboKeysDisplayName(capturedComboKeys));
+				LogActivity("KeyBindMenu: Multi-key combo captured: " + ComboKeysDisplayName(capturedComboKeys));
 			}
 		}
 
@@ -2330,7 +2330,7 @@ namespace RadarKeys {
 								capturedInstantMode = true;
 								capturedInstantTriggerType = 0;
 							}
-							LogActivity("Single key captured: " + NameForVKey(capturedVKey));
+							LogActivity("KeyBindMenu: Single key captured: " + NameForVKey(capturedVKey));
 							spdlog::info(LOG_KEYBINDMENU_CAPTURED_SINGLE_KEY_VKEY_FMT,
 								capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt);
 						}
@@ -2747,7 +2747,7 @@ namespace RadarKeys {
 						std::string comboKeyName = ComboKeysDisplayName(capturedComboKeys);
 						ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, comboKeyName);
 						DebuggerMenu::LogBindEvent("Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
-						LogActivity("Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
+						LogActivity("KeyBindMenu: Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
 						MarkDisplayCacheDirty();
 
 						ResetComboCaptureState();
@@ -2778,7 +2778,7 @@ namespace RadarKeys {
 							ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(capturedVKey));
 						}
 						DebuggerMenu::LogBindEvent("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
-						LogActivity("Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
+						LogActivity("KeyBindMenu: Mod key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
 						if (oldVKey != 0 && oldVKey != capturedVKey) {
 							LuaKeyState::ReassignBinding(oldVKey, capturedVKey, modKeyCaptureScriptName, modKeyCaptureFunctionName);
 						}
@@ -2797,10 +2797,10 @@ namespace RadarKeys {
 					menuToggleHandle = RawInput::RegisterAction(menuToggleVKey, OnMenuToggleKeyPressed);
 					SaveBindings(); 
 					DebuggerMenu::LogBindEvent("Menu Hotkey reassigned to: " + NameForVKey(capturedVKey));
-					LogActivity("Menu Hotkey reassigned to " + NameForVKey(capturedVKey));
+					LogActivity("KeyBindMenu: Menu Hotkey reassigned to " + NameForVKey(capturedVKey));
 					for (const auto& bind : bindings) {
 						if (!bind.IsCombo() && bind.vKey == capturedVKey && !bind.disabled) {
-							LogActivity("Warning: menu hotkey " + NameForVKey(capturedVKey) + " is also a manual binding - both will fire", false);
+							LogActivity("KeyBindMenu: Warning: menu hotkey " + NameForVKey(capturedVKey) + " is also a manual binding - both will fire", false);
 							break;
 						}
 					}
@@ -2828,7 +2828,7 @@ namespace RadarKeys {
 						if (injectEnd < injectStart) injectEnd = injectStart;
 						std::string injectContent = BuildInjectContent(injectSourcePath, injectStart, injectEnd);
 						if (injectContent.empty()) {
-							LogActivity("Script-line injection failed - could not read lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath, false);
+							LogActivity("KeyBindMenu: Script-line injection failed - could not read lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath, false);
 						} else {
 							RunInjectCompileCheck(injectContent);
 							if (editingBindingIndex != -1 && editingBindingIndex < (int)bindings.size()) {
@@ -2853,7 +2853,7 @@ namespace RadarKeys {
 								EnsureDispatcherRegistered(capturedVKey);
 								SaveBindings();
 								MarkDisplayCacheDirty();
-								LogActivity("Edited script-line binding -> " + CombinedDisplayName(editedBind));
+								LogActivity("KeyBindMenu: Edited script-line binding -> " + CombinedDisplayName(editedBind));
 							} else {
 								KeyBind newInjectBind{};
 								newInjectBind.vKey = capturedVKey;
@@ -2870,7 +2870,7 @@ namespace RadarKeys {
 								SaveBindings();
 								MarkDisplayCacheDirty();
 								DebuggerMenu::LogBindEvent("Bound " + newInjectBind.keyName + " -> script lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath);
-								LogActivity("Bound " + newInjectBind.keyName + " to script lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath);
+								LogActivity("KeyBindMenu: Bound " + newInjectBind.keyName + " to script lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath);
 							}
 						}
 					}
@@ -2894,7 +2894,7 @@ namespace RadarKeys {
 							bindings[editingBindingIndex] = editedBind;
 							SaveBindings();
 							MarkDisplayCacheDirty();
-							LogActivity("Edited combo binding -> " + CombinedDisplayName(editedBind));
+							LogActivity("KeyBindMenu: Edited combo binding -> " + CombinedDisplayName(editedBind));
 						} else {
 							AddComboBinding(capturedComboKeys, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap, finalHoldSeconds, capturedInstantMode, capturedInstantTriggerType, capturedRepeatAccelMult);
 						}
@@ -2914,7 +2914,7 @@ namespace RadarKeys {
 						bindings[editingBindingIndex] = editedBind;
 						RemoveDispatcherIfUnused(oldVKey); EnsureDispatcherRegistered(capturedVKey); SaveBindings();
 						MarkDisplayCacheDirty();
-						LogActivity("Edited binding -> " + CombinedDisplayName(editedBind));
+						LogActivity("KeyBindMenu: Edited binding -> " + CombinedDisplayName(editedBind));
 					} else {
 						AddBinding(capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt, finalHoldSeconds, capturedToggleMode, finalPathOn, finalPathOff, finalFuncOn, finalFuncOff, finalFuncTap, capturedInstantMode, capturedInstantTriggerType, capturedRepeatAccelMult);
 					}
@@ -3443,7 +3443,7 @@ namespace RadarKeys {
 
 							isAssigningMenuToggleKey = false; isAssigningModKey = false; showCapturePrompt = true;
 							requestCaptureFocus = true;
-							LogActivity("Key Assignment Edit Prompt opened " + itemLabel);
+							LogActivity("KeyBindMenu: Key Assignment Edit Prompt opened " + itemLabel);
 						}
 					}
 					else if (row.isComboScript) {
@@ -3623,7 +3623,7 @@ namespace RadarKeys {
 							}
 						}
 						ModKeyBindings::SetDisabled(pendingResetScriptName, pendingResetFunctionName, false);
-						LogActivity("Reset mod key to default: " + pendingResetScriptName + " [" + pendingResetFunctionName + "]");
+						LogActivity("KeyBindMenu: Reset mod key to default: " + pendingResetScriptName + " [" + pendingResetFunctionName + "]");
 						pendingResetActive = false;
 						ImGui::CloseCurrentPopup();
 					}
