@@ -12,6 +12,7 @@
 #include "spdlog/spdlog.h"
 #include "imgui/imgui.h"
 
+#include <deque>
 #include <fstream>
 #include <filesystem>
 #include <map>
@@ -56,6 +57,7 @@ namespace RadarKeys {
 		static const char* LOG_OK_FMT = "[OK]{}";
 		static const char* LOG_FAIL_FMT = "[FAIL]{}";
 		static const char* LOG_STATE_CLEAN_EXIT = "[STATE] CLEAN_EXIT";
+		static const char* LOG_LOGSINK_INITIALIZATION_COMPLETE = "[STATE] Initialization complete - player activity follows (last 50 kept)";
 		static const char* LOG_KEYBINDMENU_MAIN_MENU_FMT_F7 = "KeyBindMenu: main menu {} (F7)";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_BIND_LI = "KeyBindMenu::LoadBindings: skipping incomplete BIND line: {}";
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_MALFORMED_FMT = "KeyBindMenu: InjectDescribe: dropped malformed payload (fields: {})";
@@ -205,35 +207,109 @@ namespace RadarKeys {
 		}
 
 		class BootStampSink : public spdlog::sinks::base_sink<std::mutex> {
+			private:
+				enum class Phase { Booting, Live };
+				static constexpr size_t kMaxActivityLines = 50;
 			public:
-			explicit BootStampSink(spdlog::sink_ptr downstream)
-			: downstream_(std::move(downstream)) {
-				downstream_->set_pattern("[%l] %v");
-			}
+				explicit BootStampSink(spdlog::sink_ptr downstream, const std::string& logFilePath)
+				: downstream_(std::move(downstream)), filePath_(logFilePath) {
+					downstream_->set_pattern("[%l] %v");
+				}
+				void MarkInitializationComplete() {
+					std::lock_guard<std::mutex> lock(mutex_);
+					if (phase_ != Phase::Booting || finalized_) return;
+					const std::string text(LOG_LOGSINK_INITIALIZATION_COMPLETE);
+					std::string line = StampPayload(text.data(), text.size());
+					spdlog::details::log_msg stamped(spdlog::string_view_t(), spdlog::level::info, spdlog::string_view_t(line.data(), line.size()));
+					downstream_->log(stamped);
+					downstream_->flush();
+					std::error_code sizeEc;
+					interactionStart_ = static_cast<std::streamoff>(std::filesystem::file_size(filePath_, sizeEc));
+					if (interactionStart_ <= 0) interactionStart_ = 0;
+					phase_ = Phase::Live;
+				}
 			protected:
-			void sink_it_(const spdlog::details::log_msg& msg) override {
-				static const auto bootTime = std::chrono::steady_clock::now();
-				auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - bootTime);
-				auto hours = std::chrono::duration_cast<std::chrono::hours>(durationMs);
-				durationMs -= hours;
-				auto minutes = std::chrono::duration_cast<std::chrono::minutes>(durationMs);
-				durationMs -= minutes;
-				auto seconds = std::chrono::duration_cast<std::chrono::seconds>(durationMs);
-				durationMs -= seconds;
-				char stamp[32];
-				snprintf(stamp, sizeof(stamp), "[%02d:%02d:%02d.%03d] ", (int)hours.count(), (int)minutes.count(), (int)seconds.count(), (int)durationMs.count());
-				std::string line;
-				line.reserve(msg.payload.size() + 32);
-				line.append(stamp);
-				line.append(msg.payload.data(), msg.payload.size());
-				spdlog::details::log_msg stamped(msg.logger_name, msg.level, spdlog::string_view_t(line.data(), line.size()));
-				downstream_->log(stamped);
+				void sink_it_(const spdlog::details::log_msg& msg) override {
+					std::string line = StampPayload(msg.payload.data(), msg.payload.size());
+					if (phase_ == Phase::Booting) {
+						spdlog::details::log_msg stamped(msg.logger_name, msg.level, spdlog::string_view_t(line.data(), line.size()));
+						downstream_->log(stamped);
+						return;
+					}
+					if (line.find(LOG_STATE_CLEAN_EXIT) != std::string::npos) {
+						CompactTailLocked();
+						AppendTail(line + "\n");
+						finalized_ = true;
+						return;
+					}
+					AppendTail(line + "\n");
+					ring_.push_back(line + "\n");
+					if (ring_.size() > kMaxActivityLines) {
+						ring_.pop_front();
+						CompactTailLocked();
+					}
+				}
+				void flush_() override {
+					downstream_->flush();
+					if (tailFile_.is_open()) tailFile_.flush();
+				}
+			private:
+				std::string StampPayload(const char* data, size_t len) {
+					auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - bootTime_);
+					auto hours = std::chrono::duration_cast<std::chrono::hours>(durationMs);
+					durationMs -= hours;
+					auto minutes = std::chrono::duration_cast<std::chrono::minutes>(durationMs);
+					durationMs -= minutes;
+					auto seconds = std::chrono::duration_cast<std::chrono::seconds>(durationMs);
+					durationMs -= seconds;
+					char stamp[32];
+					snprintf(stamp, sizeof(stamp), "[%02d:%02d:%02d.%03d] ", (int)hours.count(), (int)minutes.count(), (int)seconds.count(), (int)durationMs.count());
+					std::string line;
+					line.reserve(len + 32);
+					line.append(stamp);
+					line.append(data, len);
+					return line;
+				}
+				void AppendTail(const std::string& line) {
+					if (!tailFile_.is_open()) {
+						tailFile_.open(filePath_, std::ios::app | std::ios::binary);
+					}
+					if (tailFile_.is_open()) {
+						tailFile_.write(line.data(), static_cast<std::streamsize>(line.size()));
+						tailFile_.flush();
+					}
+				}
+				void CompactTailLocked() {
+					tailFile_.flush();
+					std::ofstream out(filePath_, std::ios::in | std::ios::out | std::ios::binary);
+					if (!out) return;
+					out.seekp(interactionStart_);
+					std::streamoff total = 0;
+					for (const auto& l : ring_) {
+						out.write(l.data(), static_cast<std::streamsize>(l.size()));
+						total += static_cast<std::streamoff>(l.size());
+					}
+					out.close();
+					std::error_code resizeEc;
+					std::filesystem::resize_file(filePath_, interactionStart_ + total, resizeEc);
+				}
+				spdlog::sink_ptr downstream_;
+				std::string filePath_;
+				std::chrono::steady_clock::time_point bootTime_ = std::chrono::steady_clock::now();
+				Phase phase_ = Phase::Booting;
+				bool finalized_ = false;
+				std::streamoff interactionStart_ = 0;
+				std::deque<std::string> ring_;
+				std::ofstream tailFile_;
+			};
+
+			static BootStampSink* g_activityLogSink = nullptr;
+
+			void MarkActivityLogLive() {
+				if (g_activityLogSink) {
+					g_activityLogSink->MarkInitializationComplete();
+				}
 			}
-			void flush_() override {
-				downstream_->flush();
-			}
-			spdlog::sink_ptr downstream_;
-		};
 
 		bool PreviousSessionEndedCleanly(const std::string& logPath);
 		void InitDiagnostics() {
@@ -255,7 +331,8 @@ namespace RadarKeys {
 					("radarkeys_log." + std::to_string(rolledIndex) + ".txt"), logEc);
 				}
 				auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
-				auto sink = std::make_shared<BootStampSink>(fileSink);
+				auto sink = std::make_shared<BootStampSink>(fileSink, logPath.string());
+				g_activityLogSink = sink.get();
 				auto logger = std::make_shared<spdlog::logger>("radarkeys", sink);
 				std::error_code verboseEc;
 				const bool verboseRequested = std::filesystem::exists(
@@ -595,6 +672,9 @@ namespace RadarKeys {
 			}
 
 			menuOpen = !menuOpen;
+			if (menuOpen) {
+				MarkActivityLogLive();
+			}
 			LogActivity(menuOpen ? "Menu opened" : "Menu closed");
 			spdlog::info(LOG_KEYBINDMENU_MAIN_MENU_FMT_F7, menuOpen ? "OPENED" : "CLOSED");
 		}
@@ -903,6 +983,7 @@ namespace RadarKeys {
 		}
 
 		void FireBinding(const KeyBind& bind) {
+			MarkActivityLogLive();
 			if (bind.isInject) {
 				if (bind.scriptDescribed && ModKeyBindings::IsDisabled(bind.injectScriptName, bind.injectFunctionName)) {
 					return;
@@ -1367,6 +1448,7 @@ namespace RadarKeys {
 				LogActivity("KeyBindMenu: Bound " + keyName + " to script lines " + std::to_string(lineStart) + "-" + std::to_string(lineEnd) + " of " + sourcePath);
 			}
 			injectDescribeTouch[identity] = std::chrono::steady_clock::now();
+			MarkActivityLogLive();
 		}
 
 		void SweepStaleScriptInjects() {
