@@ -15,6 +15,9 @@ namespace RadarKeys {
 			std::string keyName;
 			std::string padKeyName;
 			bool disabled = false;
+			int triggerType = 0;
+			float holdSeconds = 0.0f;
+			float repeatAccelMult = 1.0f;
 		};
 
 		void Load();
@@ -28,6 +31,16 @@ namespace RadarKeys {
 
 		bool IsDisabled(const std::string& scriptName, const std::string& functionName);
 		void SetDisabled(const std::string& scriptName, const std::string& functionName, bool disabled);
+
+		struct TriggerConfig {
+			int triggerType = 0;
+			float holdSeconds = 0.0f;
+			float repeatAccelMult = 1.0f;
+		};
+
+		TriggerConfig GetTriggerConfig(const std::string& scriptName, const std::string& functionName);
+		void SetTriggerConfigWithoutSave(const std::string& scriptName, const std::string& functionName, int triggerType, float holdSeconds, float repeatAccelMult);
+		bool HasTriggerConfig(const std::string& scriptName, const std::string& functionName);
 
 		std::vector<OverrideEntry> GetAllOverrides();
 		void LoadFromEntries(const std::vector<OverrideEntry>& entries);
