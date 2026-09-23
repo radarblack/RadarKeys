@@ -14,7 +14,7 @@ namespace RadarKeys {
 	namespace DebuggerMenu {
 		static const char* LOG_DEBUGGERMENU_ONDOSCRIPTRESULT_MALFORMED_ARGS_SIZE_FM = "DebuggerMenu::OnDoScriptResult: malformed args (size {})";
 		static const char* UI_DEBUGGER_LOG_SCOPE_HINT = "These control both the live view below and what gets written to radarkeys_log.txt - tick a box to record its category, untick to silence it.";
-		static const char* LOG_SCR_LUA_SUCCESS = "[SCR][LUA] success";
+		static const char* LOG_SCR_LUA_SUCCESS = "[LUA] success";
 		static const char* LOG_DEBUGGERMENU_ONDOSCRIPTRESULT_SCRIPT_FAILED_BUT_NO = "DebuggerMenu::OnDoScriptResult: script failed but no error message provided (size {})";
 
 		bool logBindUnbind = false;
@@ -81,11 +81,11 @@ namespace RadarKeys {
 			}
 			if (!exists) {
 				KeyBindMenu::LogActivity("[SCR][DLL] missing - SKIP: " + scriptPath, false);
-				AddLogEntry("[SCR][DLL] missing - SKIP: " + scriptPath);
+				AddLogEntry("[DLL] missing - SKIP: " + scriptPath);
 				return false;
 			}
 			KeyBindMenu::LogActivity("[SCR][DLL] attempt: " + scriptPath);
-			AddLogEntry("[SCR][DLL] attempt: " + scriptPath);
+			AddLogEntry("[DLL] attempt: " + scriptPath);
 			return true;
 		}
 
@@ -101,7 +101,7 @@ namespace RadarKeys {
 			bool success = args[2] == "1";
 			if (success) {
 				KeyBindMenu::LogActivity(LOG_SCR_LUA_SUCCESS);
-				AddLogEntry("[SCR][LUA] success");
+				AddLogEntry("[LUA] success");
 			}
 			else {
 				if (args.size() < 4) {
@@ -111,7 +111,7 @@ namespace RadarKeys {
 
 				std::string errorMsg = args[3];
 				KeyBindMenu::LogActivity("[SCR][LUA] fail: " + errorMsg, false);
-				AddLogEntry("[SCR][LUA] fail: " + errorMsg);
+				AddLogEntry("[LUA] fail: " + errorMsg);
 			}
 		}
 
