@@ -57,18 +57,7 @@ namespace RadarKeys {
 		static const char* LOG_FAIL_FMT = "[FAIL] {}";
 		static const char* LOG_STATE_CLEAN_EXIT = "[STATE] CLEAN_EXIT";
 		static const char* LOG_KEYBINDMENU_MAIN_MENU_FMT_F7 = "KeyBindMenu: main menu {} (F7)";
-		static const char* LOG_KEYBINDMENU_SAVEBINDINGS_COULDN_T_OPEN_FMT = "KeyBindMenu::SaveBindings: couldn't open {} for writing";
-		static const char* LOG_KEYBINDMENU_SAVEBINDINGS_FAILED_WRITING_FMT = "KeyBindMenu::SaveBindings: failed writing {}";
-		static const char* LOG_KEYBINDMENU_SAVEBINDINGS_COULDN_T_RENAME_FMT = "KeyBindMenu::SaveBindings: couldn't rename {} -> {}: {}";
-		static const char* LOG_KEYBINDMENU_SAVEBINDINGS_WROTE_FMT_BINDING_S = "KeyBindMenu::SaveBindings: wrote {} binding(s) to {}";
-		static const char* LOG_KEYBINDMENU_LOADBINDINGS_NO_FMT_YET_FINE = "KeyBindMenu::LoadBindings: no {} yet (fine on first run)";
-		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_MALFORMED_LINE_FMT = "KeyBindMenu::LoadBindings: skipping malformed line: {}";
-		static const char* LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_MENUKEY_NAME_FMT = "KeyBindMenu::LoadBindings: unknown MENUKEY name '{}', keeping default";
-		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INVALID_COMBO2_LIN = "KeyBindMenu::LoadBindings: skipping invalid COMBO2 line: {}";
-		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_COMBO2_ = "KeyBindMenu::LoadBindings: skipping incomplete COMBO2 line: {}";
-		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INVALID_COMBO_LINE = "KeyBindMenu::LoadBindings: skipping invalid COMBO line: {}";
 		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_BIND_LI = "KeyBindMenu::LoadBindings: skipping incomplete BIND line: {}";
-		static const char* LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_KEY_NAME_FMT = "KeyBindMenu::LoadBindings: unknown key name '{}', skipping binding";
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_MALFORMED_FMT = "InjectDescribe: dropped malformed payload (fields: {})";
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UNKNOWN_KEY_FMT = "InjectDescribe: dropped - unrecognized key name '{}'";
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_BAD_RANGE_FMT = "InjectDescribe: dropped - invalid line range {}-{}";
@@ -76,10 +65,7 @@ namespace RadarKeys {
 		static const char* LOG_KEYBINDMENU_INJECT_SOURCE_LOST_AUTO_DISABLED_FMT = "Script-line binding auto-disabled - source unreadable: {}";
 		static const char* LOG_KEYBINDMENU_INJECT_SOURCE_RESTORED_AUTO_ENABLED_FMT = "Script-line binding re-enabled - source restored: {}";
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT = "Updated script-lines binding: {} -> lines {}-{} of {}";
-		static const char* LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_OLD_FORMAT_MALFORM = "KeyBindMenu::LoadBindings: skipping old-format/malformed BIND line: {}";
-		static const char* LOG_KEYBINDMENU_LOADBINDINGS_LOADED_FMT_BINDING_S = "KeyBindMenu::LoadBindings: loaded {} binding(s) from {}";
 		static const char* LOG_RADARKEYS_KEYBINDMENU_INITIALIZING = "RadarKeys KeyBindMenu initializing";
-		static const char* LOG_KEYBINDMENU_INIT_UNKNOWN_MENU_HOTKEY_FMT = "KeyBindMenu::Init: unknown menu hotkey '{}', using default F7";
 		static const char* LOG_KEY_ASSIGNMENT_PROMPT_CANCELLED = "Key Assignment Prompt cancelled";
 		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_KEY = "Multi-key combo capture cancelled - a key was released before the hold completed";
 		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_MORE = "Multi-key combo capture cancelled - more than 3 keys held";
@@ -1128,7 +1114,6 @@ namespace RadarKeys {
 				if (LuaKeyState::PhysicalOnButtonDown(vKey)) {
 					bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
 					DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
-					LogActivity(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 
 					bool hasHoldOptionOnKey = false;
 					for (const auto& bind : bindings) {
@@ -1173,7 +1158,6 @@ namespace RadarKeys {
 
 				if (!suppressedByCombo && !pending.holdFired && holdBind && LuaKeyState::PhysicalOnButtonHoldTime(vKey, holdBind->holdSeconds)) {
 					DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
-					LogActivity(NameForVKey(vKey) + " held past threshold " + std::to_string(holdBind->holdSeconds) + "s");
 					FireBinding(*holdBind);
 					pending.holdFired = true;
 					pending.lastRepeatTime = std::chrono::steady_clock::now();
@@ -1190,7 +1174,6 @@ namespace RadarKeys {
 					double effectiveInterval = kRepeatIntervalSeconds / pending.repeatSpeedMult;
 					if (sinceLastRepeat >= effectiveInterval) {
 						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " repeat-fired");
-						LogActivity(NameForVKey(vKey) + " repeat-fired");
 						FireBinding(*repeatBind);
 						pending.lastRepeatTime = std::chrono::steady_clock::now();
 						pending.repeatSpeedMult = (std::clamp)(pending.repeatSpeedMult * (double)repeatBind->repeatAccelMult, kMinRepeatSpeedMult, kMaxRepeatSpeedMult);
@@ -1203,7 +1186,6 @@ namespace RadarKeys {
 							double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.pressTime).count();
 							if (heldSeconds < kNearMissHoldFraction * holdBind->holdSeconds) {
 								DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " released early (Instant)");
-								LogActivity(NameForVKey(vKey) + " released early (Instant)");
 								FireBinding(*holdBind);
 							} else {
 								LogActivity(NameForVKey(vKey) + " released near hold threshold - Instant suppressed");
@@ -1212,7 +1194,6 @@ namespace RadarKeys {
 						else if (tapBind && tapBind->holdSeconds <= 0.0f && !(tapBind->isInstant && tapBind->instantTriggerType == 2)) {
 							std::string reason = (tapBind->isInstant && tapBind->instantTriggerType == 1) ? "released (On Release)" : "tapped cleanly (Hold bypassed)";
 							DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " " + reason);
-							LogActivity(NameForVKey(vKey) + " " + reason);
 							FireBinding(*tapBind);
 						}
 					}
@@ -1240,7 +1221,6 @@ namespace RadarKeys {
 
 					std::string label = CombinedDisplayName(bind);
 					DebuggerMenu::LogButtonPress(label + " pressed");
-					LogActivity(label + " pressed");
 
 					bool deferForOnRelease = !hasHold && bind.isInstant && bind.instantTriggerType == 1;
 					if (!hasHold && !deferForOnRelease) {
@@ -1254,7 +1234,6 @@ namespace RadarKeys {
 						double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - bind.comboPressTime).count();
 						if (heldSeconds >= bind.holdSeconds) {
 							DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " held past threshold " + std::to_string(bind.holdSeconds) + "s");
-							LogActivity(CombinedDisplayName(bind) + " held past threshold " + std::to_string(bind.holdSeconds) + "s");
 							FireBinding(bind);
 							bind.comboHoldFired = true;
 							bind.comboLastRepeatTime = std::chrono::steady_clock::now();
@@ -1267,7 +1246,6 @@ namespace RadarKeys {
 						double effectiveInterval = kRepeatIntervalSeconds / bind.runtimeRepeatSpeedMult;
 						if (sinceLastRepeat >= effectiveInterval) {
 							DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " repeat-fired");
-							LogActivity(CombinedDisplayName(bind) + " repeat-fired");
 							FireBinding(bind);
 							bind.comboLastRepeatTime = std::chrono::steady_clock::now();
 							bind.runtimeRepeatSpeedMult = (std::clamp)(bind.runtimeRepeatSpeedMult * (double)bind.repeatAccelMult, kMinRepeatSpeedMult, kMaxRepeatSpeedMult);
@@ -1281,7 +1259,6 @@ namespace RadarKeys {
 							double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - bind.comboPressTime).count();
 							if (heldSeconds < kNearMissHoldFraction * bind.holdSeconds) {
 								DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " released early (Instant)");
-								LogActivity(CombinedDisplayName(bind) + " released early (Instant)");
 								FireBinding(bind);
 							} else {
 								LogActivity(CombinedDisplayName(bind) + " released near hold threshold - Instant suppressed");
@@ -1289,7 +1266,6 @@ namespace RadarKeys {
 						}
 						else if (!hasHold) {
 							DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " released (On Release)");
-							LogActivity(CombinedDisplayName(bind) + " released (On Release)");
 							FireBinding(bind);
 						}
 					}
@@ -1456,7 +1432,6 @@ namespace RadarKeys {
 			std::string bakPath = bindsPath + ".bak";
 			std::ofstream outFile(tmpPath);
 			if (!outFile) {
-				spdlog::warn(LOG_KEYBINDMENU_SAVEBINDINGS_COULDN_T_OPEN_FMT, tmpPath);
 				LogActivity("Save bindings failed: couldn't open " + tmpPath + " for writing", false);
 				return;
 			}
@@ -1516,7 +1491,6 @@ namespace RadarKeys {
 			}
 			outFile.close();
 			if (!outFile) {
-				spdlog::warn(LOG_KEYBINDMENU_SAVEBINDINGS_FAILED_WRITING_FMT, tmpPath);
 				LogActivity("Save bindings failed while writing " + tmpPath, false);
 				return;
 			}
@@ -1528,19 +1502,16 @@ namespace RadarKeys {
 				}
 				std::filesystem::rename(tmpPath, bindsPath, ec);
 				if (ec) {
-					spdlog::warn(LOG_KEYBINDMENU_SAVEBINDINGS_COULDN_T_RENAME_FMT, tmpPath, bindsPath, ec.message());
 					LogActivity("Save bindings failed: couldn't replace " + bindsPath + " (" + ec.message() + ")", false);
 					return;
 				}
 			}
-			spdlog::debug(LOG_KEYBINDMENU_SAVEBINDINGS_WROTE_FMT_BINDING_S, bindings.size(), bindsPath);
 			LogActivity("Saved " + std::to_string(bindings.size()) + " binding(s) to " + bindsPath);
 		}
 
 		void LoadBindings() {
 			std::ifstream inFile(GetBindsFileName());
 			if (!inFile) {
-				spdlog::debug(LOG_KEYBINDMENU_LOADBINDINGS_NO_FMT_YET_FINE, GetBindsFileName());
 				LogActivity("No existing bindings file yet at " + GetBindsFileName() + " (fine on first run)");
 				ModKeyBindings::LoadFromEntries({});
 				return;
@@ -1552,7 +1523,6 @@ namespace RadarKeys {
 				if ((line = trim(line)).empty()) continue;
 				std::vector<std::string> parts = split(line, "|");
 				if (parts.size() < 2) {
-					spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_MALFORMED_LINE_FMT, line);
 					LogActivity("Skipped malformed line while loading bindings: " + line, false);
 					continue;
 				}
@@ -1561,7 +1531,6 @@ namespace RadarKeys {
 					int vKey = VKeyForName(trim(parts[1]));
 					if (vKey != -1) menuToggleVKey = (USHORT)vKey;
 					else {
-						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_MENUKEY_NAME_FMT, parts[1]);
 						LogActivity("Unknown MENUKEY name '" + parts[1] + "', keeping default", false);
 					}
 				}
@@ -1598,7 +1567,6 @@ namespace RadarKeys {
 					std::string injectKeyName = trim(parts[1]);
 					int injectVKey = VKeyForName(injectKeyName);
 					if (injectVKey == -1) {
-						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_KEY_NAME_FMT, injectKeyName);
 						LogActivity("Unknown Key name '" + injectKeyName + "', skipping script-line binding", false);
 						continue;
 					}
@@ -1624,7 +1592,6 @@ namespace RadarKeys {
 					try { injectLineEnd = std::stoi(trim(parts[11])); }
 					catch (...) { injectLineEnd = 0; }
 					if (injectLineStart < 1 || injectLineEnd < injectLineStart) {
-						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_MALFORMED_LINE_FMT, line);
 						LogActivity("Skipped malformed INJECT line while loading bindings: " + line, false);
 						continue;
 					}
@@ -1655,7 +1622,6 @@ namespace RadarKeys {
 						comboKeys.push_back((USHORT)vk);
 					}
 					if (!allValid) {
-						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INVALID_COMBO2_LIN, line);
 						LogActivity("Skipped invalid COMBO2 line while loading bindings: " + line, false);
 						continue;
 					}
@@ -1679,7 +1645,6 @@ namespace RadarKeys {
 						funcTap = trim(parts[5]);
 						instantFieldStart = 6;
 					} else {
-						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INCOMPLETE_COMBO2_, line);
 						LogActivity("Skipped incomplete COMBO2 line while loading bindings: " + line, false);
 						continue;
 					}
@@ -1726,7 +1691,6 @@ namespace RadarKeys {
 						comboKeys.push_back((USHORT)vk);
 					}
 					if (!allValid) {
-						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_INVALID_COMBO_LINE, line);
 						LogActivity("Skipped invalid COMBO line while loading bindings: " + line, false);
 						continue;
 					}
@@ -1747,7 +1711,6 @@ namespace RadarKeys {
 					}
 					std::string keyName = trim(parts[1]); int vKey = VKeyForName(keyName);
 					if (vKey == -1) {
-						spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_UNKNOWN_KEY_NAME_FMT, keyName);
 						LogActivity("Unknown Key name '" + keyName + "', skipping binding", false);
 						continue;
 					}
@@ -1812,12 +1775,10 @@ namespace RadarKeys {
 					bindings.push_back(b);
 				}
 				else if (parts[0] == "BIND") {
-					spdlog::warn(LOG_KEYBINDMENU_LOADBINDINGS_SKIPPING_OLD_FORMAT_MALFORM, line);
 					LogActivity("Skipped old-format/malformed BIND line: " + line, false);
 				}
 			}
 			ModKeyBindings::LoadFromEntries(modKeyEntries);
-			spdlog::debug(LOG_KEYBINDMENU_LOADBINDINGS_LOADED_FMT_BINDING_S, bindings.size(), GetBindsFileName());
 			LogActivity("Loaded " + std::to_string(bindings.size()) + " binding(s) from " + GetBindsFileName());
 			MarkDisplayCacheDirty();
 		}
@@ -1955,7 +1916,6 @@ namespace RadarKeys {
 			int defaultVKey = VKeyForName(defaultMenuKeyName);
 			if (defaultVKey != -1) menuToggleVKey = (USHORT)defaultVKey;
 			else if (!defaultMenuKeyName.empty()) {
-				spdlog::warn(LOG_KEYBINDMENU_INIT_UNKNOWN_MENU_HOTKEY_FMT, defaultMenuKeyName);
 				LogActivity("Unknown menu hotkey '" + defaultMenuKeyName + "', using default F7", false);
 			}
 
