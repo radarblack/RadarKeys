@@ -23,17 +23,17 @@
 #include <sstream>
 
 namespace RadarKeys {
-		static const char* LOG_INITCURSORHOOK_MH_CREATEHOOK_FAILED_SETCURSORPOS = "InitCursorHook: MH_CreateHook failed for SetCursorPos";
-		static const char* LOG_INITCURSORHOOK_MH_ENABLEHOOK_FAILED_SETCURSORPOS = "InitCursorHook: MH_EnableHook failed for SetCursorPos";
-		static const char* LOG_RADARKEYS_INITTHREAD_STARTING = "RadarKeys InitThread starting";
-		static const char* LOG_RADARKEYS_INITTHREAD_MH_INITIALIZE_FAILED = "RadarKeys InitThread: MH_Initialize failed";
-		static const char* LOG_RADARKEYS_INITTHREAD_RESOLVELUAAPI_FAILED_LUA_BINDIN = "RadarKeys InitThread: ResolveLuaApi failed - Lua bindings will not work";
-		static const char* LOG_RADARKEYS_FRAME_INITIALIZED = "RadarKeys frame initialized";
-		static const char* LOG_RADARKEYS_KEY_QUERY_UNRECOGNIZED_KEY_NAME = "RadarKeys key query: unrecognized key name '{}'";
-		static const char* LOG_RADARKEYS_COMBO_QUERY_UNRECOGNIZED_MALFORMED_COMBO = "RadarKeys combo query: unrecognized or malformed combo string '{}'";
-		static const char* LOG_RADARKEYS_KEY_QUERY_INVALID_HOLD_SECONDS = "RadarKeys key query: invalid hold-seconds arg '{}'";
-		static const char* LOG_RADARKEYS_DESCRIBEKEYLINES_REJECTED_NULL_ARGS = "DescribeKeyLines: rejected - missing or empty key, script, function or source argument";
-		static const char* LOG_RADARKEYS_DESCRIBEKEYLINES_REJECTED_BAD_LINES_FMT = "DescribeKeyLines: rejected - invalid line range start:'{}' end:'{}'";
+		static const char* LOG_INITCURSORHOOK_MH_CREATEHOOK_FAILED_SETCURSORPOS = "RadarKeys: InitCursorHook: MH_CreateHook failed for SetCursorPos";
+		static const char* LOG_INITCURSORHOOK_MH_ENABLEHOOK_FAILED_SETCURSORPOS = "RadarKeys: InitCursorHook: MH_EnableHook failed for SetCursorPos";
+		static const char* LOG_RADARKEYS_INITTHREAD_STARTING = "RadarKeys: InitThread starting";
+		static const char* LOG_RADARKEYS_INITTHREAD_MH_INITIALIZE_FAILED = "RadarKeys: InitThread: MH_Initialize failed";
+		static const char* LOG_RADARKEYS_INITTHREAD_RESOLVELUAAPI_FAILED_LUA_BINDIN = "RadarKeys: InitThread: ResolveLuaApi failed - Lua bindings will not work";
+		static const char* LOG_RADARKEYS_FRAME_INITIALIZED = "RadarKeys: frame initialized";
+		static const char* LOG_RADARKEYS_KEY_QUERY_UNRECOGNIZED_KEY_NAME = "RadarKeys: key query: unrecognized key name '{}'";
+		static const char* LOG_RADARKEYS_COMBO_QUERY_UNRECOGNIZED_MALFORMED_COMBO = "RadarKeys: combo query: unrecognized or malformed combo string '{}'";
+		static const char* LOG_RADARKEYS_KEY_QUERY_INVALID_HOLD_SECONDS = "RadarKeys: key query: invalid hold-seconds arg '{}'";
+		static const char* LOG_RADARKEYS_DESCRIBEKEYLINES_REJECTED_NULL_ARGS = "RadarKeys: DescribeKeyLines: rejected - missing or empty key, script, function or source argument";
+		static const char* LOG_RADARKEYS_DESCRIBEKEYLINES_REJECTED_BAD_LINES_FMT = "RadarKeys: DescribeKeyLines: rejected - invalid line range start:'{}' end:'{}'";
 
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
 	SetCursorPosFunc SetCursorPos_Orig = NULL;
@@ -83,7 +83,7 @@ namespace RadarKeys {
 	static int l_MenuMessage(lua_State* L) {
 		const char* cmd = LuaToString(L, 1);
 		const char* message = LuaToString(L, 2);
-		spdlog::trace("l_MenuMessage cmd:{},<> message:{}", cmd ? cmd : "", message ? message : "");
+		spdlog::trace("RadarKeys: l_MenuMessage cmd:{},<> message:{}", cmd ? cmd : "", message ? message : "");
 		LuaBridge::QueueMessageOut(message ? message : "");
 		return 0;
 	}
@@ -303,8 +303,8 @@ namespace RadarKeys {
 	}
 }
 
-static const char* LOG_LUAOPEN_RADARKEYS = "luaopen_RadarKeys";
-static const char* LOG_LUAOPEN_RADARKEYS_REGISTERLUALIBRARY_FAILED_LUA_API = "luaopen_RadarKeys: RegisterLuaLibrary failed - Lua API addresses may not have resolved yet";
+static const char* LOG_LUAOPEN_RADARKEYS = "RadarKeys: luaopen_RadarKeys";
+static const char* LOG_LUAOPEN_RADARKEYS_REGISTERLUALIBRARY_FAILED_LUA_API = "RadarKeys: luaopen_RadarKeys: RegisterLuaLibrary failed - Lua API addresses may not have resolved yet";
 
 extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 	spdlog::debug(LOG_LUAOPEN_RADARKEYS);
