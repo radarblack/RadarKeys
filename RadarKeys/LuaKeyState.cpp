@@ -17,8 +17,8 @@ namespace RadarKeys {
 			std::recursive_mutex g_keyStateMutex;
 		}
 		using KeyStateLock = std::lock_guard<std::recursive_mutex>;
-		static const char* LOG_LUAKEYSTATE_ENSURETRACKED_NOW_TRACKING_VKEY_FMT = "LuaKeyState EnsureTracked: now tracking vKey:{}";
-		static const char* LOG_LUAKEYSTATE_RETIREIFUNDESCRIBED_RELEASED_VKEY_FMT = "LuaKeyState RetireIfUndescribed: released vKey:{}";
+		static const char* LOG_LUAKEYSTATE_ENSURETRACKED_NOW_TRACKING_VKEY_FMT = "LuaKeyState: EnsureTracked: now tracking vKey:{}";
+		static const char* LOG_LUAKEYSTATE_RETIREIFUNDESCRIBED_RELEASED_VKEY_FMT = "LuaKeyState: RetireIfUndescribed: released vKey:{}";
 
 		constexpr double kHoldTimeSeconds = 0.9;
 		constexpr double kRepeatRateSeconds = 0.85;
