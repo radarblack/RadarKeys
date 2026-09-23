@@ -24,7 +24,7 @@ namespace RadarKeys {
 		}
 
 		void QueueMessageIn(std::string message) {
-			spdlog::trace("LuaBridge QueueMessageIn: " + message);
+			spdlog::trace("LuaBridge: QueueMessageIn: " + message);
 			messagesIn.push(message);
 		}
 
