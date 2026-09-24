@@ -3642,7 +3642,7 @@ namespace RadarKeys {
 						std::vector<USHORT> members = ParseComboKeyNames(assignedName);
 						int resolvedVKey = members.empty() ? VKeyForName(assignedName) : (int)members.front();
 						if (resolvedVKey <= 0) continue;
-						std::string nativeName = !entry.nativeKeyName.empty() ? entry.nativeKeyName : NameForVKey((USHORT)resolvedVKey);
+						std::string nativeName = !entry.nativeKeyName.empty() ? entry.nativeKeyName : (members.empty() ? NameForVKey((USHORT)resolvedVKey) : std::string());
 						LuaKeyState::TrackedKeyInfo synthInfo;
 						synthInfo.vKey = (USHORT)resolvedVKey;
 						synthInfo.hasDescription = true;
@@ -4098,9 +4098,11 @@ namespace RadarKeys {
 						int nativeFilterVKey = filterNativeName.empty() ? -1 : VKeyForName(filterNativeName);
 						for (const LuaKeyState::TrackedKeyInfo& member : row.groupMembers) {
 							USHORT memberDisplayVKey = ResolveDisplayVKey(member);
-							if (!currentOverrideComboMembers.empty()
+							bool memberIsComboGhost = !currentOverrideComboMembers.empty()
 								&& (USHORT)nativeFilterVKey != memberDisplayVKey
-								&& std::find(currentOverrideComboMembers.begin(), currentOverrideComboMembers.end(), memberDisplayVKey) == currentOverrideComboMembers.end()) {
+								&& std::find(currentOverrideComboMembers.begin(), currentOverrideComboMembers.end(), memberDisplayVKey) == currentOverrideComboMembers.end()
+								&& SlotOfVKey(memberDisplayVKey) == SlotOfVKey(currentOverrideComboMembers.front());
+							if (memberIsComboGhost) {
 								continue;
 							}
 							if (RawInput::IsKeyHeldReal(memberDisplayVKey)) {
@@ -4117,6 +4119,18 @@ namespace RadarKeys {
 						}
 						if (groupNames.empty() && !row.storeNativeName.empty()) {
 							groupNames.push_back(row.storeNativeName);
+						}
+						if (groupNames.empty() && !currentOverrideComboMembers.empty()) {
+							for (const auto& b : bindings) {
+								if (!b.isInject || !b.scriptDescribed || b.injectScriptName != row.info.scriptName || b.injectFunctionName != row.info.functionName) continue;
+								if (b.IsCombo()) continue;
+								if (SlotOfVKey(b.vKey) == SlotOfVKey(currentOverrideComboMembers.front())) continue;
+								std::string boundName = NameForVKey(b.vKey);
+								if (boundName.compare(0, 8, "Unknown(") != 0 && std::find(groupNames.begin(), groupNames.end(), boundName) == groupNames.end()) {
+									groupNames.push_back(boundName);
+								}
+								break;
+							}
 						}
 						if (anyToggle) {
 							keyNameColor = anyToggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
@@ -4159,7 +4173,7 @@ namespace RadarKeys {
 							if (gi) groupLabel += UI_LBL_KEY_GROUP_SEPARATOR;
 							groupLabel += groupNames[gi];
 						}
-						keyLabelLines.push_back(groupLabel);
+						if (!groupLabel.empty()) keyLabelLines.push_back(groupLabel);
 						for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
 							keyLabelLines.push_back(ComboKeysDisplayName(mergedCombo.activeKeys));
 						}
