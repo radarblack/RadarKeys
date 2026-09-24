@@ -294,6 +294,11 @@ namespace RadarKeys {
 		}
 		std::string override = ModKeyBindings::GetOverride(scriptName, functionName);
 		if (override.empty()) {
+			USHORT nativeVKey = KeyBindMenu::NativeVKeyForMod(scriptName, functionName);
+			if (nativeVKey != 0) {
+				LuaPushString(L, KeyBindMenu::NameForVKey(nativeVKey).c_str());
+				return 1;
+			}
 			LuaPushNil(L);
 		}
 		else {
