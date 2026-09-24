@@ -206,7 +206,16 @@ namespace RadarKeys {
 		return 0;
 	}
 
+	static void RecordDescribeNative(const char* scriptName, const char* functionName, const char* keyName) {
+		if (!scriptName || !*scriptName || !functionName || !*functionName || !keyName || !*keyName) return;
+		if (!ModKeyBindings::GetOverride(scriptName, functionName).empty()) return;
+		if (!ModKeyBindings::GetNativeKey(scriptName, functionName).empty()) return;
+		ModKeyBindings::SetNativeKeyWithoutSave(scriptName, functionName, keyName);
+		KeyBindMenu::SaveBindings();
+	}
+
 	static int l_DescribeKey(lua_State* L) {
+		const char* rawKey = LuaToString(L, 1);
 		const char* scriptName = LuaToString(L, 2);
 		const char* functionName = LuaToString(L, 3);
 		const char* toggleState = LuaToString(L, 4);
@@ -222,6 +231,7 @@ namespace RadarKeys {
 				functionName ? functionName : "",
 				toggleState ? toggleState : ""
 			);
+			RecordDescribeNative(scriptName, functionName, rawKey);
 			return 0;
 		}
 
@@ -235,6 +245,7 @@ namespace RadarKeys {
 			functionName ? functionName : "",
 			toggleState ? toggleState : ""
 		);
+		RecordDescribeNative(scriptName, functionName, rawKey);
 		return 0;
 	}
 
