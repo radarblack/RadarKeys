@@ -1546,10 +1546,11 @@ namespace RadarKeys {
 				std::string bindSlot = (SlotOfVKey(bind.vKey) == ModKeyBindings::BindSlot::Pad) ? "pad" : "kbm";
 				if (bind.injectScriptName != scriptName || bind.injectFunctionName != functionName || bindSlot != slotTag) continue;
 				exists = true;
-				if (bind.vKey == (USHORT)vKey && bind.scriptPathOn == sourcePath && bind.injectLineStart == lineStart && bind.injectLineEnd == lineEnd) {
+				if (bind.vKey == (USHORT)vKey && !bind.IsCombo() && bind.scriptPathOn == sourcePath && bind.injectLineStart == lineStart && bind.injectLineEnd == lineEnd) {
 					break;
 				}
 				if (bind.vKey != (USHORT)vKey) {
+					bind.comboKeys.clear();
 					RemoveDispatcherIfUnused(bind.vKey);
 					bind.vKey = (USHORT)vKey;
 					bind.keyName = keyName;
@@ -2159,6 +2160,11 @@ namespace RadarKeys {
 				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, true);
 				modKeyCount++;
 			}
+			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
+				if (ModKeyBindings::IsDisabled(entry.scriptName, entry.functionName)) continue;
+				ModKeyBindings::SetDisabledWithoutSave(entry.scriptName, entry.functionName, true);
+				modKeyCount++;
+			}
 
 			if (modKeyCount > 0) SaveBindings();
 			MarkDisplayCacheDirty();
@@ -2177,6 +2183,7 @@ namespace RadarKeys {
 				USHORT memberNative = 0;
 				for (auto& b : bindings) {
 					if (!b.isInject || !b.scriptDescribed || b.injectScriptName != info.scriptName || b.injectFunctionName != info.functionName) continue;
+					b.comboKeys.clear();
 					USHORT beforeRestore = b.vKey;
 					USHORT bindNative = b.nativeVKey;
 					if (bindNative == 0 && storedNativeResolved > 0 && SlotOfVKey((USHORT)storedNativeResolved) == SlotOfVKey(b.vKey)) bindNative = (USHORT)storedNativeResolved;
@@ -3550,6 +3557,9 @@ namespace RadarKeys {
 				}
 				for (size_t i = 0; i < trackedCombos.size(); ++i) {
 					LuaKeyState::TrackedComboKeyInfo& cinfo = trackedCombos[i];
+					std::vector<USHORT> ownerOverrideMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(cinfo.scriptName, cinfo.functionName));
+					std::vector<USHORT> ownerNativeMembers = ParseComboKeyNames(ModKeyBindings::GetNativeKey(cinfo.scriptName, cinfo.functionName));
+					if (!VectorsEqualUnordered(ownerOverrideMembers, cinfo.activeKeys) && !VectorsEqualUnordered(ownerNativeMembers, cinfo.activeKeys)) continue;
 					unsigned cinfoMask = ModComboTriggerMask(cinfo);
 					bool conflicted = IsComboConflictedWithBindings(cinfo.activeKeys, -1, cinfoMask, true);
 					if (!conflicted) {
@@ -3597,18 +3607,59 @@ namespace RadarKeys {
 						i++;
 						continue;
 					}
+					LuaKeyState::TrackedComboKeyInfo& cinfo = rows[i].comboInfo;
+					std::vector<USHORT> ownerOverrideMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(cinfo.scriptName, cinfo.functionName));
+					std::vector<USHORT> ownerNativeMembers = ParseComboKeyNames(ModKeyBindings::GetNativeKey(cinfo.scriptName, cinfo.functionName));
+					bool corroborated = VectorsEqualUnordered(ownerOverrideMembers, cinfo.activeKeys) || VectorsEqualUnordered(ownerNativeMembers, cinfo.activeKeys);
 					bool merged = false;
-					for (UnifiedRow& r : rows) {
-						if (r.isComboScript || r.isManual || !r.info.hasDescription) continue;
-						if (r.info.scriptName == rows[i].comboInfo.scriptName && r.info.functionName == rows[i].comboInfo.functionName) {
-							r.mergedCombos.push_back(rows[i].comboInfo);
-							if (rows[i].conflicted) r.conflicted = true;
-							merged = true;
-							break;
+					if (corroborated) {
+						for (UnifiedRow& r : rows) {
+							if (r.isComboScript || r.isManual || !r.info.hasDescription) continue;
+							if (r.info.scriptName == cinfo.scriptName && r.info.functionName == cinfo.functionName) {
+								r.mergedCombos.push_back(cinfo);
+								if (rows[i].conflicted) r.conflicted = true;
+								merged = true;
+								break;
+							}
 						}
 					}
 					if (merged) rows.erase(rows.begin() + i);
 					else i++;
+				}
+				for (UnifiedRow& r : rows) {
+					if (r.isComboScript || r.isManual || !r.info.hasDescription) continue;
+					std::vector<USHORT> overrideMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(r.info.scriptName, r.info.functionName));
+					if (overrideMembers.size() < 2) continue;
+					bool alreadyListed = false;
+					for (const LuaKeyState::TrackedComboKeyInfo& existing : r.mergedCombos) {
+						if (VectorsEqualUnordered(existing.activeKeys, overrideMembers)) { alreadyListed = true; break; }
+					}
+					if (alreadyListed) continue;
+					LuaKeyState::TrackedComboKeyInfo synthesized;
+					synthesized.activeKeys = CanonicalizeComboKeys(overrideMembers);
+					synthesized.scriptName = r.info.scriptName;
+					synthesized.functionName = r.info.functionName;
+					r.mergedCombos.push_back(synthesized);
+				}
+				for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
+					std::vector<USHORT> overrideMembers = ParseComboKeyNames(entry.keyName);
+					if (overrideMembers.size() < 2) continue;
+					bool represented = false;
+					for (const UnifiedRow& r : rows) {
+						if (r.isManual) continue;
+						if (!r.isComboScript && r.info.hasDescription && r.info.scriptName == entry.scriptName && r.info.functionName == entry.functionName) { represented = true; break; }
+						if (r.isComboScript && r.comboInfo.scriptName == entry.scriptName && r.comboInfo.functionName == entry.functionName) { represented = true; break; }
+					}
+					if (represented) continue;
+					LuaKeyState::TrackedComboKeyInfo synthesized;
+					synthesized.activeKeys = CanonicalizeComboKeys(overrideMembers);
+					synthesized.scriptName = entry.scriptName;
+					synthesized.functionName = entry.functionName;
+					UnifiedRow row;
+					row.isManual = false;
+					row.isComboScript = true;
+					row.comboInfo = std::move(synthesized);
+					rows.push_back(std::move(row));
 				}
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 
@@ -3654,6 +3705,15 @@ namespace RadarKeys {
 
 					const float conflictBoxHeight = 34.0f;
 					ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
+					float detailAvailX = ImGui::GetContentRegionAvail().x;
+					float detailPredictedHeight = ImGui::CalcTextSize(detailText.c_str(), nullptr, false, detailAvailX).y;
+					float mergedComboExtra = row.isComboScript ? 0.0f : (float)row.mergedCombos.size() * (ImGui::GetTextLineHeight() + 2.0f);
+					float modButtonHeight = buttonHeight + mergedComboExtra;
+					float rowContentHeight = (detailPredictedHeight > modButtonHeight) ? detailPredictedHeight : modButtonHeight;
+					float detailYOffset = (rowContentHeight - detailPredictedHeight) * 0.5f;
+					float keyButtonYOffset = (rowContentHeight - modButtonHeight) * 0.5f;
+					float stdButtonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
+					ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY + detailYOffset));
 					ImGui::AlignTextToFramePadding();
 					ImGui::BeginGroup();
 					if (row.conflicted) {
@@ -3705,13 +3765,7 @@ namespace RadarKeys {
 						}
 					}
 
-					float detailTextHeight = ImGui::GetItemRectSize().y;
-					float mergedComboExtra = row.isComboScript ? 0.0f : (float)row.mergedCombos.size() * (ImGui::GetTextLineHeight() + 2.0f);
-					float modButtonHeight = buttonHeight + mergedComboExtra;
-					float rowContentHeight = (detailTextHeight > modButtonHeight) ? detailTextHeight : modButtonHeight;
-					float buttonYOffset = (rowContentHeight - modButtonHeight) * 0.5f;
-
-					ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
+					ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + stdButtonYOffset));
 					if (row.isManual) {
 						int bindIdx = row.bindIndex;
 						bool isDisabled = bindings[bindIdx].disabled || bindings[bindIdx].autoDisabled;
@@ -3830,6 +3884,7 @@ namespace RadarKeys {
 						ImGui::EndDisabled();
 					}
 					ImGui::SameLine();
+					ImGui::SetCursorPosY(rowTopY + keyButtonYOffset);
 
 					if (row.isManual) {
 						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
@@ -4067,6 +4122,7 @@ namespace RadarKeys {
 						ModKeyBindings::SetOverride(pendingResetScriptName, pendingResetFunctionName, "");
 						for (auto& b : bindings) {
 							if (!b.isInject || !b.scriptDescribed || b.injectScriptName != pendingResetScriptName || b.injectFunctionName != pendingResetFunctionName) continue;
+							b.comboKeys.clear();
 							b.isInstant = false;
 							b.instantTriggerType = 0;
 							b.holdSeconds = 0.0f;
