@@ -1009,6 +1009,7 @@ namespace RadarKeys {
 
 			for (const auto& bind : bindings) {
 				if (bind.vKey != vKey) continue;
+				if (bind.IsCombo()) continue;
 				if (bind.disabled || bind.autoDisabled) continue;
 				bool categoryMatches = preferHold ? (bind.holdSeconds > 0.0f) : (bind.holdSeconds <= 0.0f);
 				if (!categoryMatches) continue;
@@ -1259,7 +1260,7 @@ namespace RadarKeys {
 
 					bool hasHoldOptionOnKey = false;
 					for (const auto& bind : bindings) {
-						if (bind.vKey == vKey && bind.holdSeconds > 0.0f && !bind.disabled && !bind.autoDisabled) {
+						if (bind.vKey == vKey && !bind.IsCombo() && bind.holdSeconds > 0.0f && !bind.disabled && !bind.autoDisabled) {
 						if (bind.needCtrl == ctrlHeld && bind.needShift == shiftHeld && bind.needAlt == altHeld) {
 								hasHoldOptionOnKey = true;
 								break;
@@ -1345,7 +1346,7 @@ namespace RadarKeys {
 
 			for (KeyBind& bind : bindings) {
 				if (!bind.IsCombo()) continue;
-				if (bind.disabled) continue;
+				if (bind.disabled || bind.autoDisabled) continue;
 
 				bool allHeld = true;
 				for (USHORT k : bind.comboKeys) {
