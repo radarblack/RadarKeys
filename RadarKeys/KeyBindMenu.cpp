@@ -3437,7 +3437,7 @@ namespace RadarKeys {
 		}
 
 		void RebuildDisplayCacheIfNeeded() {
-			if (!displayCacheDirty) return;
+			if (!displayCacheDirty && displayCache.size() == bindings.size()) return;
 
 			displayCache.clear();
 			displayCache.reserve(bindings.size());
@@ -4112,9 +4112,18 @@ namespace RadarKeys {
 						std::vector<USHORT> currentOverrideComboMembers = ParseComboKeyNames(currentOverrideName);
 						for (const LuaKeyState::TrackedKeyInfo& member : row.groupMembers) {
 							USHORT memberDisplayVKey = ResolveDisplayVKey(member);
-							bool memberIsComboGhost = !currentOverrideComboMembers.empty()
-								&& SlotOfVKey(memberDisplayVKey) == SlotOfVKey(currentOverrideComboMembers.front());
-							if (memberIsComboGhost) {
+							bool memberIsGhost = false;
+							if (!currentOverrideComboMembers.empty()) {
+								memberIsGhost = SlotOfVKey(memberDisplayVKey) == SlotOfVKey(currentOverrideComboMembers.front());
+							} else {
+								int overrideSingleVKey = currentOverrideName.empty() ? -1 : VKeyForName(currentOverrideName);
+								std::string authorityName = overrideSingleVKey > 0 ? currentOverrideName : ModKeyBindings::GetNativeKey(row.info.scriptName, row.info.functionName);
+								int authorityVKey = authorityName.empty() ? -1 : VKeyForName(authorityName);
+								memberIsGhost = authorityVKey > 0
+									&& SlotOfVKey(memberDisplayVKey) == SlotOfVKey((USHORT)authorityVKey)
+									&& (USHORT)authorityVKey != memberDisplayVKey;
+							}
+							if (memberIsGhost) {
 								continue;
 							}
 							if (RawInput::IsKeyHeldReal(memberDisplayVKey)) {
@@ -4132,8 +4141,10 @@ namespace RadarKeys {
 						if (groupNames.empty() && !row.storeNativeName.empty()) {
 							std::vector<USHORT> nativeLineMembers = ParseComboKeyNames(row.storeNativeName);
 							int nativeLineVKey = nativeLineMembers.empty() ? VKeyForName(row.storeNativeName) : (int)nativeLineMembers.front();
-							bool nativeLineReplaced = nativeLineVKey > 0 && !currentOverrideComboMembers.empty()
-								&& SlotOfVKey((USHORT)nativeLineVKey) == SlotOfVKey(currentOverrideComboMembers.front());
+							int overrideLineVKey = currentOverrideName.empty() ? -1 : VKeyForName(currentOverrideName);
+							USHORT overrideSlotRef = currentOverrideComboMembers.empty() ? (USHORT)(overrideLineVKey > 0 ? overrideLineVKey : -1) : currentOverrideComboMembers.front();
+							bool nativeLineReplaced = nativeLineVKey > 0 && overrideSlotRef != (USHORT)(-1)
+								&& SlotOfVKey((USHORT)nativeLineVKey) == SlotOfVKey(overrideSlotRef);
 							if (!nativeLineReplaced) {
 								groupNames.push_back(row.storeNativeName);
 							}
