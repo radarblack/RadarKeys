@@ -34,6 +34,7 @@ namespace RadarKeys {
 			bool scriptDescribed = false;
 			std::string injectScriptName;
 			std::string injectFunctionName;
+			USHORT nativeVKey = 0;
 
 			// lua script pass
 			std::string functionOn;
@@ -58,6 +59,8 @@ namespace RadarKeys {
 		void LogCleanShutdown();
 		void LogActivity(const std::string& message, bool success = true);
 		void SaveBindings();
+
+		USHORT NativeVKeyForMod(const std::string& scriptName, const std::string& functionName);
 
 		std::string NameForVKey(USHORT vKey);
 		int VKeyForName(const std::string& name);
