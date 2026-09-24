@@ -21,6 +21,7 @@ namespace RadarKeys {
 			int triggerType = 0;
 			float holdSeconds = 0.0f;
 			float repeatAccelMult = 1.0f;
+			std::string nativeKeyName;
 		};
 
 		static std::map<std::string, std::map<std::string, SlotOverride>> overrides;
@@ -99,6 +100,7 @@ namespace RadarKeys {
 					entry.triggerType = funcEntry.second.triggerType;
 					entry.holdSeconds = funcEntry.second.holdSeconds;
 					entry.repeatAccelMult = funcEntry.second.repeatAccelMult;
+					entry.nativeKeyName = funcEntry.second.nativeKeyName;
 					result.push_back(entry);
 					seen[scriptEntry.first][funcEntry.first] = true;
 				}
@@ -130,6 +132,9 @@ namespace RadarKeys {
 				}
 				if (!e.padKeyName.empty()) {
 					overrides[e.scriptName][e.functionName].pad = e.padKeyName;
+				}
+				if (!e.nativeKeyName.empty()) {
+					overrides[e.scriptName][e.functionName].nativeKeyName = e.nativeKeyName;
 				}
 				if (e.triggerType != 0 || e.holdSeconds > 0.0f || e.repeatAccelMult != 1.0f) {
 					overrides[e.scriptName][e.functionName].triggerType = e.triggerType;
@@ -201,6 +206,36 @@ namespace RadarKeys {
 			return config.triggerType != 0 || config.holdSeconds > 0.0f || config.repeatAccelMult != 1.0f;
 		}
 
+		std::string GetNativeKey(const std::string& scriptName, const std::string& functionName) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			if (!loaded) {
+				Load();
+			}
+			auto scriptIt = overrides.find(scriptName);
+			if (scriptIt == overrides.end()) {
+				return "";
+			}
+			auto funcIt = scriptIt->second.find(functionName);
+			if (funcIt == scriptIt->second.end()) {
+				return "";
+			}
+			return funcIt->second.nativeKeyName;
+		}
+
+		void SetNativeKeyWithoutSave(const std::string& scriptName, const std::string& functionName, const std::string& keyName) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			if (!loaded) {
+				Load();
+			}
+			if (keyName.empty()) {
+				return;
+			}
+			auto& native = overrides[scriptName][functionName].nativeKeyName;
+			if (native.empty()) {
+				native = keyName;
+			}
+		}
+
 		std::string GetOverride(const std::string& scriptName, const std::string& functionName) {
 			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			if (!loaded) {
@@ -241,8 +276,18 @@ namespace RadarKeys {
 			if (keyName.empty()) {
 				auto scriptIt = overrides.find(scriptName);
 				if (scriptIt != overrides.end()) {
-					scriptIt->second.erase(functionName);
-					if (scriptIt->second.empty()) overrides.erase(scriptIt);
+					auto funcIt = scriptIt->second.find(functionName);
+					if (funcIt != scriptIt->second.end()) {
+						funcIt->second.kbm.clear();
+						funcIt->second.pad.clear();
+						funcIt->second.triggerType = 0;
+						funcIt->second.holdSeconds = 0.0f;
+						funcIt->second.repeatAccelMult = 1.0f;
+						if (funcIt->second.nativeKeyName.empty()) {
+							scriptIt->second.erase(funcIt);
+							if (scriptIt->second.empty()) overrides.erase(scriptIt);
+						}
+					}
 				}
 			} else {
 				overrides[scriptName][functionName].kbm = keyName;
@@ -280,7 +325,7 @@ namespace RadarKeys {
 					if (funcIt != scriptIt->second.end()) {
 						if (slot == BindSlot::Pad) funcIt->second.pad.clear();
 						else funcIt->second.kbm.clear();
-						if (funcIt->second.kbm.empty() && funcIt->second.pad.empty() && funcIt->second.triggerType == 0 && funcIt->second.holdSeconds == 0.0f && funcIt->second.repeatAccelMult == 1.0f) {
+						if (funcIt->second.kbm.empty() && funcIt->second.pad.empty() && funcIt->second.triggerType == 0 && funcIt->second.holdSeconds == 0.0f && funcIt->second.repeatAccelMult == 1.0f && funcIt->second.nativeKeyName.empty()) {
 							scriptIt->second.erase(funcIt);
 							if (scriptIt->second.empty()) overrides.erase(scriptIt);
 						}
