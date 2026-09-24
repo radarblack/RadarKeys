@@ -177,6 +177,8 @@ namespace RadarKeys {
 		static const char* UI_FMT_RESET_CONFIRM = "Reset \"%s [%s]\" to the mod's default key?";
 		static const char* UI_TXT_CLEARS_REASSIGNMENT = "This clears the reassignment made in this menu.";
 		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Disable All Hotkeys";
+		static const char* UI_BTN_ENABLE_ALL_KEYS = "Enable All Keys";
+		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_POPUP_CLEAR_ALL_CONFIRM = "Clear All Hotkeys?";
 		static const char* UI_TXT_CLEAR_ALL_CONFIRM = "Reset all mod key overrides to their defaults and remove every manually-assigned binding?";
@@ -2171,6 +2173,38 @@ namespace RadarKeys {
 			LogActivity("KeyBindMenu: Disabled all hotkeys (" + std::to_string(manualCount) + " manual, " + std::to_string(modKeyCount) + " mod key(s))");
 		}
 
+		void EnableAllBindingsAndModKeys() {
+			size_t manualCount = 0;
+			for (KeyBind& bind : bindings) {
+				if (bind.disabled) {
+					bind.disabled = false;
+					manualCount++;
+				}
+			}
+			if (manualCount > 0) SaveBindings();
+
+			size_t modKeyCount = 0;
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (!info.hasDescription) continue;
+				if (!ModKeyBindings::IsDisabled(info.scriptName, info.functionName)) continue;
+				ModKeyBindings::SetDisabledWithoutSave(info.scriptName, info.functionName, false);
+				modKeyCount++;
+			}
+			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (!ModKeyBindings::IsDisabled(cinfo.scriptName, cinfo.functionName)) continue;
+				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, false);
+				modKeyCount++;
+			}
+			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
+				if (!ModKeyBindings::IsDisabled(entry.scriptName, entry.functionName)) continue;
+				ModKeyBindings::SetDisabledWithoutSave(entry.scriptName, entry.functionName, false);
+				modKeyCount++;
+			}
+			if (modKeyCount > 0) SaveBindings();
+			MarkDisplayCacheDirty();
+			LogActivity("KeyBindMenu: Enabled all hotkeys (" + std::to_string(manualCount) + " manual, " + std::to_string(modKeyCount) + " mod key(s))");
+		}
+
 		void ResetAndRemoveAllBindingsAndModKeys() {
 			size_t resetCount = 0;
 			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
@@ -3713,7 +3747,7 @@ namespace RadarKeys {
 					float detailYOffset = (rowContentHeight - detailPredictedHeight) * 0.5f;
 					float keyButtonYOffset = (rowContentHeight - modButtonHeight) * 0.5f;
 					float stdButtonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
-					ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY + detailYOffset));
+					ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY + (std::max)(0.0f, detailYOffset - 2.0f)));
 					ImGui::AlignTextToFramePadding();
 					ImGui::BeginGroup();
 					if (row.conflicted) {
@@ -4201,9 +4235,25 @@ namespace RadarKeys {
 				for (const auto& c : LuaKeyState::GetTrackedComboKeyInfo()) { (void)c; anyTrackedModKeys = true; break; }
 			}
 			bool clearAllDisabled = bindings.empty() && !anyTrackedModKeys;
+			bool allKeysDisabled = true;
+			for (const KeyBind& bind : bindings) {
+				if (bind.isInject && bind.scriptDescribed) continue;
+				if (!bind.disabled) allKeysDisabled = false;
+			}
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (!info.hasDescription) continue;
+				if (!ModKeyBindings::IsDisabled(info.scriptName, info.functionName)) allKeysDisabled = false;
+			}
+			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (!ModKeyBindings::IsDisabled(cinfo.scriptName, cinfo.functionName)) allKeysDisabled = false;
+			}
+			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
+				if (!ModKeyBindings::IsDisabled(entry.scriptName, entry.functionName)) allKeysDisabled = false;
+			}
+			bool enableAllMode = allKeysDisabled && !clearAllDisabled;
 
 			if (clearAllDisabled) ImGui::BeginDisabled();
-			bool clearAllClicked = ImGui::Button(UI_BTN_CLEAR_ALL_HOTKEYS, ImVec2(145, 24));
+			bool clearAllClicked = ImGui::Button(enableAllMode ? UI_BTN_ENABLE_ALL_KEYS : UI_BTN_CLEAR_ALL_HOTKEYS, ImVec2(145, 24));
 			ImVec2 clearAllBtnMin = ImGui::GetItemRectMin();
 			ImVec2 clearAllBtnMax = ImGui::GetItemRectMax();
 			if (ImGui::IsItemActive()) {
@@ -4227,11 +4277,11 @@ namespace RadarKeys {
 			}
 
 			if (clearAllClicked && !clearAllConfirmPending) {
-				DisableAllBindingsAndModKeys();
+				if (enableAllMode) EnableAllBindingsAndModKeys(); else DisableAllBindingsAndModKeys();
 			}
 
 			if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
-				ImGui::SetTooltip("%s", UI_TIP_CLICK_HOLD_CLEAR_ALL);
+				ImGui::SetTooltip("%s", enableAllMode ? UI_TIP_CLICK_HOLD_ENABLE_ALL : UI_TIP_CLICK_HOLD_CLEAR_ALL);
 			}
 			if (clearAllDisabled) ImGui::EndDisabled();
 
