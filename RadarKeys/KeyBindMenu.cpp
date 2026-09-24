@@ -2600,6 +2600,28 @@ namespace RadarKeys {
 				result.anyInstant = true;
 				result.instantType = bestInstantPriority;
 			}
+			if (result.breakdownLines.empty()) {
+				std::vector<USHORT> overrideMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(scriptName, functionName));
+				if (overrideMembers.size() >= 2) {
+					result.found = true;
+					std::string triggerLabel = "Multi-key combo";
+					ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
+					if (storedTrigger.triggerType == 0 && storedTrigger.holdSeconds > 0.0f) {
+						result.anyLongPress = true;
+						result.longPressSeconds = (double)storedTrigger.holdSeconds;
+						triggerLabel += " / Long Press";
+					} else if (storedTrigger.triggerType == 2) {
+						result.anyInstant = true;
+						result.instantType = 2;
+						triggerLabel += " / Repeat";
+					} else if (storedTrigger.triggerType == 1) {
+						result.anyInstant = true;
+						result.instantType = 1;
+						triggerLabel += " / On Release";
+					}
+					result.breakdownLines.push_back(triggerLabel + " -> " + scriptName + " [" + functionName + "]");
+				}
+			}
 			return result;
 		}
 
@@ -3556,6 +3578,7 @@ namespace RadarKeys {
 					USHORT displayVKey = 0;
 					std::vector<LuaKeyState::TrackedKeyInfo> groupMembers;
 					std::vector<LuaKeyState::TrackedComboKeyInfo> mergedCombos;
+					std::string storeNativeName;
 				};
 				std::vector<UnifiedRow> rows;
 				rows.reserve(trackedKeys.size() + trackedCombos.size() + bindings.size());
@@ -3588,6 +3611,37 @@ namespace RadarKeys {
 					row.conflicted = conflicted;
 					row.displayVKey = displayVKey;
 					rows.push_back(std::move(row));
+				}
+				{
+					std::unordered_set<std::string> representedIdentities;
+					for (const UnifiedRow& r : rows) {
+						if (!r.isManual && !r.isComboScript && r.info.hasDescription) representedIdentities.insert(r.info.scriptName + "\x1f" + r.info.functionName);
+					}
+					for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
+						std::string identity = entry.scriptName + "\x1f" + entry.functionName;
+						if (representedIdentities.count(identity) > 0) continue;
+						std::string assignedName = !entry.keyName.empty() ? entry.keyName : entry.nativeKeyName;
+						if (assignedName.empty()) continue;
+						std::vector<USHORT> members = ParseComboKeyNames(assignedName);
+						int resolvedVKey = members.empty() ? VKeyForName(assignedName) : (int)members.front();
+						if (resolvedVKey <= 0) continue;
+						std::string nativeName = !entry.nativeKeyName.empty() ? entry.nativeKeyName : NameForVKey((USHORT)resolvedVKey);
+						LuaKeyState::TrackedKeyInfo synthInfo;
+						synthInfo.vKey = (USHORT)resolvedVKey;
+						synthInfo.hasDescription = true;
+						synthInfo.scriptName = entry.scriptName;
+						synthInfo.functionName = entry.functionName;
+						UnifiedRow row;
+						row.isManual = false;
+						row.isComboScript = false;
+						row.info = synthInfo;
+						row.groupMembers.push_back(synthInfo);
+						row.storeNativeName = nativeName;
+						row.displayVKey = (USHORT)resolvedVKey;
+						row.conflicted = conflictedVKeys.count((USHORT)resolvedVKey) > 0;
+						rows.push_back(std::move(row));
+						representedIdentities.insert(identity);
+					}
 				}
 				for (size_t i = 0; i < trackedCombos.size(); ++i) {
 					LuaKeyState::TrackedComboKeyInfo& cinfo = trackedCombos[i];
@@ -4034,6 +4088,9 @@ namespace RadarKeys {
 							if (std::find(groupNames.begin(), groupNames.end(), memberName) == groupNames.end()) {
 								groupNames.push_back(memberName);
 							}
+						}
+						if (groupNames.empty() && !row.storeNativeName.empty()) {
+							groupNames.push_back(row.storeNativeName);
 						}
 						if (anyToggle) {
 							keyNameColor = anyToggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
