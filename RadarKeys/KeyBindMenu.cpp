@@ -2331,7 +2331,25 @@ namespace RadarKeys {
 					rowBind = &b;
 					break;
 				}
-				if (rowBind != nullptr) {
+				if (!row.scriptName.empty() && ModKeyBindings::HasTriggerConfig(row.scriptName, row.functionName)) {
+					ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(row.scriptName, row.functionName);
+					if (storedTrigger.triggerType == 0 && storedTrigger.holdSeconds > 0.0f) {
+						char holdBuf[32];
+						snprintf(holdBuf, sizeof(holdBuf), "%.1fs", storedTrigger.holdSeconds);
+						triggerLabel = std::string("Long Press (") + holdBuf + ")";
+						result.anyLongPress = true;
+						result.longPressSeconds = (double)storedTrigger.holdSeconds;
+					} else if (storedTrigger.triggerType == 2) {
+						if (bestInstantPriority < 2) bestInstantPriority = 2;
+						triggerLabel = "Repeat";
+					} else if (storedTrigger.triggerType == 1) {
+						if (bestInstantPriority < 1) bestInstantPriority = 1;
+						triggerLabel = "On Release";
+					} else {
+						if (bestInstantPriority < 0) bestInstantPriority = 0;
+						triggerLabel = "On Press";
+					}
+				} else if (rowBind != nullptr) {
 					if (rowBind->holdSeconds > 0.0f) {
 						result.anyLongPress = true;
 						result.longPressSeconds = rowBind->holdSeconds;
@@ -2401,21 +2419,38 @@ namespace RadarKeys {
 					result.anyToggle = true;
 				}
 				std::string triggerLabel = "Multi-key combo";
-				if (row.usesHoldTime) {
+				bool hasStoredTrigger = ModKeyBindings::HasTriggerConfig(scriptName, functionName);
+				if (hasStoredTrigger) {
+					ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
+					if (storedTrigger.triggerType == 0 && storedTrigger.holdSeconds > 0.0f) {
+						result.anyLongPress = true;
+						result.longPressSeconds = (double)storedTrigger.holdSeconds;
+						triggerLabel += " / Long Press";
+					}
+					if (storedTrigger.triggerType == 2) {
+						bestInstantPriority = (std::max)(bestInstantPriority, 2);
+						triggerLabel += " / Repeat";
+					} else if (storedTrigger.triggerType == 1) {
+						bestInstantPriority = (std::max)(bestInstantPriority, 1);
+						triggerLabel += " / On Release";
+					}
+				} else if (row.usesHoldTime) {
 					result.anyLongPress = true;
 					triggerLabel += " / Long Press";
 				}
-				if (row.usesRepeat) {
-					bestInstantPriority = (std::max)(bestInstantPriority, 2);
-					triggerLabel += " / Repeat";
-				}
-				if (row.usesOnRelease) {
-					bestInstantPriority = (std::max)(bestInstantPriority, 1);
-					triggerLabel += " / On Release";
-				}
-				if (row.usesOnPress) {
-					bestInstantPriority = (std::max)(bestInstantPriority, 0);
-					triggerLabel += " / On Press";
+				if (!hasStoredTrigger) {
+					if (row.usesRepeat) {
+						bestInstantPriority = (std::max)(bestInstantPriority, 2);
+						triggerLabel += " / Repeat";
+					}
+					if (row.usesOnRelease) {
+						bestInstantPriority = (std::max)(bestInstantPriority, 1);
+						triggerLabel += " / On Release";
+					}
+					if (row.usesOnPress) {
+						bestInstantPriority = (std::max)(bestInstantPriority, 0);
+						triggerLabel += " / On Press";
+					}
 				}
 				result.breakdownLines.push_back(triggerLabel + " -> " + row.scriptName + " [" + row.functionName + "]");
 				break;
