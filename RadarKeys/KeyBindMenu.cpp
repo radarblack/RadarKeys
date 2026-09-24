@@ -524,6 +524,19 @@ namespace RadarKeys {
 			return "Unknown(" + std::to_string(vKey) + ")";
 		}
 
+		USHORT NativeVKeyForMod(const std::string& scriptName, const std::string& functionName) {
+			std::string nativeName = ModKeyBindings::GetNativeKey(scriptName, functionName);
+			if (!nativeName.empty()) {
+				int resolved = VKeyForName(nativeName);
+				if (resolved > 0) return (USHORT)resolved;
+			}
+			for (const auto& b : bindings) {
+				if (!b.isInject || !b.scriptDescribed || b.injectScriptName != scriptName || b.injectFunctionName != functionName) continue;
+				if (b.nativeVKey != 0) return b.nativeVKey;
+			}
+			return 0;
+		}
+
 		int VKeyForName(const std::string& name) {
 			for (const auto& entry : vkNameTable) {
 				if (name == entry.name) return entry.vKey;
@@ -1431,6 +1444,7 @@ namespace RadarKeys {
 				bind.scriptPathOn = sourcePath;
 				bind.injectLineStart = lineStart;
 				bind.injectLineEnd = lineEnd;
+				if (bind.nativeVKey == 0 && !ModKeyBindings::GetOverride(scriptName, functionName).empty() == false) bind.nativeVKey = bind.vKey;
 				bind.autoDisabled = BuildInjectContent(sourcePath, lineStart, lineEnd).empty();
 				ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
 				if (storedTrigger.triggerType == 2) {
@@ -1479,6 +1493,12 @@ namespace RadarKeys {
 					newBind.instantTriggerType = storedTrigger.triggerType;
 					newBind.holdSeconds = (storedTrigger.triggerType == 0) ? storedTrigger.holdSeconds : 0.0f;
 					newBind.repeatAccelMult = 1.0f;
+				}
+				bool overrideActiveAtCreate = !ModKeyBindings::GetOverride(scriptName, functionName).empty();
+				newBind.nativeVKey = overrideActiveAtCreate ? (USHORT)0 : (USHORT)vKey;
+				if (!overrideActiveAtCreate && ModKeyBindings::GetNativeKey(scriptName, functionName).empty()) {
+					ModKeyBindings::SetNativeKeyWithoutSave(scriptName, functionName, keyName);
+					SaveBindings();
 				}
 				bindings.push_back(newBind);
 				EnsureDispatcherRegistered(newBind.vKey);
@@ -1606,7 +1626,7 @@ namespace RadarKeys {
 				if (entry.keyName == entry.padKeyName && entry.triggerType == 0 && entry.holdSeconds == 0.0f && entry.repeatAccelMult == 1.0f) {
 					outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << (entry.disabled ? "1" : "0") << "\n";
 				} else {
-					outFile << "MODKEY2|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << entry.padKeyName << "|" << (entry.disabled ? "1" : "0") << "|" << entry.triggerType << "|" << entry.holdSeconds << "|" << entry.repeatAccelMult << "\n";
+					outFile << "MODKEY2|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << entry.padKeyName << "|" << (entry.disabled ? "1" : "0") << "|" << entry.triggerType << "|" << entry.holdSeconds << "|" << entry.repeatAccelMult << "|" << entry.nativeKeyName << "\n";
 				}
 			}
 			outFile.close();
@@ -1694,6 +1714,9 @@ namespace RadarKeys {
 						catch (...) { entry.repeatAccelMult = 1.0f; }
 						if (!std::isfinite(entry.repeatAccelMult) || entry.repeatAccelMult < 0.1f) entry.repeatAccelMult = 0.1f;
 						else if (entry.repeatAccelMult > 20.0f) entry.repeatAccelMult = 20.0f;
+					}
+					if (parts.size() >= 10) {
+						entry.nativeKeyName = trim(parts[9]);
 					}
 					if (!entry.scriptName.empty() && !entry.functionName.empty() && (!entry.keyName.empty() || !entry.padKeyName.empty() || entry.disabled || entry.triggerType != 0 || entry.holdSeconds > 0.0f)) {
 						modKeyEntries.push_back(std::move(entry));
@@ -2024,9 +2047,34 @@ namespace RadarKeys {
 			size_t resetCount = 0;
 			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
 				if (!info.hasDescription) continue;
-				if (ModKeyBindings::GetOverride(info.scriptName, info.functionName).empty()) continue;
-				USHORT bulkNativeVKey = LuaKeyState::FindRedirectSource(info.vKey);
+				bool hadOverride = !ModKeyBindings::GetOverride(info.scriptName, info.functionName).empty();
+				bool hadTriggerConfig = ModKeyBindings::HasTriggerConfig(info.scriptName, info.functionName);
+				if (!hadOverride && !hadTriggerConfig) continue;
+				std::string storedNativeName = ModKeyBindings::GetNativeKey(info.scriptName, info.functionName);
+				int storedNativeResolved = storedNativeName.empty() ? -1 : VKeyForName(storedNativeName);
+				USHORT memberNative = 0;
+				for (auto& b : bindings) {
+					if (!b.isInject || !b.scriptDescribed || b.injectScriptName != info.scriptName || b.injectFunctionName != info.functionName) continue;
+					USHORT beforeRestore = b.vKey;
+					USHORT bindNative = b.nativeVKey;
+					if (bindNative == 0 && storedNativeResolved > 0 && SlotOfVKey((USHORT)storedNativeResolved) == SlotOfVKey(b.vKey)) bindNative = (USHORT)storedNativeResolved;
+					if (bindNative != 0 && bindNative != b.vKey) {
+						RemoveDispatcherIfUnused(b.vKey);
+						b.vKey = bindNative;
+						b.keyName = NameForVKey(bindNative);
+						EnsureDispatcherRegistered(b.vKey);
+					}
+					if (beforeRestore == info.vKey && bindNative != 0) memberNative = bindNative;
+					b.isInstant = false;
+					b.instantTriggerType = 0;
+					b.holdSeconds = 0.0f;
+					b.repeatAccelMult = 1.0f;
+				}
+				ModKeyBindings::SetTriggerConfigWithoutSave(info.scriptName, info.functionName, 0, 0.0f, 1.0f);
 				ModKeyBindings::SetOverrideWithoutSave(info.scriptName, info.functionName, "");
+				USHORT bulkNativeVKey = memberNative;
+				if (bulkNativeVKey == 0 && storedNativeResolved > 0 && SlotOfVKey((USHORT)storedNativeResolved) == SlotOfVKey(info.vKey)) bulkNativeVKey = (USHORT)storedNativeResolved;
+				if (bulkNativeVKey == 0) bulkNativeVKey = LuaKeyState::FindRedirectSource(info.vKey);
 				if (bulkNativeVKey != 0 && bulkNativeVKey != info.vKey) {
 					LuaKeyState::ReassignBinding(info.vKey, bulkNativeVKey, info.scriptName, info.functionName);
 				}
@@ -3836,12 +3884,39 @@ namespace RadarKeys {
 							b.holdSeconds = 0.0f;
 							b.repeatAccelMult = 1.0f;
 						}
+						for (auto& b : bindings) {
+							if (!b.isInject || !b.scriptDescribed || b.injectScriptName != pendingResetScriptName || b.injectFunctionName != pendingResetFunctionName) continue;
+							USHORT bindNative = b.nativeVKey;
+							if (bindNative == 0) {
+								std::string storedNative = ModKeyBindings::GetNativeKey(b.injectScriptName, b.injectFunctionName);
+								int resolvedNative = storedNative.empty() ? -1 : VKeyForName(storedNative);
+								if (resolvedNative > 0 && SlotOfVKey((USHORT)resolvedNative) == SlotOfVKey(b.vKey)) bindNative = (USHORT)resolvedNative;
+							}
+							if (bindNative != 0 && bindNative != b.vKey) {
+								RemoveDispatcherIfUnused(b.vKey);
+								b.vKey = bindNative;
+								b.keyName = NameForVKey(bindNative);
+								EnsureDispatcherRegistered(b.vKey);
+							}
+						}
 						MarkDisplayCacheDirty();
 						for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
 							if (info.scriptName != pendingResetScriptName || info.functionName != pendingResetFunctionName) {
 								continue;
 							}
-							USHORT resetNativeVKey = LuaKeyState::FindRedirectSource(info.vKey);
+							USHORT resetNativeVKey = 0;
+							{
+								std::string storedNative = ModKeyBindings::GetNativeKey(pendingResetScriptName, pendingResetFunctionName);
+								int resolvedNative = storedNative.empty() ? -1 : VKeyForName(storedNative);
+								if (resolvedNative > 0 && SlotOfVKey((USHORT)resolvedNative) == SlotOfVKey(info.vKey)) resetNativeVKey = (USHORT)resolvedNative;
+							}
+							if (resetNativeVKey == 0) {
+								for (const auto& b : bindings) {
+									if (!b.isInject || !b.scriptDescribed || b.injectScriptName != pendingResetScriptName || b.injectFunctionName != pendingResetFunctionName) continue;
+									if (SlotOfVKey(b.vKey) == SlotOfVKey(info.vKey) && b.nativeVKey != 0) { resetNativeVKey = b.nativeVKey; break; }
+								}
+							}
+							if (resetNativeVKey == 0) resetNativeVKey = LuaKeyState::FindRedirectSource(info.vKey);
 							if (resetNativeVKey != 0 && resetNativeVKey != info.vKey) {
 								LuaKeyState::ReassignBinding(info.vKey, resetNativeVKey, pendingResetScriptName, pendingResetFunctionName);
 							}
