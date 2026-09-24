@@ -237,7 +237,8 @@ namespace RadarKeys {
 						downstream_->log(stamped);
 						return;
 					}
-					line = "[" + std::string(spdlog::level::to_string_view(msg.level)) + "] " + line;
+					spdlog::string_view_t levelTag = spdlog::level::to_string_view(msg.level);
+					line = "[" + std::string(levelTag.data(), levelTag.size()) + "] " + line;
 					if (line.find(LOG_STATE_CLEAN_EXIT) != std::string::npos) {
 						CompactTailLocked();
 						AppendTail(line + "\n");
