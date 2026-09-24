@@ -237,6 +237,7 @@ namespace RadarKeys {
 						downstream_->log(stamped);
 						return;
 					}
+					line = "[" + std::string(spdlog::level::to_string_view(msg.level)) + "] " + line;
 					if (line.find(LOG_STATE_CLEAN_EXIT) != std::string::npos) {
 						CompactTailLocked();
 						AppendTail(line + "\n");
@@ -524,10 +525,20 @@ namespace RadarKeys {
 			return "Unknown(" + std::to_string(vKey) + ")";
 		}
 
+		int ResolveKeyNameForSlot(const std::string& name, USHORT referenceVKey) {
+			int resolved = VKeyForName(name);
+			if (resolved > 0) return resolved;
+			std::vector<USHORT> members = ParseComboKeyNames(name);
+			for (USHORT member : members) {
+				if (SlotOfVKey(member) == SlotOfVKey(referenceVKey)) return (int)member;
+			}
+			return members.empty() ? -1 : (int)members.front();
+		}
+
 		USHORT NativeVKeyForMod(const std::string& scriptName, const std::string& functionName) {
 			std::string nativeName = ModKeyBindings::GetNativeKey(scriptName, functionName);
 			if (!nativeName.empty()) {
-				int resolved = VKeyForName(nativeName);
+				int resolved = ResolveKeyNameForSlot(nativeName, 0);
 				if (resolved > 0) return (USHORT)resolved;
 			}
 			for (const auto& b : bindings) {
@@ -1408,7 +1419,17 @@ namespace RadarKeys {
 			std::string keyName = fields[0];
 			int vKey = VKeyForName(keyName);
 			if (vKey == -1) {
-				spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_UNKNOWN_KEY_FMT, keyName);
+				std::vector<USHORT> comboMembers = ParseComboKeyNames(keyName);
+				if (!comboMembers.empty()) {
+					for (USHORT member : comboMembers) {
+						ApplyInjectDescribe(NameForVKey(member) + "\x1f" + fields[1] + "\x1f" + fields[2] + "\x1f" + fields[3] + "\x1f" + fields[4] + "\x1f" + fields[5]);
+					}
+					return;
+				}
+				static std::unordered_set<std::string> droppedDescribeNamesLogged;
+				if (droppedDescribeNamesLogged.insert(keyName).second) {
+					spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_UNKNOWN_KEY_FMT, keyName);
+				}
 				return;
 			}
 			int lineStart = 0;
@@ -2051,7 +2072,7 @@ namespace RadarKeys {
 				bool hadTriggerConfig = ModKeyBindings::HasTriggerConfig(info.scriptName, info.functionName);
 				if (!hadOverride && !hadTriggerConfig) continue;
 				std::string storedNativeName = ModKeyBindings::GetNativeKey(info.scriptName, info.functionName);
-				int storedNativeResolved = storedNativeName.empty() ? -1 : VKeyForName(storedNativeName);
+				int storedNativeResolved = storedNativeName.empty() ? -1 : ResolveKeyNameForSlot(storedNativeName, info.vKey);
 				USHORT memberNative = 0;
 				for (auto& b : bindings) {
 					if (!b.isInject || !b.scriptDescribed || b.injectScriptName != info.scriptName || b.injectFunctionName != info.functionName) continue;
@@ -3889,7 +3910,7 @@ namespace RadarKeys {
 							USHORT bindNative = b.nativeVKey;
 							if (bindNative == 0) {
 								std::string storedNative = ModKeyBindings::GetNativeKey(b.injectScriptName, b.injectFunctionName);
-								int resolvedNative = storedNative.empty() ? -1 : VKeyForName(storedNative);
+								int resolvedNative = storedNative.empty() ? -1 : ResolveKeyNameForSlot(storedNative, b.vKey);
 								if (resolvedNative > 0 && SlotOfVKey((USHORT)resolvedNative) == SlotOfVKey(b.vKey)) bindNative = (USHORT)resolvedNative;
 							}
 							if (bindNative != 0 && bindNative != b.vKey) {
@@ -3907,7 +3928,7 @@ namespace RadarKeys {
 							USHORT resetNativeVKey = 0;
 							{
 								std::string storedNative = ModKeyBindings::GetNativeKey(pendingResetScriptName, pendingResetFunctionName);
-								int resolvedNative = storedNative.empty() ? -1 : VKeyForName(storedNative);
+								int resolvedNative = storedNative.empty() ? -1 : ResolveKeyNameForSlot(storedNative, info.vKey);
 								if (resolvedNative > 0 && SlotOfVKey((USHORT)resolvedNative) == SlotOfVKey(info.vKey)) resetNativeVKey = (USHORT)resolvedNative;
 							}
 							if (resetNativeVKey == 0) {
