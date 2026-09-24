@@ -914,11 +914,12 @@ namespace RadarKeys {
 			return true;
 		}
 
-		bool IsComboConflictedWithBindings(const std::vector<USHORT>& comboKeys, int ignoredBindingIndex = -1, unsigned triggerMask = 0) {
+		bool IsComboConflictedWithBindings(const std::vector<USHORT>& comboKeys, int ignoredBindingIndex = -1, unsigned triggerMask = 0, bool ignoreInjectBinds = false) {
 			for (int i = 0; i < (int)bindings.size(); ++i) {
 				if (i == ignoredBindingIndex) continue;
 				const KeyBind& bind = bindings[i];
 				if (!bind.IsCombo() || !VectorsEqualUnordered(bind.comboKeys, comboKeys)) continue;
+				if (ignoreInjectBinds && bind.isInject) continue;
 				if (triggerMask == 0 || (ManualTriggerMask(bind) & triggerMask) != 0) return true;
 			}
 			return false;
@@ -950,6 +951,7 @@ namespace RadarKeys {
 				if (i == editingIndex) continue;
 				const KeyBind& bind = bindings[i];
 				if (!bind.IsCombo() || bind.disabled) continue;
+				if (bind.isInject && bind.injectScriptName == ignoreScript && bind.injectFunctionName == ignoreFunc) continue;
 				bool isMember = false;
 				for (USHORT k : bind.comboKeys) if (k == vKey) { isMember = true; break; }
 				if (isMember && (ManualTriggerMask(bind) & singleMask) != 0) return true;
@@ -968,6 +970,7 @@ namespace RadarKeys {
 				if (i == editingIndex) continue;
 				const KeyBind& bind = bindings[i];
 				if (bind.IsCombo() || bind.disabled) continue;
+				if (bind.isInject && bind.injectScriptName == ignoreScript && bind.injectFunctionName == ignoreFunc) continue;
 				bool hitsMember = false;
 				for (USHORT k : comboKeys) if (k == bind.vKey) { hitsMember = true; break; }
 				if (hitsMember && (ManualTriggerMask(bind) & comboMask) != 0) return true;
@@ -3548,7 +3551,7 @@ namespace RadarKeys {
 				for (size_t i = 0; i < trackedCombos.size(); ++i) {
 					LuaKeyState::TrackedComboKeyInfo& cinfo = trackedCombos[i];
 					unsigned cinfoMask = ModComboTriggerMask(cinfo);
-					bool conflicted = IsComboConflictedWithBindings(cinfo.activeKeys, -1, cinfoMask);
+					bool conflicted = IsComboConflictedWithBindings(cinfo.activeKeys, -1, cinfoMask, true);
 					if (!conflicted) {
 						for (size_t j = 0; j < trackedCombos.size(); ++j) {
 							if (i == j) continue;
@@ -3703,8 +3706,10 @@ namespace RadarKeys {
 					}
 
 					float detailTextHeight = ImGui::GetItemRectSize().y;
-					float rowContentHeight = (detailTextHeight > buttonHeight) ? detailTextHeight : buttonHeight;
-					float buttonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
+					float mergedComboExtra = row.isComboScript ? 0.0f : (float)row.mergedCombos.size() * (ImGui::GetTextLineHeight() + 2.0f);
+					float modButtonHeight = buttonHeight + mergedComboExtra;
+					float rowContentHeight = (detailTextHeight > modButtonHeight) ? detailTextHeight : modButtonHeight;
+					float buttonYOffset = (rowContentHeight - modButtonHeight) * 0.5f;
 
 					ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + buttonYOffset));
 					if (row.isManual) {
@@ -3990,6 +3995,7 @@ namespace RadarKeys {
 						if (row.mergedCombos.empty() && groupButtonWidth > 210.0f) groupButtonWidth = 210.0f;
 						float groupButtonHeight = buttonHeight + (float)row.mergedCombos.size() * (ImGui::GetTextLineHeight() + 2.0f);
 
+						ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
 						if (row.info.hasDescription) {
 							if (ImGui::Button(groupLabel.c_str(), ImVec2(groupButtonWidth, groupButtonHeight))) {
@@ -4008,6 +4014,7 @@ namespace RadarKeys {
 							}
 						}
 						ImGui::PopStyleColor();
+						ImGui::PopStyleVar();
 					}
 
 					ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
