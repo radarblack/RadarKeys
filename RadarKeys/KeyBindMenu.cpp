@@ -3634,6 +3634,12 @@ namespace RadarKeys {
 					for (const UnifiedRow& r : rows) {
 						if (!r.isManual && !r.isComboScript && r.info.hasDescription) representedIdentities.insert(r.info.scriptName + "\x1f" + r.info.functionName);
 					}
+					for (const LuaKeyState::TrackedComboKeyInfo& tc : trackedCombos) {
+						std::vector<USHORT> ovm = ParseComboKeyNames(ModKeyBindings::GetOverride(tc.scriptName, tc.functionName));
+						std::vector<USHORT> nvm = ParseComboKeyNames(ModKeyBindings::GetNativeKey(tc.scriptName, tc.functionName));
+						bool contradicts = (!ovm.empty() && !VectorsEqualUnordered(ovm, tc.activeKeys)) || (!nvm.empty() && !VectorsEqualUnordered(nvm, tc.activeKeys));
+						if (!contradicts) representedIdentities.insert(tc.scriptName + "\x1f" + tc.functionName);
+					}
 					for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
 						std::string identity = entry.scriptName + "\x1f" + entry.functionName;
 						if (representedIdentities.count(identity) > 0) continue;
@@ -3654,6 +3660,13 @@ namespace RadarKeys {
 						row.info = synthInfo;
 						row.groupMembers.push_back(synthInfo);
 						row.storeNativeName = nativeName;
+						if (members.size() >= 2) {
+							LuaKeyState::TrackedComboKeyInfo synthCombo;
+							synthCombo.activeKeys = CanonicalizeComboKeys(members);
+							synthCombo.scriptName = entry.scriptName;
+							synthCombo.functionName = entry.functionName;
+							row.mergedCombos.push_back(synthCombo);
+						}
 						row.displayVKey = (USHORT)resolvedVKey;
 						row.conflicted = conflictedVKeys.count((USHORT)resolvedVKey) > 0;
 						rows.push_back(std::move(row));
@@ -3664,7 +3677,9 @@ namespace RadarKeys {
 					LuaKeyState::TrackedComboKeyInfo& cinfo = trackedCombos[i];
 					std::vector<USHORT> ownerOverrideMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(cinfo.scriptName, cinfo.functionName));
 					std::vector<USHORT> ownerNativeMembers = ParseComboKeyNames(ModKeyBindings::GetNativeKey(cinfo.scriptName, cinfo.functionName));
-					if (!VectorsEqualUnordered(ownerOverrideMembers, cinfo.activeKeys) && !VectorsEqualUnordered(ownerNativeMembers, cinfo.activeKeys)) continue;
+					bool overrideContradicts = !ownerOverrideMembers.empty() && !VectorsEqualUnordered(ownerOverrideMembers, cinfo.activeKeys);
+					bool nativeContradicts = !ownerNativeMembers.empty() && !VectorsEqualUnordered(ownerNativeMembers, cinfo.activeKeys);
+					if (overrideContradicts || nativeContradicts) continue;
 					unsigned cinfoMask = ModComboTriggerMask(cinfo);
 					bool conflicted = IsComboConflictedWithBindings(cinfo.activeKeys, -1, cinfoMask, true);
 					if (!conflicted) {
