@@ -1419,19 +1419,16 @@ namespace RadarKeys {
 			}
 			std::string keyName = fields[0];
 			int vKey = VKeyForName(keyName);
+			std::vector<USHORT> comboMembers;
 			if (vKey == -1) {
-				std::vector<USHORT> comboMembers = ParseComboKeyNames(keyName);
-				if (!comboMembers.empty()) {
-					for (USHORT member : comboMembers) {
-						ApplyInjectDescribe(NameForVKey(member) + "\x1f" + fields[1] + "\x1f" + fields[2] + "\x1f" + fields[3] + "\x1f" + fields[4] + "\x1f" + fields[5]);
+				comboMembers = ParseComboKeyNames(keyName);
+				if (comboMembers.empty()) {
+					static std::unordered_set<std::string> droppedDescribeNamesLogged;
+					if (droppedDescribeNamesLogged.insert(keyName).second) {
+						spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_UNKNOWN_KEY_FMT, keyName);
 					}
 					return;
 				}
-				static std::unordered_set<std::string> droppedDescribeNamesLogged;
-				if (droppedDescribeNamesLogged.insert(keyName).second) {
-					spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_UNKNOWN_KEY_FMT, keyName);
-				}
-				return;
 			}
 			int lineStart = 0;
 			int lineEnd = 0;
@@ -1446,9 +1443,101 @@ namespace RadarKeys {
 			std::string scriptName = fields[1];
 			std::string functionName = fields[2];
 			std::string sourcePath = ResolveScriptPath(fields[3]);
-			std::string slotTag = (SlotOfVKey((USHORT)vKey) == ModKeyBindings::BindSlot::Pad) ? "pad" : "kbm";
+			USHORT referenceVKey = comboMembers.empty() ? (USHORT)vKey : comboMembers.front();
+			std::string slotTag = (SlotOfVKey(referenceVKey) == ModKeyBindings::BindSlot::Pad) ? "pad" : "kbm";
 			std::string identity = scriptName + "\x1f" + functionName + "\x1f" + slotTag;
 			bool exists = false;
+			if (!comboMembers.empty()) {
+				std::vector<USHORT> canonicalMembers = CanonicalizeComboKeys(comboMembers);
+				bool comboFormed = false;
+				for (size_t bi = 0; bi < bindings.size(); ) {
+					KeyBind& bind = bindings[bi];
+					std::string bindSlot = (SlotOfVKey(bind.vKey) == ModKeyBindings::BindSlot::Pad) ? "pad" : "kbm";
+					if (!bind.isInject || !bind.scriptDescribed || bind.injectScriptName != scriptName || bind.injectFunctionName != functionName || bindSlot != slotTag) {
+						bi++;
+						continue;
+					}
+					if (!comboFormed) {
+						if (bind.IsCombo() && VectorsEqualUnordered(bind.comboKeys, canonicalMembers)
+							&& bind.scriptPathOn == sourcePath && bind.injectLineStart == lineStart && bind.injectLineEnd == lineEnd) {
+							exists = true;
+							break;
+						}
+						bind.comboKeys = canonicalMembers;
+						bind.vKey = canonicalMembers.front();
+						bind.keyName = keyName;
+						bind.scriptPathOn = sourcePath;
+						bind.injectLineStart = lineStart;
+						bind.injectLineEnd = lineEnd;
+						ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
+						if (storedTrigger.triggerType == 2) {
+							bind.isInstant = true;
+							bind.instantTriggerType = 2;
+							bind.holdSeconds = 0.0f;
+							bind.repeatAccelMult = storedTrigger.repeatAccelMult;
+						} else {
+							bind.isInstant = (storedTrigger.triggerType == 1);
+							bind.instantTriggerType = storedTrigger.triggerType;
+							bind.holdSeconds = (storedTrigger.triggerType == 0) ? storedTrigger.holdSeconds : 0.0f;
+							bind.repeatAccelMult = 1.0f;
+						}
+						bind.autoDisabled = BuildInjectContent(sourcePath, lineStart, lineEnd).empty();
+						MarkDisplayCacheDirty();
+						spdlog::info(LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT, keyName, lineStart, lineEnd, FileNameOnly(sourcePath));
+						comboFormed = true;
+						exists = true;
+					} else {
+						bindings.erase(bindings.begin() + bi);
+						continue;
+					}
+					bi++;
+				}
+				if (!exists) {
+					std::string injectContent = BuildInjectContent(sourcePath, lineStart, lineEnd);
+					if (injectContent.empty()) {
+						spdlog::warn(LOG_KEYBINDMENU_INJECTDESCRIBE_SOURCE_UNREADABLE_FMT, FileNameOnly(sourcePath));
+					} else {
+						RunInjectCompileCheck(injectContent);
+					}
+					KeyBind newBind{};
+					newBind.vKey = canonicalMembers.front();
+					newBind.keyName = keyName;
+					newBind.comboKeys = canonicalMembers;
+					newBind.scriptPathOn = sourcePath;
+					newBind.isInject = true;
+					newBind.scriptDescribed = true;
+					newBind.autoDisabled = injectContent.empty();
+					newBind.injectScriptName = scriptName;
+					newBind.injectFunctionName = functionName;
+					newBind.injectLineStart = lineStart;
+					newBind.injectLineEnd = lineEnd;
+					ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
+					if (storedTrigger.triggerType == 2) {
+						newBind.isInstant = true;
+						newBind.instantTriggerType = 2;
+						newBind.holdSeconds = 0.0f;
+						newBind.repeatAccelMult = storedTrigger.repeatAccelMult;
+					} else {
+						newBind.isInstant = (storedTrigger.triggerType == 1);
+						newBind.instantTriggerType = storedTrigger.triggerType;
+						newBind.holdSeconds = (storedTrigger.triggerType == 0) ? storedTrigger.holdSeconds : 0.0f;
+						newBind.repeatAccelMult = 1.0f;
+					}
+					bool overrideActiveAtCreate = !ModKeyBindings::GetOverride(scriptName, functionName).empty();
+					newBind.nativeVKey = overrideActiveAtCreate ? (USHORT)0 : (USHORT)canonicalMembers.front();
+					if (!overrideActiveAtCreate && ModKeyBindings::GetNativeKey(scriptName, functionName).empty()) {
+						ModKeyBindings::SetNativeKeyWithoutSave(scriptName, functionName, keyName);
+						SaveBindings();
+					}
+					bindings.push_back(newBind);
+					EnsureDispatcherRegistered(newBind.vKey);
+					MarkDisplayCacheDirty();
+					LogActivity("KeyBindMenu: Bound " + keyName + " to script lines " + std::to_string(lineStart) + "-" + std::to_string(lineEnd) + " of " + FileNameOnly(sourcePath));
+				}
+				injectDescribeTouch[identity] = std::chrono::steady_clock::now();
+				MarkActivityLogLive();
+				return;
+			}
 			for (auto& bind : bindings) {
 				if (!bind.isInject || !bind.scriptDescribed) continue;
 				std::string bindSlot = (SlotOfVKey(bind.vKey) == ModKeyBindings::BindSlot::Pad) ? "pad" : "kbm";
@@ -1746,10 +1835,15 @@ namespace RadarKeys {
 				}
 				else if (parts[0] == "INJECT" && parts.size() >= 13) {
 					std::string injectKeyName = trim(parts[1]);
+					std::vector<USHORT> injectComboMembers;
 					int injectVKey = VKeyForName(injectKeyName);
 					if (injectVKey == -1) {
-						LogActivity("KeyBindMenu: Unknown Key name '" + injectKeyName + "', skipping script-line binding", false);
-						continue;
+						injectComboMembers = ParseComboKeyNames(injectKeyName);
+						if (injectComboMembers.empty()) {
+							LogActivity("KeyBindMenu: Unknown Key name '" + injectKeyName + "', skipping script-line binding", false);
+							continue;
+						}
+						injectVKey = (int)injectComboMembers.front();
 					}
 					float injectHoldSeconds = 0.0f;
 					try { injectHoldSeconds = std::stof(trim(parts[5])); }
@@ -1782,6 +1876,9 @@ namespace RadarKeys {
 					newInjectBind.needShift = trim(parts[3]) == "1";
 					newInjectBind.needAlt = trim(parts[4]) == "1";
 					newInjectBind.keyName = injectKeyName;
+					if (injectComboMembers.size() >= 2) {
+						newInjectBind.comboKeys = CanonicalizeComboKeys(injectComboMembers);
+					}
 					newInjectBind.holdSeconds = injectHoldSeconds;
 					newInjectBind.isInstant = injectIsInstant;
 					newInjectBind.instantTriggerType = injectInstantType;
@@ -3414,6 +3511,7 @@ namespace RadarKeys {
 					bool conflicted = false;
 					USHORT displayVKey = 0;
 					std::vector<LuaKeyState::TrackedKeyInfo> groupMembers;
+					std::vector<LuaKeyState::TrackedComboKeyInfo> mergedCombos;
 				};
 				std::vector<UnifiedRow> rows;
 				rows.reserve(trackedKeys.size() + trackedCombos.size() + bindings.size());
@@ -3490,6 +3588,24 @@ namespace RadarKeys {
 					}
 					row.displayVKey = bindings[i].vKey;
 					rows.push_back(std::move(row));
+				}
+				for (size_t i = 0; i < rows.size(); ) {
+					if (!rows[i].isComboScript) {
+						i++;
+						continue;
+					}
+					bool merged = false;
+					for (UnifiedRow& r : rows) {
+						if (r.isComboScript || r.isManual || !r.info.hasDescription) continue;
+						if (r.info.scriptName == rows[i].comboInfo.scriptName && r.info.functionName == rows[i].comboInfo.functionName) {
+							r.mergedCombos.push_back(rows[i].comboInfo);
+							if (rows[i].conflicted) r.conflicted = true;
+							merged = true;
+							break;
+						}
+					}
+					if (merged) rows.erase(rows.begin() + i);
+					else i++;
 				}
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 
@@ -3794,7 +3910,10 @@ namespace RadarKeys {
 
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
 						std::string comboLabel = ComboKeysDisplayName(row.comboInfo.activeKeys);
-						if (ImGui::Button(comboLabel.c_str(), ImVec2(130, buttonHeight))) {
+						float comboButtonWidth = ImGui::CalcTextSize(comboLabel.c_str()).x + 24.0f;
+						if (comboButtonWidth < 130.0f) comboButtonWidth = 130.0f;
+						if (comboButtonWidth > 210.0f) comboButtonWidth = 210.0f;
+						if (ImGui::Button(comboLabel.c_str(), ImVec2(comboButtonWidth, buttonHeight))) {
 							openComboReassignPrompt();
 						}
 						if (ImGui::IsItemHovered()) {
@@ -3862,13 +3981,18 @@ namespace RadarKeys {
 							if (gi) groupLabel += UI_LBL_KEY_GROUP_SEPARATOR;
 							groupLabel += groupNames[gi];
 						}
+						for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
+							groupLabel += "\n";
+							groupLabel += ComboKeysDisplayName(mergedCombo.activeKeys);
+						}
 						float groupButtonWidth = ImGui::CalcTextSize(groupLabel.c_str()).x + 24.0f;
 						if (groupButtonWidth < 130.0f) groupButtonWidth = 130.0f;
-						if (groupButtonWidth > 210.0f) groupButtonWidth = 210.0f;
+						if (row.mergedCombos.empty() && groupButtonWidth > 210.0f) groupButtonWidth = 210.0f;
+						float groupButtonHeight = buttonHeight + (float)row.mergedCombos.size() * (ImGui::GetTextLineHeight() + 2.0f);
 
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
 						if (row.info.hasDescription) {
-							if (ImGui::Button(groupLabel.c_str(), ImVec2(groupButtonWidth, buttonHeight))) {
+							if (ImGui::Button(groupLabel.c_str(), ImVec2(groupButtonWidth, groupButtonHeight))) {
 								openReassignPrompt();
 							}
 							if (ImGui::IsItemHovered()) {
@@ -3877,7 +4001,7 @@ namespace RadarKeys {
 						}
 						else {
 							ImGui::BeginDisabled();
-							ImGui::Button(groupLabel.c_str(), ImVec2(groupButtonWidth, buttonHeight));
+							ImGui::Button(groupLabel.c_str(), ImVec2(groupButtonWidth, groupButtonHeight));
 							ImGui::EndDisabled();
 							if (ImGui::IsItemHovered()) {
 								ImGui::SetTooltip(UI_TIP_CANNOT_REASSIGN_UNDESCRIBED);
