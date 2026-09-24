@@ -4092,9 +4092,9 @@ namespace RadarKeys {
 						bool anyToggle = false;
 						bool anyToggleEnabled = false;
 						std::vector<std::string> groupNames;
-						std::string currentOverrideName = ModKeyBindings::GetOverride(mkScriptName, mkFunctionName);
+						std::string currentOverrideName = ModKeyBindings::GetOverride(row.info.scriptName, row.info.functionName);
 						std::vector<USHORT> currentOverrideComboMembers = ParseComboKeyNames(currentOverrideName);
-						std::string filterNativeName = ModKeyBindings::GetNativeKey(mkScriptName, mkFunctionName);
+						std::string filterNativeName = ModKeyBindings::GetNativeKey(row.info.scriptName, row.info.functionName);
 						int nativeFilterVKey = filterNativeName.empty() ? -1 : VKeyForName(filterNativeName);
 						for (const LuaKeyState::TrackedKeyInfo& member : row.groupMembers) {
 							USHORT memberDisplayVKey = ResolveDisplayVKey(member);
