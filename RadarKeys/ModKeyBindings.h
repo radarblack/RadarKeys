@@ -18,9 +18,13 @@ namespace RadarKeys {
 			int triggerType = 0;
 			float holdSeconds = 0.0f;
 			float repeatAccelMult = 1.0f;
+			std::string nativeKeyName;
 		};
 
 		void Load();
+		std::string GetNativeKey(const std::string& scriptName, const std::string& functionName);
+		void SetNativeKeyWithoutSave(const std::string& scriptName, const std::string& functionName, const std::string& keyName);
+
 		std::string GetOverride(const std::string& scriptName, const std::string& functionName);
 		std::string GetSlotOverride(const std::string& scriptName, const std::string& functionName, BindSlot slot);
 		void SetOverride(const std::string& scriptName, const std::string& functionName, const std::string& keyName);
