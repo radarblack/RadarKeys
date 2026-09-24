@@ -4094,13 +4094,9 @@ namespace RadarKeys {
 						std::vector<std::string> groupNames;
 						std::string currentOverrideName = ModKeyBindings::GetOverride(row.info.scriptName, row.info.functionName);
 						std::vector<USHORT> currentOverrideComboMembers = ParseComboKeyNames(currentOverrideName);
-						std::string filterNativeName = ModKeyBindings::GetNativeKey(row.info.scriptName, row.info.functionName);
-						int nativeFilterVKey = filterNativeName.empty() ? -1 : VKeyForName(filterNativeName);
 						for (const LuaKeyState::TrackedKeyInfo& member : row.groupMembers) {
 							USHORT memberDisplayVKey = ResolveDisplayVKey(member);
 							bool memberIsComboGhost = !currentOverrideComboMembers.empty()
-								&& (USHORT)nativeFilterVKey != memberDisplayVKey
-								&& std::find(currentOverrideComboMembers.begin(), currentOverrideComboMembers.end(), memberDisplayVKey) == currentOverrideComboMembers.end()
 								&& SlotOfVKey(memberDisplayVKey) == SlotOfVKey(currentOverrideComboMembers.front());
 							if (memberIsComboGhost) {
 								continue;
@@ -4118,7 +4114,13 @@ namespace RadarKeys {
 							}
 						}
 						if (groupNames.empty() && !row.storeNativeName.empty()) {
-							groupNames.push_back(row.storeNativeName);
+							std::vector<USHORT> nativeLineMembers = ParseComboKeyNames(row.storeNativeName);
+							int nativeLineVKey = nativeLineMembers.empty() ? VKeyForName(row.storeNativeName) : (int)nativeLineMembers.front();
+							bool nativeLineReplaced = nativeLineVKey > 0 && !currentOverrideComboMembers.empty()
+								&& SlotOfVKey((USHORT)nativeLineVKey) == SlotOfVKey(currentOverrideComboMembers.front());
+							if (!nativeLineReplaced) {
+								groupNames.push_back(row.storeNativeName);
+							}
 						}
 						if (groupNames.empty() && !currentOverrideComboMembers.empty()) {
 							for (const auto& b : bindings) {
