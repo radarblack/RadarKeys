@@ -622,6 +622,23 @@ namespace RadarKeys {
 			return a == b;
 		}
 
+		std::string CenterMultilineLabel(const std::vector<std::string>& lines) {
+			float maxWidth = 0.0f;
+			for (const std::string& line : lines) {
+				maxWidth = (std::max)(maxWidth, ImGui::CalcTextSize(line.c_str()).x);
+			}
+			float spaceWidth = ImGui::CalcTextSize(" ").x;
+			std::string result;
+			for (size_t i = 0; i < lines.size(); i++) {
+				float lineW = ImGui::CalcTextSize(lines[i].c_str()).x;
+				int padCount = (spaceWidth > 0.0f) ? (int)(((maxWidth - lineW) * 0.5f) / spaceWidth) : 0;
+				std::string padded = std::string((size_t)(std::max)(0, padCount), ' ') + lines[i];
+				if (i) result += "\n";
+				result += padded;
+			}
+			return result;
+		}
+
 		std::string CombinedDisplayName(const KeyBind& bind) {
 			if (bind.IsCombo()) {
 				std::string result = ComboKeysDisplayName(bind.comboKeys);
@@ -3798,10 +3815,10 @@ namespace RadarKeys {
 					float mergedComboExtra = row.isComboScript ? 0.0f : (float)row.mergedCombos.size() * (ImGui::GetTextLineHeight() + 2.0f);
 					float modButtonHeight = buttonHeight + mergedComboExtra;
 					float rowContentHeight = (detailPredictedHeight > modButtonHeight) ? detailPredictedHeight : modButtonHeight;
-					float detailYOffset = (rowContentHeight - detailPredictedHeight) * 0.5f;
 					float keyButtonYOffset = (rowContentHeight - modButtonHeight) * 0.5f;
 					float stdButtonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
-					ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY + (std::max)(0.0f, detailYOffset - 2.0f)));
+					float detailYOffset = keyButtonYOffset + (modButtonHeight - detailPredictedHeight) * 0.5f - ImGui::GetStyle().FramePadding.y;
+					ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY + (std::max)(0.0f, detailYOffset)));
 					ImGui::AlignTextToFramePadding();
 					ImGui::BeginGroup();
 					if (row.conflicted) {
@@ -4075,8 +4092,17 @@ namespace RadarKeys {
 						bool anyToggle = false;
 						bool anyToggleEnabled = false;
 						std::vector<std::string> groupNames;
+						std::string currentOverrideName = ModKeyBindings::GetOverride(mkScriptName, mkFunctionName);
+						std::vector<USHORT> currentOverrideComboMembers = ParseComboKeyNames(currentOverrideName);
+						std::string filterNativeName = ModKeyBindings::GetNativeKey(mkScriptName, mkFunctionName);
+						int nativeFilterVKey = filterNativeName.empty() ? -1 : VKeyForName(filterNativeName);
 						for (const LuaKeyState::TrackedKeyInfo& member : row.groupMembers) {
 							USHORT memberDisplayVKey = ResolveDisplayVKey(member);
+							if (!currentOverrideComboMembers.empty()
+								&& (USHORT)nativeFilterVKey != memberDisplayVKey
+								&& std::find(currentOverrideComboMembers.begin(), currentOverrideComboMembers.end(), memberDisplayVKey) == currentOverrideComboMembers.end()) {
+								continue;
+							}
 							if (RawInput::IsKeyHeldReal(memberDisplayVKey)) {
 								anyPressed = true;
 							}
@@ -4127,15 +4153,17 @@ namespace RadarKeys {
 							showCapturePrompt = true;
 						};
 
+						std::vector<std::string> keyLabelLines;
 						std::string groupLabel;
 						for (size_t gi = 0; gi < groupNames.size(); gi++) {
 							if (gi) groupLabel += UI_LBL_KEY_GROUP_SEPARATOR;
 							groupLabel += groupNames[gi];
 						}
+						keyLabelLines.push_back(groupLabel);
 						for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
-							groupLabel += "\n";
-							groupLabel += ComboKeysDisplayName(mergedCombo.activeKeys);
+							keyLabelLines.push_back(ComboKeysDisplayName(mergedCombo.activeKeys));
 						}
+						groupLabel = CenterMultilineLabel(keyLabelLines);
 						float groupButtonWidth = ImGui::CalcTextSize(groupLabel.c_str()).x + 24.0f;
 						if (groupButtonWidth < 130.0f) groupButtonWidth = 130.0f;
 						if (row.mergedCombos.empty() && groupButtonWidth > 210.0f) groupButtonWidth = 210.0f;
