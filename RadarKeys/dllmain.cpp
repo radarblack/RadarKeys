@@ -199,6 +199,16 @@ namespace RadarKeys {
 		return 0;
 	}
 
+	static int l_SetRepeatMult(lua_State* L) {
+		if (ArgIsCombo(L)) { LuaKeyState::SetComboRepeatMult(ResolveKeyListArg(L), ResolveHoldSecondsArg(L)); return 0; }
+		int vKey = RadarKeys::ResolveKeyNameArg(L);
+		double mult = RadarKeys::ResolveHoldSecondsArg(L);
+		if (vKey >= 0 && mult > 0.0) {
+			LuaKeyState::SetRepeatMult((USHORT)vKey, mult);
+		}
+		return 0;
+	}
+
 	static int l_DebugLog(lua_State* L) {
 		const char* message = LuaToString(L, 1);
 		if (message) {
@@ -357,6 +367,8 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "OnComboButtonRepeat", RadarKeys::l_OnButtonRepeat },
 		{ "GetComboRepeatMult", RadarKeys::l_GetRepeatMult },
 		{ "ResetComboRepeat", RadarKeys::l_ResetRepeat },
+		{ "SetRepeatMult", RadarKeys::l_SetRepeatMult },
+		{ "SetComboRepeatMult", RadarKeys::l_SetRepeatMult },
 		{ "DebugLog", RadarKeys::l_DebugLog },
 		{ "DescribeKey", RadarKeys::l_DescribeKey },
 		{ "DescribeMod", RadarKeys::l_DescribeMod },
