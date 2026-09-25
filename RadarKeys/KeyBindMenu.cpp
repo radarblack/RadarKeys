@@ -409,10 +409,10 @@ namespace RadarKeys {
 			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 			std::filesystem::create_directories(bindsDir, ec);
 			if (!ec) {
-				e = std::error_code();
-				std::filesystem::remove((bindsDir / "radar_keybinds.conf.bak"), e);
-				e = std::error_code();
-				std::filesystem::remove((bindsDir / "radar_keybinds.conf.tmp"), e);
+				ec = std::error_code();
+				std::filesystem::remove((bindsDir / "radar_keybinds.conf.bak"), ec);
+				ec = std::error_code();
+				std::filesystem::remove((bindsDir / "radar_keybinds.conf.tmp"), ec);
 			}
 			if (ec) {
 				spdlog::warn(LOG_KEYBINDMENU_COULDN_T_CREATE_FMT_DIRECTORY, FileNameOnly(bindsDir.string()), ec.message());
@@ -442,6 +442,10 @@ namespace RadarKeys {
 			}
 		}
 		
+		void RequestBindingsSave() {
+			g_pendingBindingsSave.store(true);
+		}
+
 		void LogCleanShutdown() {
 			ShutdownHealthProbe();
 			if (g_pendingBindingsSave.exchange(false)) {
