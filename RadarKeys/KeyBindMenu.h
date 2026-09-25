@@ -59,6 +59,7 @@ namespace RadarKeys {
 		void LogCleanShutdown();
 		void LogActivity(const std::string& message, bool success = true);
 		void SaveBindings();
+		void RequestBindingsSave();
 
 		USHORT NativeVKeyForMod(const std::string& scriptName, const std::string& functionName);
 
