@@ -1974,6 +1974,12 @@ namespace RadarKeys {
 					}
 					bool disabled = (parts.size() >= instantFieldStart + 4) && trim(parts[instantFieldStart + 3]) == "1";
 
+					if (isToggle) {
+						isInstant = false;
+						instantTriggerType = 0;
+						holdSeconds = 0.0f;
+						repeatAccelMult = 1.0f;
+					}
 					KeyBind b{};
 					b.comboKeys = comboKeys;
 					b.isToggle = isToggle;
@@ -2072,6 +2078,12 @@ namespace RadarKeys {
 					}
 					bool disabled = (parts.size() >= instantFieldStart + 4) && trim(parts[instantFieldStart + 3]) == "1";
 
+					if (isToggle) {
+						isInstant = false;
+						instantTriggerType = 0;
+						holdSeconds = 0.0f;
+						repeatAccelMult = 1.0f;
+					}
 					KeyBind b{ (USHORT)vKey, trim(parts[2]) == "1", trim(parts[3]) == "1", trim(parts[4]) == "1", keyName, isToggle, resolvedOn, resolvedOff, false, holdSeconds };
 					b.isInstant = isInstant;
 					b.instantTriggerType = instantTriggerType;
