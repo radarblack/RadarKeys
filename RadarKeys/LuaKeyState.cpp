@@ -56,6 +56,7 @@ namespace RadarKeys {
 			bool pendingUsesOnRelease = false;
 			double pendingLastHoldSeconds = 0.0;
 			double currentIncrementMult = 1.0;
+			double configuredIncrementMult = 1.0;
 			clock::time_point heldStart{};
 			clock::time_point onHoldStart{};
 			clock::time_point repeatStart{};
@@ -79,6 +80,7 @@ namespace RadarKeys {
 			clock::time_point pressTime{};
 			clock::time_point repeatStart{};
 			double currentIncrementMult = 1.0;
+			double configuredIncrementMult = 1.0;
 		};
 		std::map<std::string, ComboPollState> comboStates;
 		bool ValidVKey(USHORT vKey) {
@@ -446,6 +448,7 @@ namespace RadarKeys {
 				mult = 1.0 / kMaxIncrementMult;
 			}
 			states[vKey].currentIncrementMult = mult;
+			states[vKey].configuredIncrementMult = mult;
 		}
 
 		std::string ComboStateKey(const std::vector<USHORT>& vKeys) {
@@ -658,19 +661,19 @@ namespace RadarKeys {
 				return kRepeatRateSeconds;
 			}
 			vKey = ResolveActive(vKey);
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
-				return kRepeatRateSeconds;
-			}
-			return kRepeatRateSeconds / states[vKey].currentIncrementMult;
+			double displayMult = states[vKey].configuredIncrementMult != 1.0 ? states[vKey].configuredIncrementMult : states[vKey].currentIncrementMult;
+			return kRepeatRateSeconds / displayMult;
 		}
 
 		double GetComboRepeatIntervalSeconds(const std::vector<USHORT>& vKeys) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return kRepeatRateSeconds;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt) return kRepeatRateSeconds;
+			if (!ValidCombo(active)) return kRepeatRateSeconds;
 			auto it = comboStates.find(ComboStateKey(active));
-			return it == comboStates.end() ? kRepeatRateSeconds : kRepeatRateSeconds / it->second.currentIncrementMult;
+			if (it == comboStates.end()) return kRepeatRateSeconds;
+			double displayMult = it->second.configuredIncrementMult != 1.0 ? it->second.configuredIncrementMult : it->second.currentIncrementMult;
+			return kRepeatRateSeconds / displayMult;
 		}
 
 		void ResetComboRepeat(const std::vector<USHORT>& vKeys) {
@@ -692,6 +695,7 @@ namespace RadarKeys {
 			if (mult > kMaxIncrementMult) mult = kMaxIncrementMult;
 			if (mult < 1.0 / kMaxIncrementMult) mult = 1.0 / kMaxIncrementMult;
 			comboStates[ComboStateKey(active)].currentIncrementMult = mult;
+			comboStates[ComboStateKey(active)].configuredIncrementMult = mult;
 		}
 
 		struct ComboKeyDescription {
