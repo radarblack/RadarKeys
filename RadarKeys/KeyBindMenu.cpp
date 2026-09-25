@@ -407,6 +407,12 @@ namespace RadarKeys {
 			std::error_code ec;
 			std::filesystem::path bindsDir = std::filesystem::path(GetGameDirectory()) / "mod" / "radarKeys";
 			std::filesystem::create_directories(bindsDir, ec);
+			if (!ec) {
+				e = std::error_code();
+				std::filesystem::remove((bindsDir / "radar_keybinds.conf.bak"), e);
+				e = std::error_code();
+				std::filesystem::remove((bindsDir / "radar_keybinds.conf.tmp"), e);
+			}
 			if (ec) {
 				spdlog::warn(LOG_KEYBINDMENU_COULDN_T_CREATE_FMT_DIRECTORY, FileNameOnly(bindsDir.string()), ec.message());
 				return false;
@@ -1763,7 +1769,6 @@ namespace RadarKeys {
 			EnsureBindsDirectory();
 			std::string bindsPath = GetBindsFileName();
 			std::string tmpPath = bindsPath + ".tmp";
-			std::string bakPath = bindsPath + ".bak";
 			std::ofstream outFile(tmpPath);
 			if (!outFile) {
 				LogActivity("KeyBindMenu: Save bindings failed: couldn't open " + FileNameOnly(tmpPath) + " for writing", false);
@@ -1830,10 +1835,6 @@ namespace RadarKeys {
 			}
 			{
 				std::error_code ec;
-				if (std::filesystem::exists(bindsPath, ec)) {
-					std::filesystem::copy_file(bindsPath, bakPath, std::filesystem::copy_options::overwrite_existing, ec);
-					ec.clear();
-				}
 				std::filesystem::rename(tmpPath, bindsPath, ec);
 				if (ec) {
 					LogActivity("KeyBindMenu: Save bindings failed: couldn't replace " + FileNameOnly(bindsPath) + " (" + ec.message() + ")", false);
