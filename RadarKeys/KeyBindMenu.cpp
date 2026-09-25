@@ -1382,7 +1382,8 @@ namespace RadarKeys {
 				}
 				if (repeatBind && !suppressedByCombo && RawInput::IsKeyHeldReal(vKey)) {
 					double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - pending.lastRepeatTime).count();
-					double effectiveInterval = kRepeatIntervalSeconds / pending.repeatSpeedMult;
+					double scriptRepeatMult = LuaKeyState::GetRepeatMult(vKey);
+					double effectiveInterval = kRepeatIntervalSeconds / (pending.repeatSpeedMult * scriptRepeatMult);
 					if (sinceLastRepeat >= effectiveInterval) {
 						DebuggerMenu::LogButtonPress(NameForVKey(vKey) + " repeat-fired");
 						FireBinding(*repeatBind);
@@ -1454,7 +1455,8 @@ namespace RadarKeys {
 					bool repeatEligible = allHeld && bind.isInstant && bind.instantTriggerType == 2 && (hasHold ? bind.comboHoldFired : true);
 					if (repeatEligible) {
 						double sinceLastRepeat = std::chrono::duration<double>(std::chrono::steady_clock::now() - bind.comboLastRepeatTime).count();
-						double effectiveInterval = kRepeatIntervalSeconds / bind.runtimeRepeatSpeedMult;
+						double scriptRepeatMult = LuaKeyState::GetComboRepeatMult(bind.comboKeys);
+						double effectiveInterval = kRepeatIntervalSeconds / (bind.runtimeRepeatSpeedMult * scriptRepeatMult);
 						if (sinceLastRepeat >= effectiveInterval) {
 							DebuggerMenu::LogButtonPress(CombinedDisplayName(bind) + " repeat-fired");
 							FireBinding(bind);
@@ -3576,6 +3578,7 @@ namespace RadarKeys {
 
 		void Draw(bool* p_open) {
 			RebuildDisplayCacheIfNeeded();
+			static float s_requiredContentWidth = 0.0f;
 			float longestItemWidth = 0.0f;
 			for (const auto& entry : displayCache) {
 				float stringPixelWidth = ImGui::CalcTextSize(entry.fullLine.c_str()).x;
@@ -3587,6 +3590,9 @@ namespace RadarKeys {
 			float finalMinWidthFloor = longestItemWidth + 111.0f;
 			if (finalMinWidthFloor < 480.0f) {
 				finalMinWidthFloor = 480.0f;
+			}
+			if (s_requiredContentWidth + 48.0f > finalMinWidthFloor) {
+				finalMinWidthFloor = s_requiredContentWidth + 48.0f;
 			}
 			constexpr float kWindowMinHeight = 360.0f;
 			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, kWindowMinHeight), ImGuiCond_FirstUseEver);
@@ -3725,7 +3731,8 @@ namespace RadarKeys {
 						if (b.isInstant && b.instantTriggerType == 2) {
 							usesRepeat = true;
 							double speedMult = (b.runtimeRepeatSpeedMult > 0.0) ? (double)b.runtimeRepeatSpeedMult : 1.0;
-							repeatInterval = kRepeatIntervalSeconds / speedMult;
+							double scriptRepeatMult = b.IsCombo() ? LuaKeyState::GetComboRepeatMult(b.comboKeys) : LuaKeyState::GetRepeatMult(b.vKey);
+							repeatInterval = kRepeatIntervalSeconds / (speedMult * scriptRepeatMult);
 						} else if (b.isInstant && b.instantTriggerType == 1) {
 							usesRelease = true;
 						} else if (b.isInstant) {
@@ -4224,6 +4231,7 @@ namespace RadarKeys {
 				if (rows.empty()) {
 					ImGui::TextDisabled(UI_TXT_NO_KEYS_ASSIGNED);
 				}
+				float frameRequiredWidth = 0.0f;
 				for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
 					UnifiedRow& row = rows[rowIdx];
 					ImGui::PushID((int)rowIdx);
@@ -4246,6 +4254,12 @@ namespace RadarKeys {
 					}
 					else {
 						detailText = UI_TXT_NOT_YET_DESCRIBED;
+					}
+
+					float detailFullW = ImGui::CalcTextSize(detailText.c_str()).x;
+					float rowRequiredW = notesColumnX + ImGui::GetStyle().ItemSpacing.x + detailFullW;
+					if (rowRequiredW > frameRequiredWidth) {
+						frameRequiredWidth = rowRequiredW;
 					}
 
 					const float conflictBoxHeight = 34.0f;
@@ -4543,12 +4557,15 @@ namespace RadarKeys {
 					}
 					if (!row.conflicted) {
 						float notesY = rowTopY + (std::max)(0.0f, keyButtonYOffset + (row.keyButtonH - detailPredictedHeight) * 0.5f);
-						ImGui::SameLine();
-						ImGui::SetCursorPosY(notesY);
 						if (!triggerLabel.empty()) {
+							float triggerLineH = ImGui::CalcTextSize(triggerLabel.c_str()).y;
+							float triggerY = rowTopY + keyButtonYOffset + (std::max)(0.0f, (row.keyButtonH - triggerLineH) * 0.5f);
+							ImGui::SameLine();
+							ImGui::SetCursorPosY(triggerY);
 							ImGui::TextDisabled("%s", triggerLabel.c_str());
 						}
 						ImGui::SameLine(notesColumnX);
+						ImGui::SetCursorPosY(notesY);
 						ImGui::BeginGroup();
 						ImGui::TextWrapped("%s", detailText.c_str());
 						ImGui::EndGroup();
@@ -4558,6 +4575,7 @@ namespace RadarKeys {
 					ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
 					ImGui::PopID(); ImGui::Separator();
 				}
+				s_requiredContentWidth = frameRequiredWidth;
 				ImGui::EndChild();
 
 				if (removeConfirmPopupRequested) {
