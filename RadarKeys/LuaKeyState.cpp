@@ -86,6 +86,7 @@ namespace RadarKeys {
 		}
 
 		bool suppressed[RawInput::kMaxVKey] = {};
+		std::map<USHORT, double> g_holdSecondsOverrides;
 		bool IsSuppressed(USHORT vKey) {
 			return ValidVKey(vKey) && suppressed[vKey];
 		}
@@ -106,6 +107,11 @@ namespace RadarKeys {
 
 		bool IsDisabledVKey(USHORT vKey) {
 			return ValidVKey(vKey) && disabledVKey[vKey];
+		}
+
+		void SetHoldSecondsOverrides(const std::map<USHORT, double>& overrides) {
+			KeyStateLock lock(g_keyStateMutex);
+			g_holdSecondsOverrides = overrides;
 		}
 
 		void SetDisabledVKeys(const std::vector<USHORT>& vKeys) {
@@ -366,6 +372,10 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
+			auto holdOverrideIt = g_holdSecondsOverrides.find(vKey);
+			if (holdOverrideIt != g_holdSecondsOverrides.end()) {
+				holdTime = holdOverrideIt->second;
+			}
 			s.pendingUsesHoldTime = true;
 			s.pendingLastHoldSeconds = holdTime;
 			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
