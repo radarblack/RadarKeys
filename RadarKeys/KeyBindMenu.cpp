@@ -4333,6 +4333,7 @@ namespace RadarKeys {
 								break;
 							}
 						}
+						ModKeyBindings::SetTriggerConfigWithoutSave(pendingResetScriptName, pendingResetFunctionName, 0, 0.0f, 1.0f);
 						ModKeyBindings::SetDisabled(pendingResetScriptName, pendingResetFunctionName, false);
 						LogActivity("KeyBindMenu: Reset mod key to default: " + pendingResetScriptName + " [" + pendingResetFunctionName + "]");
 						pendingResetActive = false;
