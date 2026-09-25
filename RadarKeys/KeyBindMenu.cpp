@@ -24,7 +24,9 @@
 #include <algorithm>
 #include <unordered_set>
 #include <unordered_map>
+#include <atomic>
 #include <mutex>
+#include <thread>
 #include <memory>
 #include <cmath>
 #include "spdlog/sinks/basic_file_sink.h"
@@ -316,6 +318,43 @@ namespace RadarKeys {
 				}
 			}
 
+		static std::mutex g_healthProbeMutex;
+		static std::vector<std::string> g_healthProbePaths;
+		static std::vector<std::pair<std::string, bool>> g_healthProbeResults;
+		static std::atomic<bool> g_healthProbeStop{ false };
+		static std::thread g_healthProbeThread;
+
+		void HealthProbeThreadProc() {
+			while (!g_healthProbeStop.load()) {
+				for (int i = 0; i < 25 && !g_healthProbeStop.load(); ++i) {
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				}
+				if (g_healthProbeStop.load()) break;
+				std::vector<std::string> paths;
+				{
+					std::lock_guard<std::mutex> lock(g_healthProbeMutex);
+					paths.swap(g_healthProbePaths);
+				}
+				if (paths.empty()) continue;
+				std::vector<std::pair<std::string, bool>> results;
+				for (const auto& path : paths) {
+					std::error_code probeEc;
+					results.emplace_back(path, std::filesystem::exists(path, probeEc));
+				}
+				std::lock_guard<std::mutex> lock(g_healthProbeMutex);
+				for (auto& result : results) {
+					g_healthProbeResults.push_back(std::move(result));
+				}
+			}
+		}
+
+		void ShutdownHealthProbe() {
+			g_healthProbeStop.store(true);
+			if (g_healthProbeThread.joinable()) {
+				g_healthProbeThread.join();
+			}
+		}
+
 		bool PreviousSessionEndedCleanly(const std::string& logPath);
 		void InitDiagnostics() {
 			static bool initialized = false;
@@ -352,6 +391,8 @@ namespace RadarKeys {
 				if (verboseRequested) {
 					spdlog::info("KeyBindMenu: Verbose (trace-level) logging ENABLED (marker file: mod/radarKeys/radarkeys_verbose_log.txt)");
 				}
+				g_healthProbeStop.store(false);
+				g_healthProbeThread = std::thread(HealthProbeThreadProc);
 				spdlog::info(LOG_RADARKEYS_DIAGNOSTICS_SINGLE_LOG_FMT_PREVIOUS,
 				FileNameOnly(logPath.string()), FileNameOnly(prevPath.string()));
 			} catch (const std::exception& e) {
@@ -395,6 +436,7 @@ namespace RadarKeys {
 		}
 		
 		void LogCleanShutdown() {
+			ShutdownHealthProbe();
 			spdlog::info(LOG_STATE_CLEAN_EXIT);
 			spdlog::default_logger()->flush();
 		}
@@ -1681,16 +1723,27 @@ namespace RadarKeys {
 			auto healthNow = std::chrono::steady_clock::now();
 			if (std::chrono::duration<double>(healthNow - lastHealthSweep).count() >= 1.0) {
 				lastHealthSweep = healthNow;
+				std::vector<std::string> paths;
 				for (auto& bind : bindings) {
 					if (!bind.isInject) continue;
-					std::error_code healthEc;
-					bool sourceReadable = std::filesystem::exists(bind.scriptPathOn, healthEc);
-					if (!sourceReadable && !bind.autoDisabled) {
-						bind.autoDisabled = true;
-						spdlog::warn(LOG_KEYBINDMENU_INJECT_SOURCE_LOST_AUTO_DISABLED_FMT, FileNameOnly(bind.scriptPathOn));
-					} else if (sourceReadable && bind.autoDisabled) {
-						bind.autoDisabled = false;
-						spdlog::info(LOG_KEYBINDMENU_INJECT_SOURCE_RESTORED_AUTO_ENABLED_FMT, FileNameOnly(bind.scriptPathOn));
+					paths.push_back(bind.scriptPathOn);
+				}
+				std::vector<std::pair<std::string, bool>> results;
+				{
+					std::lock_guard<std::mutex> lock(g_healthProbeMutex);
+					g_healthProbePaths.swap(paths);
+					results.swap(g_healthProbeResults);
+				}
+				for (const auto& result : results) {
+					for (auto& bind : bindings) {
+						if (!bind.isInject || bind.scriptPathOn != result.first) continue;
+						if (!result.second && !bind.autoDisabled) {
+							bind.autoDisabled = true;
+							spdlog::warn(LOG_KEYBINDMENU_INJECT_SOURCE_LOST_AUTO_DISABLED_FMT, FileNameOnly(bind.scriptPathOn));
+						} else if (result.second && bind.autoDisabled) {
+							bind.autoDisabled = false;
+							spdlog::info(LOG_KEYBINDMENU_INJECT_SOURCE_RESTORED_AUTO_ENABLED_FMT, FileNameOnly(bind.scriptPathOn));
+						}
 					}
 				}
 			}
