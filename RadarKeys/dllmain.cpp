@@ -33,6 +33,7 @@ namespace RadarKeys {
 		static const char* LOG_RADARKEYS_COMBO_QUERY_UNRECOGNIZED_MALFORMED_COMBO = "RadarKeys: combo query: unrecognized or malformed combo string '{}'";
 		static const char* LOG_RADARKEYS_KEY_QUERY_INVALID_HOLD_SECONDS = "RadarKeys: key query: invalid hold-seconds arg '{}'";
 		static const char* LOG_RADARKEYS_DESCRIBEKEYLINES_REJECTED_NULL_ARGS = "RadarKeys: DescribeKeyLines: rejected - missing or empty key, script, function or source argument";
+		static const char* LOG_RADARKEYS_DESCRIBEKEY_REJECTED_IDENTITY_ARGS = "RadarKeys: DescribeKey: rejected - missing or empty script or function argument";
 		static const char* LOG_RADARKEYS_DESCRIBEKEYLINES_REJECTED_BAD_LINES_FMT = "RadarKeys: DescribeKeyLines: rejected - invalid line range start:'{}' end:'{}'";
 
 	typedef BOOL(WINAPI* SetCursorPosFunc)(int, int);
@@ -220,6 +221,11 @@ namespace RadarKeys {
 		const char* functionName = LuaToString(L, 3);
 		const char* toggleState = LuaToString(L, 4);
 
+		if (!scriptName || !*scriptName || !functionName || !*functionName) {
+			spdlog::warn(LOG_RADARKEYS_DESCRIBEKEY_REJECTED_IDENTITY_ARGS);
+			return 0;
+		}
+
 		if (ArgIsCombo(L)) {
 			std::vector<USHORT> vKeys = ResolveKeyListArg(L);
 			if (vKeys.empty()) {
@@ -254,7 +260,7 @@ namespace RadarKeys {
 		const char* scriptName = LuaToString(L, 2);
 		const char* functionName = LuaToString(L, 3);
 		const char* sourceScript = LuaToString(L, 4);
-		if (!keyName || !*keyName || !scriptName || !functionName || !sourceScript) {
+		if (!keyName || !*keyName || !scriptName || !*scriptName || !functionName || !*functionName || !sourceScript) {
 			spdlog::warn(LOG_RADARKEYS_DESCRIBEKEYLINES_REJECTED_NULL_ARGS);
 			return 0;
 		}
