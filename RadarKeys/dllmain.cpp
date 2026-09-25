@@ -212,7 +212,7 @@ namespace RadarKeys {
 		if (!ModKeyBindings::GetOverride(scriptName, functionName).empty()) return;
 		if (!ModKeyBindings::GetNativeKey(scriptName, functionName).empty()) return;
 		ModKeyBindings::SetNativeKeyWithoutSave(scriptName, functionName, keyName);
-		KeyBindMenu::SaveBindings();
+		KeyBindMenu::RequestBindingsSave();
 	}
 
 	static int l_DescribeKey(lua_State* L) {
