@@ -564,6 +564,11 @@ namespace RadarKeys {
 			return -1;
 		}
 
+		bool ComboKeysContainDuplicates(std::vector<USHORT> keys) {
+			std::sort(keys.begin(), keys.end());
+			return std::adjacent_find(keys.begin(), keys.end()) != keys.end();
+		}
+
 		std::vector<USHORT> ParseComboKeyNames(const std::string& raw) {
 			std::vector<USHORT> result;
 			static const char kNumpadPlusGuard = '\x1f';
@@ -588,6 +593,7 @@ namespace RadarKeys {
 				}
 				result.push_back((USHORT)vKey);
 			}
+			if (ComboKeysContainDuplicates(result)) result.clear();
 			if (result.size() < 2 || result.size() > 3) result.clear();
 			return result;
 		}
@@ -1923,7 +1929,7 @@ namespace RadarKeys {
 						if (vk == -1) { allValid = false; break; }
 						comboKeys.push_back((USHORT)vk);
 					}
-					if (!allValid) {
+					if (!allValid || ComboKeysContainDuplicates(comboKeys)) {
 						LogActivity("KeyBindMenu: Skipped invalid COMBO2 line while loading bindings: " + line, false);
 						continue;
 					}
@@ -1992,7 +1998,7 @@ namespace RadarKeys {
 						if (vk == -1) { allValid = false; break; }
 						comboKeys.push_back((USHORT)vk);
 					}
-					if (!allValid) {
+					if (!allValid || ComboKeysContainDuplicates(comboKeys)) {
 						LogActivity("KeyBindMenu: Skipped invalid COMBO line while loading bindings: " + line, false);
 						continue;
 					}
