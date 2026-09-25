@@ -2,6 +2,7 @@
 #include "windowsapi.h"
 #include <vector>
 #include <string>
+#include <map>
 
 namespace RadarKeys {
 	namespace LuaKeyState {
@@ -32,6 +33,7 @@ namespace RadarKeys {
 		void RetireIfUndescribed(USHORT vKey);
 		void SetSuppressedVKeys(const std::vector<USHORT>& vKeys);
 		void SetDisabledVKeys(const std::vector<USHORT>& vKeys);
+		void SetHoldSecondsOverrides(const std::map<USHORT, double>& overrides);
 		void SetDisabledCombos(const std::vector<std::vector<USHORT>>& combos);
 		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName);
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
