@@ -1249,6 +1249,22 @@ namespace RadarKeys {
 			return result;
 		}
 
+		std::map<USHORT, double> ComputeHoldSecondsOverrides() {
+			std::map<USHORT, double> result;
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (!info.hasDescription) continue;
+				if (!ModKeyBindings::HasTriggerConfig(info.scriptName, info.functionName)) continue;
+				ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(info.scriptName, info.functionName);
+				if (storedTrigger.triggerType != 0 || storedTrigger.holdSeconds <= 0.0f) continue;
+				USHORT displayVKey = ResolveDisplayVKey(info);
+				auto existing = result.find(displayVKey);
+				if (existing == result.end() || existing->second < (double)storedTrigger.holdSeconds) {
+					result[displayVKey] = (double)storedTrigger.holdSeconds;
+				}
+			}
+			return result;
+		}
+
 		std::vector<std::vector<USHORT>> ComputeDisabledModCombos() {
 			std::vector<std::vector<USHORT>> result;
 			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
@@ -1289,6 +1305,7 @@ namespace RadarKeys {
 			static std::vector<USHORT> cachedSuppressedVKeys;
 			static std::vector<USHORT> cachedDisabledVKeys;
 			static std::vector<std::vector<USHORT>> cachedDisabledCombos;
+			static std::map<USHORT, double> cachedHoldSecondsOverrides;
 			static ULONGLONG lastVKeyComputeTick = 0;
 			static bool lastVKeyComputeMenuOpen = false;
 			static bool lastVKeyComputeCapturePrompt = false;
@@ -1305,6 +1322,8 @@ namespace RadarKeys {
 			LuaKeyState::SetSuppressedVKeys(cachedSuppressedVKeys);
 			LuaKeyState::SetDisabledVKeys(cachedDisabledVKeys);
 			LuaKeyState::SetDisabledCombos(cachedDisabledCombos);
+			cachedHoldSecondsOverrides = ComputeHoldSecondsOverrides();
+			LuaKeyState::SetHoldSecondsOverrides(cachedHoldSecondsOverrides);
 			}
 
 			if (showCapturePrompt) {
@@ -4556,16 +4575,15 @@ namespace RadarKeys {
 						ImGui::PopStyleVar();
 					}
 					if (!row.conflicted) {
-						float notesY = rowTopY + (std::max)(0.0f, keyButtonYOffset + (row.keyButtonH - detailPredictedHeight) * 0.5f);
+						float buttonCenterY = rowTopY + keyButtonYOffset + row.keyButtonH * 0.5f;
 						if (!triggerLabel.empty()) {
 							float triggerLineH = ImGui::CalcTextSize(triggerLabel.c_str()).y;
-							float triggerY = rowTopY + keyButtonYOffset + (std::max)(0.0f, (row.keyButtonH - triggerLineH) * 0.5f);
 							ImGui::SameLine();
-							ImGui::SetCursorPosY(triggerY);
+							ImGui::SetCursorPosY(buttonCenterY - triggerLineH * 0.5f);
 							ImGui::TextDisabled("%s", triggerLabel.c_str());
 						}
 						ImGui::SameLine(notesColumnX);
-						ImGui::SetCursorPosY(notesY);
+						ImGui::SetCursorPosY(buttonCenterY - detailPredictedHeight * 0.5f);
 						ImGui::BeginGroup();
 						ImGui::TextWrapped("%s", detailText.c_str());
 						ImGui::EndGroup();
