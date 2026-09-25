@@ -75,6 +75,7 @@ namespace RadarKeys {
 			bool pendingUsesOnRelease = false;
 			bool pendingUsesHoldTime = false;
 			bool pendingUsesRepeat = false;
+			double pendingLastHoldSeconds = 0.0;
 			clock::time_point pressTime{};
 			clock::time_point repeatStart{};
 			double currentIncrementMult = 1.0;
@@ -398,7 +399,7 @@ namespace RadarKeys {
 			}
 			if (s.repeatStartSet) {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.repeatStart).count();
-				if (elapsed >= kRepeatRateSeconds) {
+				if (elapsed >= kRepeatRateSeconds / s.currentIncrementMult) {
 					s.repeatStart = clock::now();
 					s.currentIncrementMult *= kIncrementMultIncrementMult;
 					if (s.currentIncrementMult > kMaxIncrementMult) {
@@ -420,6 +421,21 @@ namespace RadarKeys {
 				return 1.0;
 			}
 			return states[vKey].currentIncrementMult;
+		}
+
+		void SetRepeatMult(USHORT vKey, double mult) {
+			KeyStateLock lock(g_keyStateMutex);
+			if (!ValidVKey(vKey) || !(mult > 0.0)) {
+				return;
+			}
+			vKey = ResolveActive(vKey);
+			if (mult > kMaxIncrementMult) {
+				mult = kMaxIncrementMult;
+			}
+			if (mult < 1.0 / kMaxIncrementMult) {
+				mult = 1.0 / kMaxIncrementMult;
+			}
+			states[vKey].currentIncrementMult = mult;
 		}
 
 		std::string ComboStateKey(const std::vector<USHORT>& vKeys) {
@@ -566,6 +582,7 @@ namespace RadarKeys {
 				state.holdStartSet = true;
 			}
 			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds; // L46: explicit 0 = immediate
+			state.pendingLastHoldSeconds = holdTime;
 			return state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime;
 		}
 
@@ -583,6 +600,7 @@ namespace RadarKeys {
 				state.holdStartSet = true;
 			}
 			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds; // L46: explicit 0 = immediate
+			state.pendingLastHoldSeconds = holdTime;
 			if (state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime) {
 				state.holdStartSet = false;
 				return true;
@@ -606,7 +624,7 @@ namespace RadarKeys {
 				state.repeatStartSet = true;
 				state.currentIncrementMult = 1.0;
 			}
-			if (state.repeatStartSet && std::chrono::duration<double>(clock::now() - state.repeatStart).count() >= kRepeatRateSeconds) {
+			if (state.repeatStartSet && std::chrono::duration<double>(clock::now() - state.repeatStart).count() >= kRepeatRateSeconds / state.currentIncrementMult) {
 				state.repeatStart = clock::now();
 				state.currentIncrementMult *= kIncrementMultIncrementMult;
 				if (state.currentIncrementMult > kMaxIncrementMult) state.currentIncrementMult = kMaxIncrementMult;
@@ -624,6 +642,27 @@ namespace RadarKeys {
 			return it == comboStates.end() ? 1.0 : it->second.currentIncrementMult;
 		}
 
+		double GetRepeatIntervalSeconds(USHORT vKey) {
+			KeyStateLock lock(g_keyStateMutex);
+			if (!ValidVKey(vKey)) {
+				return kRepeatRateSeconds;
+			}
+			vKey = ResolveActive(vKey);
+			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
+				return kRepeatRateSeconds;
+			}
+			return kRepeatRateSeconds / states[vKey].currentIncrementMult;
+		}
+
+		double GetComboRepeatIntervalSeconds(const std::vector<USHORT>& vKeys) {
+			KeyStateLock lock(g_keyStateMutex);
+			if (!ValidCombo(vKeys)) return kRepeatRateSeconds;
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt) return kRepeatRateSeconds;
+			auto it = comboStates.find(ComboStateKey(active));
+			return it == comboStates.end() ? kRepeatRateSeconds : kRepeatRateSeconds / it->second.currentIncrementMult;
+		}
+
 		void ResetComboRepeat(const std::vector<USHORT>& vKeys) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return;
@@ -635,6 +674,16 @@ namespace RadarKeys {
 			state.currentIncrementMult = 1.0;
 		}
 
+		void SetComboRepeatMult(const std::vector<USHORT>& vKeys, double mult) {
+			KeyStateLock lock(g_keyStateMutex);
+			if (!ValidCombo(vKeys) || !(mult > 0.0)) return;
+			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
+			if (!ValidCombo(active)) return;
+			if (mult > kMaxIncrementMult) mult = kMaxIncrementMult;
+			if (mult < 1.0 / kMaxIncrementMult) mult = 1.0 / kMaxIncrementMult;
+			comboStates[ComboStateKey(active)].currentIncrementMult = mult;
+		}
+
 		struct ComboKeyDescription {
 			bool hasToggleState = false;
 			bool toggleEnabled = false;
@@ -643,6 +692,7 @@ namespace RadarKeys {
 			bool usesHoldTime = false;
 			bool usesRepeat = false;
 			bool usesOnRelease = false;
+			double lastHoldSeconds = 0.0;
 			std::vector<USHORT> nativeKeys;
 			std::string scriptName;
 			std::string functionName;
@@ -662,10 +712,12 @@ namespace RadarKeys {
 			bool obsHoldTime = state.pendingUsesHoldTime;
 			bool obsRepeat = state.pendingUsesRepeat;
 			bool obsOnRelease = state.pendingUsesOnRelease;
+			double obsHoldSeconds = state.pendingLastHoldSeconds;
 			state.pendingUsesOnPress = false;
 			state.pendingUsesHoldTime = false;
 			state.pendingUsesRepeat = false;
 			state.pendingUsesOnRelease = false;
+			state.pendingLastHoldSeconds = 0.0;
 			std::string identity = scriptName + "\x1f" + functionName;
 			ComboKeyDescription& d = comboDescriptions[identity];
 			d.nativeKeys = vKeys;
@@ -677,6 +729,7 @@ namespace RadarKeys {
 			d.usesHoldTime = obsHoldTime;
 			d.usesRepeat = obsRepeat;
 			d.usesOnRelease = obsOnRelease;
+			d.lastHoldSeconds = obsHoldSeconds;
 			d.lastTouched = clock::now();
 		}
 
@@ -719,6 +772,7 @@ namespace RadarKeys {
 				info.usesHoldTime = d.usesHoldTime;
 				info.usesRepeat = d.usesRepeat;
 				info.usesOnRelease = d.usesOnRelease;
+				info.lastHoldSeconds = d.lastHoldSeconds;
 				result.push_back(std::move(info));
 			}
 			return result;
