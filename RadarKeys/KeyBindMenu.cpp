@@ -3686,6 +3686,13 @@ namespace RadarKeys {
 					std::vector<LuaKeyState::TrackedKeyInfo> groupMembers;
 					std::vector<LuaKeyState::TrackedComboKeyInfo> mergedCombos;
 					std::string storeNativeName;
+				std::string triggerLabel;
+				std::string keyButtonLabel;
+				float keyButtonW = 104.0f;
+				float keyButtonH = 20.0f;
+				bool keyAnyPressed = false;
+				bool keyAnyToggle = false;
+				bool keyAnyToggleEnabled = false;
 				};
 				auto FormatTrimmedSeconds = [](double v) -> std::string {
 					char buf[32];
@@ -3794,6 +3801,131 @@ namespace RadarKeys {
 						joined += parts[i];
 					}
 					return joined;
+				};
+				float buttonBaseHeight = 20.0f;
+				auto WrapTextToWidth = [&](const std::string& text, float maxWidth) -> std::vector<std::string> {
+					std::vector<std::string> words;
+					std::string word;
+					for (size_t i = 0; i < text.size(); i++) {
+						if (text[i] == ' ') {
+							if (!word.empty()) {
+								words.push_back(word);
+								word.clear();
+							}
+						} else {
+							word += text[i];
+						}
+					}
+					if (!word.empty()) words.push_back(word);
+					std::vector<std::string> lines;
+					std::string line;
+					for (const std::string& w : words) {
+						std::string candidate = line.empty() ? w : line + " " + w;
+						if (!line.empty() && ImGui::CalcTextSize(candidate.c_str()).x > maxWidth) {
+							lines.push_back(line);
+							line = w;
+						} else {
+							line = candidate;
+						}
+					}
+					if (!line.empty()) lines.push_back(line);
+					if (lines.empty()) lines.push_back(text);
+					return lines;
+				};
+				struct ModKeyRowVisual {
+					std::string label;
+					float width = 104.0f;
+					float height = 20.0f;
+					bool anyPressed = false;
+					bool anyToggle = false;
+					bool anyToggleEnabled = false;
+				};
+				auto BuildModKeyGroupVisual = [&](const UnifiedRow& row) -> ModKeyRowVisual {
+					ModKeyRowVisual visual;
+					std::string currentOverrideName = ModKeyBindings::GetOverride(row.info.scriptName, row.info.functionName);
+					std::vector<USHORT> currentOverrideComboMembers = ParseComboKeyNames(currentOverrideName);
+					std::vector<std::string> groupNames;
+					for (const LuaKeyState::TrackedKeyInfo& member : row.groupMembers) {
+						USHORT memberDisplayVKey = ResolveDisplayVKey(member);
+						bool memberIsGhost = false;
+						if (!currentOverrideComboMembers.empty()) {
+							memberIsGhost = SlotOfVKey(memberDisplayVKey) == SlotOfVKey(currentOverrideComboMembers.front());
+						} else {
+							int overrideSingleVKey = currentOverrideName.empty() ? -1 : VKeyForName(currentOverrideName);
+							std::string authorityName = overrideSingleVKey > 0 ? currentOverrideName : ModKeyBindings::GetNativeKey(row.info.scriptName, row.info.functionName);
+							int authorityVKey = authorityName.empty() ? -1 : VKeyForName(authorityName);
+							memberIsGhost = authorityVKey > 0
+								&& SlotOfVKey(memberDisplayVKey) == SlotOfVKey((USHORT)authorityVKey)
+								&& (USHORT)authorityVKey != memberDisplayVKey;
+						}
+						if (memberIsGhost) {
+							continue;
+						}
+						if (RawInput::IsKeyHeldReal(memberDisplayVKey)) {
+							visual.anyPressed = true;
+						}
+						if (member.hasToggleState) {
+							visual.anyToggle = true;
+							visual.anyToggleEnabled = member.toggleEnabled;
+						}
+						std::string memberName = NameForVKey(memberDisplayVKey);
+						if (std::find(groupNames.begin(), groupNames.end(), memberName) == groupNames.end()) {
+							groupNames.push_back(memberName);
+						}
+					}
+					if (groupNames.empty() && !row.storeNativeName.empty()) {
+						std::vector<USHORT> nativeLineMembers = ParseComboKeyNames(row.storeNativeName);
+						int nativeLineVKey = nativeLineMembers.empty() ? VKeyForName(row.storeNativeName) : (int)nativeLineMembers.front();
+						int overrideLineVKey = currentOverrideName.empty() ? -1 : VKeyForName(currentOverrideName);
+						USHORT overrideSlotRef = currentOverrideComboMembers.empty() ? (USHORT)(overrideLineVKey > 0 ? overrideLineVKey : -1) : currentOverrideComboMembers.front();
+						bool nativeLineReplaced = nativeLineVKey > 0 && overrideSlotRef != (USHORT)(-1)
+							&& SlotOfVKey((USHORT)nativeLineVKey) == SlotOfVKey(overrideSlotRef);
+						if (!nativeLineReplaced) {
+							groupNames.push_back(row.storeNativeName);
+						}
+					}
+					if (groupNames.empty() && !currentOverrideComboMembers.empty()) {
+						for (const auto& b : bindings) {
+							if (!b.isInject || !b.scriptDescribed || b.injectScriptName != row.info.scriptName || b.injectFunctionName != row.info.functionName) continue;
+							if (b.IsCombo()) continue;
+							if (SlotOfVKey(b.vKey) == SlotOfVKey(currentOverrideComboMembers.front())) continue;
+							std::string boundName = NameForVKey(b.vKey);
+							if (boundName.compare(0, 8, "Unknown(") != 0 && std::find(groupNames.begin(), groupNames.end(), boundName) == groupNames.end()) {
+								groupNames.push_back(boundName);
+							}
+							break;
+						}
+					}
+					std::vector<std::string> keyLabelLines;
+					std::string groupLabelFlat;
+					for (size_t gi = 0; gi < groupNames.size(); gi++) {
+						if (gi) groupLabelFlat += UI_LBL_KEY_GROUP_SEPARATOR;
+						groupLabelFlat += groupNames[gi];
+					}
+					if (!groupLabelFlat.empty()) keyLabelLines.push_back(groupLabelFlat);
+					for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
+						keyLabelLines.push_back(ComboKeysDisplayName(mergedCombo.activeKeys));
+					}
+					float maxLineWidth = 0.0f;
+					for (const std::string& lineText : keyLabelLines) {
+						maxLineWidth = (std::max)(maxLineWidth, ImGui::CalcTextSize(lineText.c_str()).x);
+					}
+					float width = maxLineWidth + 24.0f;
+					if (width < 104.0f) width = 104.0f;
+					if (row.mergedCombos.empty() && width > 168.0f) width = 168.0f;
+					float innerWidth = width - ImGui::GetStyle().FramePadding.x * 2.0f;
+					std::vector<std::string> wrappedLines;
+					for (const std::string& lineText : keyLabelLines) {
+						std::vector<std::string> parts = WrapTextToWidth(lineText, innerWidth);
+						wrappedLines.insert(wrappedLines.end(), parts.begin(), parts.end());
+					}
+					visual.label = CenterMultilineLabel(wrappedLines);
+					visual.width = width;
+					visual.height = buttonBaseHeight;
+					if (!wrappedLines.empty()) {
+						visual.height += (float)(wrappedLines.size() - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+					}
+					return visual;
 				};
 				auto DrawModInfoTooltipIfHovered = [&](const UnifiedRow& r) {
 					if (!ImGui::IsItemHovered()) {
@@ -4027,6 +4159,54 @@ namespace RadarKeys {
 					return af < bf;
 				});
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
+				float notesColumnX = 0.0f;
+				for (UnifiedRow& row : rows) {
+					row.triggerLabel = BuildTriggerTypeLabel(row);
+					if (row.isManual) {
+						std::vector<std::string> wrapped = WrapTextToWidth(displayCache[row.bindIndex].itemLabel, 104.0f - ImGui::GetStyle().FramePadding.x * 2.0f);
+						std::string joined;
+						for (size_t i = 0; i < wrapped.size(); i++) {
+							if (i) joined += "\n";
+							joined += wrapped[i];
+						}
+						row.keyButtonLabel = joined;
+						row.keyButtonW = 104.0f;
+						row.keyButtonH = buttonBaseHeight + (float)(wrapped.size() - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+					} else if (row.isComboScript) {
+						std::string comboLabel = ComboKeysDisplayName(row.comboInfo.activeKeys);
+						float width = ImGui::CalcTextSize(comboLabel.c_str()).x + 24.0f;
+						if (width < 104.0f) width = 104.0f;
+						if (width > 168.0f) width = 168.0f;
+						std::vector<std::string> wrapped = WrapTextToWidth(comboLabel, width - ImGui::GetStyle().FramePadding.x * 2.0f);
+						std::string joined;
+						for (size_t i = 0; i < wrapped.size(); i++) {
+							if (i) joined += "\n";
+							joined += wrapped[i];
+						}
+						row.keyButtonLabel = joined;
+						row.keyButtonW = width;
+						row.keyButtonH = buttonBaseHeight + (float)(wrapped.size() - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+					} else {
+						ModKeyRowVisual visual = BuildModKeyGroupVisual(row);
+						row.keyButtonLabel = visual.label;
+						row.keyButtonW = visual.width;
+						row.keyButtonH = visual.height;
+						row.keyAnyPressed = visual.anyPressed;
+						row.keyAnyToggle = visual.anyToggle;
+						row.keyAnyToggleEnabled = visual.anyToggleEnabled;
+					}
+					if (row.conflicted) {
+						continue;
+					}
+					float labelWidth = row.triggerLabel.empty() ? 0.0f : ImGui::CalcTextSize(row.triggerLabel.c_str()).x;
+					float rowExtent = ImGui::GetStyle().ItemSpacing.x * 3.0f + 55.0f + row.keyButtonW + labelWidth;
+					if (labelWidth > 0.0f) {
+						rowExtent += ImGui::GetStyle().ItemSpacing.x;
+					}
+					if (rowExtent > notesColumnX) {
+						notesColumnX = rowExtent;
+					}
+				}
 
 				if (!rows.empty()) {
 					ImGui::TextDisabled(UI_TXT_DESCRIBED_KEYS_HINT);
@@ -4069,26 +4249,13 @@ namespace RadarKeys {
 					}
 
 					const float conflictBoxHeight = 34.0f;
-					float mergedComboExtra = row.isComboScript ? 0.0f : (float)row.mergedCombos.size() * (ImGui::GetTextLineHeight() + 2.0f);
-					float modButtonHeight = buttonHeight + mergedComboExtra;
-					std::string triggerLabel = BuildTriggerTypeLabel(row);
-					float keyButtonPredW = 168.0f;
-					if (row.isManual) {
-						keyButtonPredW = 104.0f;
-					} else if (row.isComboScript) {
-						std::string comboLabelPred = ComboKeysDisplayName(row.comboInfo.activeKeys);
-						keyButtonPredW = ImGui::CalcTextSize(comboLabelPred.c_str()).x + 24.0f;
-						if (keyButtonPredW < 104.0f) keyButtonPredW = 104.0f;
-						if (keyButtonPredW > 168.0f) keyButtonPredW = 168.0f;
-					}
-					float typeWidth = triggerLabel.empty() ? 0.0f : ImGui::CalcTextSize(triggerLabel.c_str()).x;
+					std::string triggerLabel = row.triggerLabel;
 					ImGui::SetCursorPos(ImVec2(0.0f, rowTopY));
 					float rowAvailWidth = ImGui::GetContentRegionAvail().x;
-					float notesStartX = ImGui::GetStyle().ItemSpacing.x * 3.0f + 55.0f + keyButtonPredW + typeWidth;
-					float detailAvailX = (rowAvailWidth - notesStartX) > 50.0f ? (rowAvailWidth - notesStartX) : 50.0f;
+					float detailAvailX = (rowAvailWidth - notesColumnX) > 50.0f ? (rowAvailWidth - notesColumnX) : 50.0f;
 					float detailPredictedHeight = row.conflicted ? conflictBoxHeight : ImGui::CalcTextSize(detailText.c_str(), nullptr, false, detailAvailX).y;
-					float rowContentHeight = (detailPredictedHeight > modButtonHeight) ? detailPredictedHeight : modButtonHeight;
-					float keyButtonYOffset = (rowContentHeight - modButtonHeight) * 0.5f;
+					float rowContentHeight = (detailPredictedHeight > row.keyButtonH) ? detailPredictedHeight : row.keyButtonH;
+					float keyButtonYOffset = (rowContentHeight - row.keyButtonH) * 0.5f;
 					float stdButtonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
 					if (row.conflicted) {
 						ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
@@ -4228,7 +4395,7 @@ namespace RadarKeys {
 
 					if (row.isManual) {
 						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
-						if (ImGui::Button(itemLabel.c_str(), ImVec2(104, buttonHeight))) {
+						if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
 							int i = row.bindIndex;
 							editingBindingIndex = i;
 							captureIsCombo = bindings[i].IsCombo();
@@ -4309,11 +4476,7 @@ namespace RadarKeys {
 						};
 
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
-						std::string comboLabel = ComboKeysDisplayName(row.comboInfo.activeKeys);
-						float comboButtonWidth = ImGui::CalcTextSize(comboLabel.c_str()).x + 24.0f;
-						if (comboButtonWidth < 104.0f) comboButtonWidth = 104.0f;
-						if (comboButtonWidth > 168.0f) comboButtonWidth = 168.0f;
-						if (ImGui::Button(comboLabel.c_str(), ImVec2(comboButtonWidth, buttonHeight))) {
+						if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
 							openComboReassignPrompt();
 						}
 						if (ImGui::IsItemHovered()) {
@@ -4322,71 +4485,6 @@ namespace RadarKeys {
 						ImGui::PopStyleColor();
 					}
 					else {
-						ImVec4 keyNameColor;
-						bool anyPressed = false;
-						bool anyToggle = false;
-						bool anyToggleEnabled = false;
-						std::vector<std::string> groupNames;
-						std::string currentOverrideName = ModKeyBindings::GetOverride(row.info.scriptName, row.info.functionName);
-						std::vector<USHORT> currentOverrideComboMembers = ParseComboKeyNames(currentOverrideName);
-						for (const LuaKeyState::TrackedKeyInfo& member : row.groupMembers) {
-							USHORT memberDisplayVKey = ResolveDisplayVKey(member);
-							bool memberIsGhost = false;
-							if (!currentOverrideComboMembers.empty()) {
-								memberIsGhost = SlotOfVKey(memberDisplayVKey) == SlotOfVKey(currentOverrideComboMembers.front());
-							} else {
-								int overrideSingleVKey = currentOverrideName.empty() ? -1 : VKeyForName(currentOverrideName);
-								std::string authorityName = overrideSingleVKey > 0 ? currentOverrideName : ModKeyBindings::GetNativeKey(row.info.scriptName, row.info.functionName);
-								int authorityVKey = authorityName.empty() ? -1 : VKeyForName(authorityName);
-								memberIsGhost = authorityVKey > 0
-									&& SlotOfVKey(memberDisplayVKey) == SlotOfVKey((USHORT)authorityVKey)
-									&& (USHORT)authorityVKey != memberDisplayVKey;
-							}
-							if (memberIsGhost) {
-								continue;
-							}
-							if (RawInput::IsKeyHeldReal(memberDisplayVKey)) {
-								anyPressed = true;
-							}
-							if (member.hasToggleState) {
-								anyToggle = true;
-								anyToggleEnabled = member.toggleEnabled;
-							}
-							std::string memberName = NameForVKey(memberDisplayVKey);
-							if (std::find(groupNames.begin(), groupNames.end(), memberName) == groupNames.end()) {
-								groupNames.push_back(memberName);
-							}
-						}
-						if (groupNames.empty() && !row.storeNativeName.empty()) {
-							std::vector<USHORT> nativeLineMembers = ParseComboKeyNames(row.storeNativeName);
-							int nativeLineVKey = nativeLineMembers.empty() ? VKeyForName(row.storeNativeName) : (int)nativeLineMembers.front();
-							int overrideLineVKey = currentOverrideName.empty() ? -1 : VKeyForName(currentOverrideName);
-							USHORT overrideSlotRef = currentOverrideComboMembers.empty() ? (USHORT)(overrideLineVKey > 0 ? overrideLineVKey : -1) : currentOverrideComboMembers.front();
-							bool nativeLineReplaced = nativeLineVKey > 0 && overrideSlotRef != (USHORT)(-1)
-								&& SlotOfVKey((USHORT)nativeLineVKey) == SlotOfVKey(overrideSlotRef);
-							if (!nativeLineReplaced) {
-								groupNames.push_back(row.storeNativeName);
-							}
-						}
-						if (groupNames.empty() && !currentOverrideComboMembers.empty()) {
-							for (const auto& b : bindings) {
-								if (!b.isInject || !b.scriptDescribed || b.injectScriptName != row.info.scriptName || b.injectFunctionName != row.info.functionName) continue;
-								if (b.IsCombo()) continue;
-								if (SlotOfVKey(b.vKey) == SlotOfVKey(currentOverrideComboMembers.front())) continue;
-								std::string boundName = NameForVKey(b.vKey);
-								if (boundName.compare(0, 8, "Unknown(") != 0 && std::find(groupNames.begin(), groupNames.end(), boundName) == groupNames.end()) {
-									groupNames.push_back(boundName);
-								}
-								break;
-							}
-						}
-						if (anyToggle) {
-							keyNameColor = anyToggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
-						}
-						else {
-							keyNameColor = anyPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-						}
-
 						auto openReassignPrompt = [&row]() {
 							modKeyCaptureScriptName = row.info.scriptName;
 							modKeyCaptureFunctionName = row.info.functionName;
@@ -4415,26 +4513,17 @@ namespace RadarKeys {
 							showCapturePrompt = true;
 						};
 
-						std::vector<std::string> keyLabelLines;
-						std::string groupLabel;
-						for (size_t gi = 0; gi < groupNames.size(); gi++) {
-							if (gi) groupLabel += UI_LBL_KEY_GROUP_SEPARATOR;
-							groupLabel += groupNames[gi];
+						ImVec4 keyNameColor;
+						if (row.keyAnyToggle) {
+							keyNameColor = row.keyAnyToggleEnabled ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
 						}
-						if (!groupLabel.empty()) keyLabelLines.push_back(groupLabel);
-						for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
-							keyLabelLines.push_back(ComboKeysDisplayName(mergedCombo.activeKeys));
+						else {
+							keyNameColor = row.keyAnyPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 						}
-						groupLabel = CenterMultilineLabel(keyLabelLines);
-						float groupButtonWidth = ImGui::CalcTextSize(groupLabel.c_str()).x + 24.0f;
-						if (groupButtonWidth < 104.0f) groupButtonWidth = 104.0f;
-						if (row.mergedCombos.empty() && groupButtonWidth > 168.0f) groupButtonWidth = 168.0f;
-						float groupButtonHeight = buttonHeight + (float)row.mergedCombos.size() * (ImGui::GetTextLineHeight() + 2.0f);
-
 						ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
 						if (row.info.hasDescription) {
-							if (ImGui::Button(groupLabel.c_str(), ImVec2(groupButtonWidth, groupButtonHeight))) {
+							if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
 								openReassignPrompt();
 							}
 							if (ImGui::IsItemHovered()) {
@@ -4443,7 +4532,7 @@ namespace RadarKeys {
 						}
 						else {
 							ImGui::BeginDisabled();
-							ImGui::Button(groupLabel.c_str(), ImVec2(groupButtonWidth, groupButtonHeight));
+							ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
 							ImGui::EndDisabled();
 							if (ImGui::IsItemHovered()) {
 								ImGui::SetTooltip(UI_TIP_CANNOT_REASSIGN_UNDESCRIBED);
@@ -4453,13 +4542,13 @@ namespace RadarKeys {
 						ImGui::PopStyleVar();
 					}
 					if (!row.conflicted) {
-						float notesY = rowTopY + (std::max)(0.0f, keyButtonYOffset + (modButtonHeight - detailPredictedHeight) * 0.5f);
+						float notesY = rowTopY + (std::max)(0.0f, keyButtonYOffset + (row.keyButtonH - detailPredictedHeight) * 0.5f);
 						ImGui::SameLine();
 						ImGui::SetCursorPosY(notesY);
 						if (!triggerLabel.empty()) {
 							ImGui::TextDisabled("%s", triggerLabel.c_str());
-							ImGui::SameLine();
 						}
+						ImGui::SameLine(notesColumnX);
 						ImGui::BeginGroup();
 						ImGui::TextWrapped("%s", detailText.c_str());
 						ImGui::EndGroup();
