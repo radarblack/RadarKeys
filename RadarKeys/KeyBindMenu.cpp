@@ -3800,6 +3800,16 @@ namespace RadarKeys {
 					row.comboInfo = std::move(synthesized);
 					rows.push_back(std::move(row));
 				}
+				std::stable_sort(rows.begin(), rows.end(), [](const UnifiedRow& a, const UnifiedRow& b) {
+					if (a.isManual != b.isManual) return !a.isManual;
+					if (a.isManual || b.isManual) return false;
+					const std::string& an = a.isComboScript ? a.comboInfo.scriptName : a.info.scriptName;
+					const std::string& bn = b.isComboScript ? b.comboInfo.scriptName : b.info.scriptName;
+					if (an != bn) return an < bn;
+					const std::string& af = a.isComboScript ? a.comboInfo.functionName : a.info.functionName;
+					const std::string& bf = b.isComboScript ? b.comboInfo.functionName : b.info.functionName;
+					return af < bf;
+				});
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 
 				if (!rows.empty()) {
