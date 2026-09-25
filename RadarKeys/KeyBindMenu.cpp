@@ -1787,7 +1787,7 @@ namespace RadarKeys {
 		void LoadBindings() {
 			std::ifstream inFile(GetBindsFileName());
 			if (!inFile) {
-				LogActivity("KeyBindMenu: No existing bindings file yet at " + GetBindsFileName() + " (fine on first run)");
+				LogActivity("KeyBindMenu: No existing bindings file yet at " + FileNameOnly(GetBindsFileName()) + " (fine on first run)");
 				ModKeyBindings::LoadFromEntries({});
 				return;
 			}
