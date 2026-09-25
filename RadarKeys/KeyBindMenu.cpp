@@ -108,6 +108,12 @@ namespace RadarKeys {
 		static const char* UI_TIP_UNCHECK_TOGGLE_FIRST = "Uncheck Toggle or Long Press first to use Instant.";
 		static const char* UI_OPT_ON_PRESS = "On Press";
 		static const char* UI_OPT_ON_RELEASE = "On Release";
+		static const char* UI_TT_REPEAT_FMT = "Repeat (every %s seconds)";
+		static const char* UI_TT_TOGGLE_FMT = "Toggle: %s";
+		static const char* UI_TT_ON_HOLD_FMT = "On Hold (for %s seconds)";
+		static const char* UI_TT_JOIN = " | ";
+		static const char* UI_TT_STATE_ON = "on";
+		static const char* UI_TT_STATE_OFF = "off";
 		static const char* UI_OPT_REPEAT = "Repeat";
 		static const char* UI_TIP_REPEAT_ACCEL =
 			"Acceleration multiplier for the Repeat interval.\n"
@@ -3681,6 +3687,151 @@ namespace RadarKeys {
 					std::vector<LuaKeyState::TrackedComboKeyInfo> mergedCombos;
 					std::string storeNativeName;
 				};
+				auto FormatTrimmedSeconds = [](double v) -> std::string {
+					char buf[32];
+					snprintf(buf, sizeof(buf), "%.2f", v);
+					std::string s(buf);
+					while (!s.empty() && s.back() == '0') s.pop_back();
+					if (!s.empty() && s.back() == '.') s.pop_back();
+					return s.empty() ? "0" : s;
+				};
+				auto BuildTriggerTypeLabel = [&](const UnifiedRow& row) -> std::string {
+					std::vector<std::string> parts;
+					bool usesPress = false;
+					bool usesRelease = false;
+					bool usesRepeat = false;
+					bool usesToggle = false;
+					bool usesHold = false;
+					bool toggleOn = false;
+					double holdSeconds = 0.0;
+					double repeatInterval = 0.0;
+					if (row.isManual) {
+						const KeyBind& b = bindings[row.bindIndex];
+						if (b.isToggle) {
+							usesToggle = true;
+							toggleOn = b.toggleState;
+						}
+						if (b.holdSeconds > 0.0f) {
+							usesHold = true;
+							holdSeconds = b.holdSeconds;
+						}
+						if (b.isInstant && b.instantTriggerType == 2) {
+							usesRepeat = true;
+							double speedMult = (b.runtimeRepeatSpeedMult > 0.0) ? (double)b.runtimeRepeatSpeedMult : 1.0;
+							repeatInterval = kRepeatIntervalSeconds / speedMult;
+						} else if (b.isInstant && b.instantTriggerType == 1) {
+							usesRelease = true;
+						} else if (b.isInstant) {
+							usesPress = true;
+						} else if (!b.isToggle && b.holdSeconds <= 0.0f) {
+							usesPress = true;
+						}
+					} else {
+						const std::string& scriptName = row.isComboScript ? row.comboInfo.scriptName : row.info.scriptName;
+						const std::string& functionName = row.isComboScript ? row.comboInfo.functionName : row.info.functionName;
+						if (ModKeyBindings::HasTriggerConfig(scriptName, functionName)) {
+							ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
+							if (storedTrigger.triggerType == 0 && storedTrigger.holdSeconds > 0.0f) {
+								usesHold = true;
+								holdSeconds = storedTrigger.holdSeconds;
+							} else if (storedTrigger.triggerType == 2) {
+								usesRepeat = true;
+							} else if (storedTrigger.triggerType == 1) {
+								usesRelease = true;
+							} else {
+								usesPress = true;
+							}
+						}
+						auto absorbKey = [&](const LuaKeyState::TrackedKeyInfo& m) {
+							usesPress |= m.usesOnPress;
+							usesRelease |= m.usesOnRelease;
+							usesRepeat |= m.usesRepeat;
+							usesHold |= m.usesHoldTime;
+							holdSeconds = (std::max)(holdSeconds, m.lastHoldSeconds);
+							if (m.hasToggleState) {
+								usesToggle = true;
+								toggleOn = m.toggleEnabled;
+							}
+						};
+						auto absorbCombo = [&](const LuaKeyState::TrackedComboKeyInfo& c) {
+							usesPress |= c.usesOnPress;
+							usesRelease |= c.usesOnRelease;
+							usesRepeat |= c.usesRepeat;
+							usesHold |= c.usesHoldTime;
+							holdSeconds = (std::max)(holdSeconds, c.lastHoldSeconds);
+							if (c.hasToggleState) {
+								usesToggle = true;
+								toggleOn = c.toggleEnabled;
+							}
+						};
+						if (row.isComboScript) {
+							absorbCombo(row.comboInfo);
+							if (usesRepeat) repeatInterval = LuaKeyState::GetComboRepeatIntervalSeconds(row.comboInfo.activeKeys);
+						} else {
+							for (const LuaKeyState::TrackedKeyInfo& m : row.groupMembers) absorbKey(m);
+							for (const LuaKeyState::TrackedComboKeyInfo& c : row.mergedCombos) absorbCombo(c);
+							if (usesRepeat) repeatInterval = LuaKeyState::GetRepeatIntervalSeconds(row.displayVKey);
+						}
+					}
+					char fmtBuf[160];
+					if (usesPress) parts.push_back(UI_OPT_ON_PRESS);
+					if (usesRelease) parts.push_back(UI_OPT_ON_RELEASE);
+					if (usesRepeat) {
+						snprintf(fmtBuf, sizeof(fmtBuf), UI_TT_REPEAT_FMT, FormatTrimmedSeconds(repeatInterval).c_str());
+						parts.push_back(fmtBuf);
+					}
+					if (usesToggle) {
+						snprintf(fmtBuf, sizeof(fmtBuf), UI_TT_TOGGLE_FMT, toggleOn ? UI_TT_STATE_ON : UI_TT_STATE_OFF);
+						parts.push_back(fmtBuf);
+					}
+					if (usesHold) {
+						snprintf(fmtBuf, sizeof(fmtBuf), UI_TT_ON_HOLD_FMT, FormatTrimmedSeconds(holdSeconds).c_str());
+						parts.push_back(fmtBuf);
+					}
+					std::string joined;
+					for (size_t i = 0; i < parts.size(); i++) {
+						if (i) joined += UI_TT_JOIN;
+						joined += parts[i];
+					}
+					return joined;
+				};
+				auto DrawModInfoTooltipIfHovered = [&](const UnifiedRow& r) {
+					if (!ImGui::IsItemHovered()) {
+						return;
+					}
+					const std::string* hoveredScriptName = nullptr;
+					if (r.isComboScript) {
+						hoveredScriptName = &r.comboInfo.scriptName;
+					}
+					else if (r.info.hasDescription) {
+						hoveredScriptName = &r.info.scriptName;
+					}
+					if (hoveredScriptName) {
+						auto modIt = modInfoByScript.find(*hoveredScriptName);
+						if (modIt != modInfoByScript.end()) {
+							const ModInfoRegistry::ModInfo& mi = modIt->second;
+							bool hasExtra = !mi.modDescription.empty() || !mi.modCreator.empty() || !mi.modVersion.empty() || !mi.modLink.empty();
+							if (hasExtra) {
+								ImGui::BeginTooltip();
+								ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+								if (!mi.modDescription.empty()) {
+									ImGui::TextWrapped("%s", mi.modDescription.c_str());
+								}
+								if (!mi.modCreator.empty()) {
+									ImGui::Text("Creator: %s", mi.modCreator.c_str());
+								}
+								if (!mi.modVersion.empty()) {
+									ImGui::Text("Version: %s", mi.modVersion.c_str());
+								}
+								if (!mi.modLink.empty()) {
+									ImGui::TextWrapped("Link: %s", mi.modLink.c_str());
+								}
+								ImGui::PopTextWrapPos();
+								ImGui::EndTooltip();
+							}
+						}
+					}
+				};
 				std::vector<UnifiedRow> rows;
 				rows.reserve(trackedKeys.size() + trackedCombos.size() + bindings.size());
 
@@ -3918,19 +4069,31 @@ namespace RadarKeys {
 					}
 
 					const float conflictBoxHeight = 34.0f;
-					ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
-					float detailAvailX = ImGui::GetContentRegionAvail().x;
-					float detailPredictedHeight = ImGui::CalcTextSize(detailText.c_str(), nullptr, false, detailAvailX).y;
 					float mergedComboExtra = row.isComboScript ? 0.0f : (float)row.mergedCombos.size() * (ImGui::GetTextLineHeight() + 2.0f);
 					float modButtonHeight = buttonHeight + mergedComboExtra;
+					std::string triggerLabel = BuildTriggerTypeLabel(row);
+					float keyButtonPredW = 168.0f;
+					if (row.isManual) {
+						keyButtonPredW = 104.0f;
+					} else if (row.isComboScript) {
+						std::string comboLabelPred = ComboKeysDisplayName(row.comboInfo.activeKeys);
+						keyButtonPredW = ImGui::CalcTextSize(comboLabelPred.c_str()).x + 24.0f;
+						if (keyButtonPredW < 104.0f) keyButtonPredW = 104.0f;
+						if (keyButtonPredW > 168.0f) keyButtonPredW = 168.0f;
+					}
+					float typeWidth = triggerLabel.empty() ? 0.0f : ImGui::CalcTextSize(triggerLabel.c_str()).x;
+					ImGui::SetCursorPos(ImVec2(0.0f, rowTopY));
+					float rowAvailWidth = ImGui::GetContentRegionAvail().x;
+					float notesStartX = ImGui::GetStyle().ItemSpacing.x * 3.0f + 55.0f + keyButtonPredW + typeWidth;
+					float detailAvailX = (rowAvailWidth - notesStartX) > 50.0f ? (rowAvailWidth - notesStartX) : 50.0f;
+					float detailPredictedHeight = row.conflicted ? conflictBoxHeight : ImGui::CalcTextSize(detailText.c_str(), nullptr, false, detailAvailX).y;
 					float rowContentHeight = (detailPredictedHeight > modButtonHeight) ? detailPredictedHeight : modButtonHeight;
 					float keyButtonYOffset = (rowContentHeight - modButtonHeight) * 0.5f;
 					float stdButtonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
-					float detailYOffset = keyButtonYOffset + (modButtonHeight - detailPredictedHeight) * 0.5f - ImGui::GetStyle().FramePadding.y;
-					ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY + (std::max)(0.0f, detailYOffset)));
-					ImGui::AlignTextToFramePadding();
-					ImGui::BeginGroup();
 					if (row.conflicted) {
+						ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
+						ImGui::AlignTextToFramePadding();
+						ImGui::BeginGroup();
 						ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
 						ImGui::BeginChild("ConflictDetailBox", ImVec2(0, conflictBoxHeight), true);
 						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
@@ -3938,45 +4101,8 @@ namespace RadarKeys {
 						ImGui::PopStyleColor();
 						ImGui::EndChild();
 						ImGui::PopStyleColor();
-					}
-					else {
-						ImGui::TextWrapped("%s", detailText.c_str());
-					}
-					ImGui::EndGroup();
-
-					if (ImGui::IsItemHovered()) {
-						const std::string* hoveredScriptName = nullptr;
-						if (row.isComboScript) {
-							hoveredScriptName = &row.comboInfo.scriptName;
-						}
-						else if (row.info.hasDescription) {
-							hoveredScriptName = &row.info.scriptName;
-						}
-						if (hoveredScriptName) {
-							auto modIt = modInfoByScript.find(*hoveredScriptName);
-							if (modIt != modInfoByScript.end()) {
-								const ModInfoRegistry::ModInfo& mi = modIt->second;
-								bool hasExtra = !mi.modDescription.empty() || !mi.modCreator.empty() || !mi.modVersion.empty() || !mi.modLink.empty();
-								if (hasExtra) {
-									ImGui::BeginTooltip();
-									ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
-									if (!mi.modDescription.empty()) {
-										ImGui::TextWrapped("%s", mi.modDescription.c_str());
-									}
-									if (!mi.modCreator.empty()) {
-										ImGui::Text("Creator: %s", mi.modCreator.c_str());
-									}
-									if (!mi.modVersion.empty()) {
-										ImGui::Text("Version: %s", mi.modVersion.c_str());
-									}
-									if (!mi.modLink.empty()) {
-										ImGui::TextWrapped("Link: %s", mi.modLink.c_str());
-									}
-									ImGui::PopTextWrapPos();
-									ImGui::EndTooltip();
-								}
-							}
-						}
+						ImGui::EndGroup();
+						DrawModInfoTooltipIfHovered(row);
 					}
 
 					ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + stdButtonYOffset));
@@ -4102,7 +4228,7 @@ namespace RadarKeys {
 
 					if (row.isManual) {
 						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
-						if (ImGui::Button(itemLabel.c_str(), ImVec2(130, buttonHeight))) {
+						if (ImGui::Button(itemLabel.c_str(), ImVec2(104, buttonHeight))) {
 							int i = row.bindIndex;
 							editingBindingIndex = i;
 							captureIsCombo = bindings[i].IsCombo();
@@ -4185,8 +4311,8 @@ namespace RadarKeys {
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
 						std::string comboLabel = ComboKeysDisplayName(row.comboInfo.activeKeys);
 						float comboButtonWidth = ImGui::CalcTextSize(comboLabel.c_str()).x + 24.0f;
-						if (comboButtonWidth < 130.0f) comboButtonWidth = 130.0f;
-						if (comboButtonWidth > 210.0f) comboButtonWidth = 210.0f;
+						if (comboButtonWidth < 104.0f) comboButtonWidth = 104.0f;
+						if (comboButtonWidth > 168.0f) comboButtonWidth = 168.0f;
 						if (ImGui::Button(comboLabel.c_str(), ImVec2(comboButtonWidth, buttonHeight))) {
 							openComboReassignPrompt();
 						}
@@ -4301,8 +4427,8 @@ namespace RadarKeys {
 						}
 						groupLabel = CenterMultilineLabel(keyLabelLines);
 						float groupButtonWidth = ImGui::CalcTextSize(groupLabel.c_str()).x + 24.0f;
-						if (groupButtonWidth < 130.0f) groupButtonWidth = 130.0f;
-						if (row.mergedCombos.empty() && groupButtonWidth > 210.0f) groupButtonWidth = 210.0f;
+						if (groupButtonWidth < 104.0f) groupButtonWidth = 104.0f;
+						if (row.mergedCombos.empty() && groupButtonWidth > 168.0f) groupButtonWidth = 168.0f;
 						float groupButtonHeight = buttonHeight + (float)row.mergedCombos.size() * (ImGui::GetTextLineHeight() + 2.0f);
 
 						ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
@@ -4325,6 +4451,19 @@ namespace RadarKeys {
 						}
 						ImGui::PopStyleColor();
 						ImGui::PopStyleVar();
+					}
+					if (!row.conflicted) {
+						float notesY = rowTopY + (std::max)(0.0f, keyButtonYOffset + (modButtonHeight - detailPredictedHeight) * 0.5f);
+						ImGui::SameLine();
+						ImGui::SetCursorPosY(notesY);
+						if (!triggerLabel.empty()) {
+							ImGui::TextDisabled("%s", triggerLabel.c_str());
+							ImGui::SameLine();
+						}
+						ImGui::BeginGroup();
+						ImGui::TextWrapped("%s", detailText.c_str());
+						ImGui::EndGroup();
+						DrawModInfoTooltipIfHovered(row);
 					}
 
 					ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
