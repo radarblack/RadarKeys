@@ -322,6 +322,7 @@ namespace RadarKeys {
 		static std::vector<std::string> g_healthProbePaths;
 		static std::vector<std::pair<std::string, bool>> g_healthProbeResults;
 		static std::atomic<bool> g_healthProbeStop{ false };
+		static std::atomic<bool> g_pendingBindingsSave{ false };
 		static std::thread g_healthProbeThread;
 
 		void HealthProbeThreadProc() {
@@ -443,6 +444,9 @@ namespace RadarKeys {
 		
 		void LogCleanShutdown() {
 			ShutdownHealthProbe();
+			if (g_pendingBindingsSave.exchange(false)) {
+				SaveBindings();
+			}
 			spdlog::info(LOG_STATE_CLEAN_EXIT);
 			spdlog::default_logger()->flush();
 		}
@@ -1759,6 +1763,9 @@ namespace RadarKeys {
 				payloadOpt = pendingInjectDescribes.pop();
 			}
 			SweepStaleScriptInjects();
+			if (g_pendingBindingsSave.exchange(false)) {
+				SaveBindings();
+			}
 		}
 
 		void QueueInjectDescribe(const std::string& payload) {
