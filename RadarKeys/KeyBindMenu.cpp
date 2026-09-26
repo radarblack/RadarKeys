@@ -116,9 +116,9 @@ namespace RadarKeys {
 		static const char* UI_TT_STATE_OFF = "off";
 		static const char* UI_OPT_REPEAT = "Repeat";
 		static const char* UI_TIP_REPEAT_ACCEL =
-			"Acceleration multiplier for the Repeat interval.\n"
-			"- ? > 1.00: Faster\n"
-			"- ? < 1.00: Slower";
+			"Seconds before the next repeat fires.\n"
+			"- ? Higher: Slower\n"
+			"- ? Lower: Faster";
 		static const char* UI_LBL_READY = "[ READY ]";
 		static const char* UI_LBL_UNFIT = "[ UNFIT ]";
 		static const char* UI_TIP_COMBO_VALID = "The key combination is valid. Key assignment can finalize.";
@@ -1026,6 +1026,7 @@ namespace RadarKeys {
 		std::map<USHORT, PendingPress> pendingPresses;
 
 		constexpr double kRepeatIntervalSeconds = 0.3;
+		constexpr double kModKeyRepeatBaseSeconds = 0.85;
 		constexpr double kNearMissHoldFraction = 0.8;
 		constexpr double kMaxRepeatSpeedMult = 20.0;
 		constexpr float kMinRepeatAccelMult = 0.1f;
@@ -2429,6 +2430,7 @@ namespace RadarKeys {
 		static bool capturedToggleLocked = false;
 		static bool capturedLongPressMode = false;
 		static float capturedRepeatAccelMult = 1.0f;
+		static float capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
 		static bool capturedHasFuncOn = false;
 		static bool capturedHasFuncOff = false;
 		static int capturedToggleType = 0; 
@@ -2468,6 +2470,7 @@ namespace RadarKeys {
 			capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 			capturedToggleLocked = false;
 			capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
+			capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
 			capturedInstantUserSet = false;
 			ResetComboCaptureState();
 			captureIsCombo = false;
@@ -2964,6 +2967,7 @@ namespace RadarKeys {
 				capturedInstantMode = false;
 				capturedInstantTriggerType = 0;
 				capturedRepeatAccelMult = 1.0f;
+				capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
 				capturedInstantUserSet = false;
 				LogActivity(LOG_KEYBIND_HAS_BEEN_RESET);
 			}
@@ -3043,6 +3047,7 @@ namespace RadarKeys {
 					capturedInstantMode = false;
 					capturedInstantTriggerType = 0;
 					capturedRepeatAccelMult = 1.0f;
+					capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
 					capturedInstantUserSet = false;
 					LogActivity(LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET);
 				}
@@ -3109,8 +3114,14 @@ namespace RadarKeys {
 
 					if (capturedInstantTriggerType == 2) {
 						ImGui::SetNextItemWidth(55);
-						ImGui::InputFloat("##capturedRepeatAccelInput", &capturedRepeatAccelMult, 0.0f, 0.0f, "%.2fx");
-						if (capturedRepeatAccelMult < kMinRepeatAccelMult) capturedRepeatAccelMult = kMinRepeatAccelMult;
+						if (ImGui::InputFloat("##capturedRepeatInterval", &capturedRepeatIntervalSeconds, 0.0f, 0.0f, "%.2fs")) {
+							float baseSeconds = isAssigningModKey ? (float)kModKeyRepeatBaseSeconds : (float)kRepeatIntervalSeconds;
+							float minSeconds = baseSeconds / (float)kMaxRepeatSpeedMult;
+							float maxSeconds = baseSeconds / kMinRepeatAccelMult;
+							if (!std::isfinite(capturedRepeatIntervalSeconds) || capturedRepeatIntervalSeconds < minSeconds) capturedRepeatIntervalSeconds = minSeconds;
+							if (capturedRepeatIntervalSeconds > maxSeconds) capturedRepeatIntervalSeconds = maxSeconds;
+							capturedRepeatAccelMult = baseSeconds / capturedRepeatIntervalSeconds;
+						}
 						if (ImGui::IsItemHovered()) {
 							ImGui::SetTooltip("%s", UI_TIP_REPEAT_ACCEL);
 						}
@@ -3401,6 +3412,7 @@ namespace RadarKeys {
 					capturedVKey = 0; capturedHoldSeconds = 0.0f;
 					capturedToggleMode = capturedLongPressMode = false;
 					capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
+					capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
 					capturedInstantUserSet = false;
 					showCapturePrompt = isAssigningModKey = false;
 				}
@@ -3419,6 +3431,7 @@ namespace RadarKeys {
 					}
 					capturedToggleMode = capturedLongPressMode = false;
 					capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
+					capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
 					capturedInstantUserSet = false;
 				} else {
 					float finalHoldSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
@@ -3545,6 +3558,7 @@ namespace RadarKeys {
 					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 					capturedToggleLocked = false;
 					capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
+					capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
 					capturedInstantUserSet = false;
 					ResetComboCaptureState();
 					captureIsCombo = false;
@@ -4475,6 +4489,7 @@ namespace RadarKeys {
 							capturedInstantMode = bindings[i].isInstant;
 							capturedInstantTriggerType = bindings[i].instantTriggerType;
 							capturedRepeatAccelMult = bindings[i].repeatAccelMult;
+							capturedRepeatIntervalSeconds = (float)(kRepeatIntervalSeconds / (bindings[i].repeatAccelMult > 0.0f ? bindings[i].repeatAccelMult : 1.0f));
 							capturedInstantUserSet = true;
 							capturedHasFuncOn = !bindings[i].functionOn.empty() || !bindings[i].functionTap.empty();
 							capturedHasFuncOff = !bindings[i].functionOff.empty();
@@ -4535,6 +4550,7 @@ namespace RadarKeys {
 							capturedInstantMode = seededInfo.anyInstant || !seededInfo.anyLongPress;
 							capturedInstantTriggerType = seededInfo.instantType;
 							capturedRepeatAccelMult = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).repeatAccelMult;
+							capturedRepeatIntervalSeconds = (float)(kModKeyRepeatBaseSeconds / (capturedRepeatAccelMult > 0.0f ? capturedRepeatAccelMult : 1.0f));
 							capturedInstantUserSet = false;
 							requestCaptureFocus = true;
 							showCapturePrompt = true;
@@ -4575,6 +4591,7 @@ namespace RadarKeys {
 							capturedInstantMode = seededInfo.anyInstant || !seededInfo.anyLongPress;
 							capturedInstantTriggerType = seededInfo.instantType;
 							capturedRepeatAccelMult = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).repeatAccelMult;
+							capturedRepeatIntervalSeconds = (float)(kModKeyRepeatBaseSeconds / (capturedRepeatAccelMult > 0.0f ? capturedRepeatAccelMult : 1.0f));
 							capturedInstantUserSet = false;
 							requestCaptureFocus = true;
 							showCapturePrompt = true;
