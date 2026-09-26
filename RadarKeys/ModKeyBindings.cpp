@@ -21,6 +21,7 @@ namespace RadarKeys {
 			int triggerType = 0;
 			float holdSeconds = 0.0f;
 			float repeatAccelMult = 1.0f;
+			bool toggleMode = false;
 			std::string nativeKeyName;
 		};
 
@@ -100,6 +101,7 @@ namespace RadarKeys {
 					entry.triggerType = funcEntry.second.triggerType;
 					entry.holdSeconds = funcEntry.second.holdSeconds;
 					entry.repeatAccelMult = funcEntry.second.repeatAccelMult;
+					entry.toggleMode = funcEntry.second.toggleMode;
 					entry.nativeKeyName = funcEntry.second.nativeKeyName;
 					result.push_back(entry);
 					seen[scriptEntry.first][funcEntry.first] = true;
@@ -136,10 +138,11 @@ namespace RadarKeys {
 				if (!e.nativeKeyName.empty()) {
 					overrides[e.scriptName][e.functionName].nativeKeyName = e.nativeKeyName;
 				}
-				if (e.triggerType != 0 || e.holdSeconds > 0.0f || e.repeatAccelMult != 1.0f) {
+				if (e.triggerType != 0 || e.holdSeconds > 0.0f || e.repeatAccelMult != 1.0f || e.toggleMode) {
 					overrides[e.scriptName][e.functionName].triggerType = e.triggerType;
 					overrides[e.scriptName][e.functionName].holdSeconds = e.holdSeconds;
 					overrides[e.scriptName][e.functionName].repeatAccelMult = e.repeatAccelMult;
+					overrides[e.scriptName][e.functionName].toggleMode = e.toggleMode;
 				}
 				if (e.disabled) {
 					disabledMap[e.scriptName][e.functionName] = true;
@@ -177,10 +180,11 @@ namespace RadarKeys {
 			config.triggerType = funcIt->second.triggerType;
 			config.holdSeconds = funcIt->second.holdSeconds;
 			config.repeatAccelMult = funcIt->second.repeatAccelMult;
+			config.toggleMode = funcIt->second.toggleMode;
 			return config;
 		}
 
-		void SetTriggerConfigWithoutSave(const std::string& scriptName, const std::string& functionName, int triggerType, float holdSeconds, float repeatAccelMult) {
+		void SetTriggerConfigWithoutSave(const std::string& scriptName, const std::string& functionName, int triggerType, float holdSeconds, float repeatAccelMult, bool toggleMode) {
 			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			if (!loaded) {
 				Load();
@@ -199,11 +203,12 @@ namespace RadarKeys {
 			overrides[scriptName][functionName].triggerType = triggerType;
 			overrides[scriptName][functionName].holdSeconds = holdSeconds;
 			overrides[scriptName][functionName].repeatAccelMult = repeatAccelMult;
+			overrides[scriptName][functionName].toggleMode = toggleMode;
 		}
 
 		bool HasTriggerConfig(const std::string& scriptName, const std::string& functionName) {
 			TriggerConfig config = GetTriggerConfig(scriptName, functionName);
-			return config.triggerType != 0 || config.holdSeconds > 0.0f || config.repeatAccelMult != 1.0f;
+			return config.triggerType != 0 || config.holdSeconds > 0.0f || config.repeatAccelMult != 1.0f || config.toggleMode;
 		}
 
 		std::string GetNativeKey(const std::string& scriptName, const std::string& functionName) {
@@ -283,6 +288,7 @@ namespace RadarKeys {
 						funcIt->second.triggerType = 0;
 						funcIt->second.holdSeconds = 0.0f;
 						funcIt->second.repeatAccelMult = 1.0f;
+						funcIt->second.toggleMode = false;
 						if (funcIt->second.nativeKeyName.empty()) {
 							scriptIt->second.erase(funcIt);
 							if (scriptIt->second.empty()) overrides.erase(scriptIt);
@@ -325,7 +331,7 @@ namespace RadarKeys {
 					if (funcIt != scriptIt->second.end()) {
 						if (slot == BindSlot::Pad) funcIt->second.pad.clear();
 						else funcIt->second.kbm.clear();
-						if (funcIt->second.kbm.empty() && funcIt->second.pad.empty() && funcIt->second.triggerType == 0 && funcIt->second.holdSeconds == 0.0f && funcIt->second.repeatAccelMult == 1.0f && funcIt->second.nativeKeyName.empty()) {
+						if (funcIt->second.kbm.empty() && funcIt->second.pad.empty() && funcIt->second.triggerType == 0 && funcIt->second.holdSeconds == 0.0f && funcIt->second.repeatAccelMult == 1.0f && !funcIt->second.toggleMode && funcIt->second.nativeKeyName.empty()) {
 							scriptIt->second.erase(funcIt);
 							if (scriptIt->second.empty()) overrides.erase(scriptIt);
 						}
