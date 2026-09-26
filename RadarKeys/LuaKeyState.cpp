@@ -531,10 +531,11 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt) return false;
+			if (!ValidCombo(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesOnPress = true;
+			if (IsComboDisabled(active) || showCapturePrompt) return false;
 			bool allHeld = RawComboAllHeld(active);
 			if (allHeld && !state.active) {
 				state.active = true;
@@ -558,10 +559,11 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt) return false;
+			if (!ValidCombo(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesOnRelease = true;
+			if (IsComboDisabled(active) || showCapturePrompt) return false;
 			bool allHeld = RawComboAllHeld(active);
 			if (allHeld && !state.active) {
 				state.active = true;
@@ -585,10 +587,11 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
+			if (!ValidCombo(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesHoldTime = true;
+			if (IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
 			if (!state.active) {
 				state.active = true;
 				state.pressTime = clock::now();
@@ -603,10 +606,11 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
+			if (!ValidCombo(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesHoldTime = true;
+			if (IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
 			if (!state.active) {
 				state.active = true;
 				state.pressTime = clock::now();
@@ -625,10 +629,11 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
-			if (!ValidCombo(active) || IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
+			if (!ValidCombo(active)) return false;
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesRepeat = true;
+			if (IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
 			if (!state.active) {
 				state.active = true;
 				state.pressTime = clock::now();
