@@ -3064,9 +3064,10 @@ namespace RadarKeys {
 				bool toggleLockedForScript = capturedToggleLocked && isAssigningModKey;
 				if (toggleLockedForScript) ImGui::BeginDisabled();
 				ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
-				if (toggleLockedForScript && ImGui::IsItemHovered()) {
+				if (toggleLockedForScript && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 					ImGui::SetTooltip(UI_TIP_TOGGLE_SCRIPT_DECLARED);
 				}
+				if (toggleLockedForScript) ImGui::EndDisabled();
 				if (isAssigningModKey) {
 					if (ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode)) {
 						capturedInstantMode = !capturedLongPressMode;
@@ -3078,7 +3079,6 @@ namespace RadarKeys {
 						ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 					}
 				}
-				if (toggleLockedForScript) ImGui::EndDisabled();
 				
 				if (capturedLongPressMode) {
 				    ImGui::SetNextItemWidth(75);
@@ -3100,7 +3100,7 @@ namespace RadarKeys {
 					if (ImGui::Checkbox(UI_CHK_INSTANT, &capturedInstantMode)) {
 						capturedInstantUserSet = true;
 					}
-					if (capturedLongPressMode && ImGui::IsItemHovered()) {
+					if (capturedLongPressMode && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 						ImGui::SetTooltip(UI_TIP_UNCHECK_TOGGLE_FIRST);
 					}
 				}
