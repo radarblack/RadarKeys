@@ -4580,13 +4580,15 @@ namespace RadarKeys {
 					if (!row.conflicted) {
 						float buttonCenterY = rowTopY + keyButtonYOffset + row.keyButtonH * 0.5f;
 						float labelLineH = ImGui::GetTextLineHeight();
+						constexpr float kButtonLabelRowNudge = 3.5f;
+						float buttonLabelRowY = buttonCenterY - labelLineH * 0.5f - kButtonLabelRowNudge;
 						if (!triggerLabel.empty()) {
 							ImGui::SameLine();
-							ImGui::SetCursorPosY(buttonCenterY - labelLineH * 0.5f);
+							ImGui::SetCursorPosY(buttonLabelRowY);
 							ImGui::TextDisabled("%s", triggerLabel.c_str());
 						}
 						ImGui::SameLine(notesColumnX);
-						ImGui::SetCursorPosY(buttonCenterY - labelLineH * 0.5f);
+						ImGui::SetCursorPosY(buttonLabelRowY);
 						ImGui::BeginGroup();
 						ImGui::TextWrapped("%s", detailText.c_str());
 						ImGui::EndGroup();
