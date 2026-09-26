@@ -100,7 +100,6 @@ namespace RadarKeys {
 		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
 		static const char* UI_CHK_TOGGLE = "Toggle";
 		static const char* UI_TIP_UNCHECK_INSTANT_FIRST = "Uncheck Instant first to use Toggle or Long Press.";
-		static const char* UI_TIP_TOGGLE_SCRIPT_UNAVAILABLE = "Toggle is not available for script bindings";
 		static const char* UI_CHK_LONG_PRESS = "Long Press";
 		static const char* UI_BTN_MINUS = " - ";
 		static const char* UI_BTN_PLUS = " + ";
@@ -1863,7 +1862,7 @@ namespace RadarKeys {
 				if (entry.keyName == entry.padKeyName && entry.triggerType == 0 && entry.holdSeconds == 0.0f && entry.repeatAccelMult == 1.0f) {
 					outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << (entry.disabled ? "1" : "0") << "\n";
 				} else {
-					outFile << "MODKEY2|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << entry.padKeyName << "|" << (entry.disabled ? "1" : "0") << "|" << entry.triggerType << "|" << entry.holdSeconds << "|" << entry.repeatAccelMult << "|" << entry.nativeKeyName << "\n";
+					outFile << "MODKEY2|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << entry.padKeyName << "|" << (entry.disabled ? "1" : "0") << "|" << entry.triggerType << "|" << entry.holdSeconds << "|" << entry.repeatAccelMult << "|" << (entry.toggleMode ? "1" : "0") << "|" << entry.nativeKeyName << "\n";
 				}
 			}
 			outFile.close();
@@ -1951,7 +1950,10 @@ namespace RadarKeys {
 					if (parts.size() >= 10) {
 						entry.nativeKeyName = trim(parts[9]);
 					}
-					if (!entry.scriptName.empty() && !entry.functionName.empty() && (!entry.keyName.empty() || !entry.padKeyName.empty() || entry.disabled || entry.triggerType != 0 || entry.holdSeconds > 0.0f)) {
+					if (parts.size() >= 11) {
+						entry.toggleMode = trim(parts[10]) == "1";
+					}
+					if (!entry.scriptName.empty() && !entry.functionName.empty() && (!entry.keyName.empty() || !entry.padKeyName.empty() || entry.disabled || entry.triggerType != 0 || entry.holdSeconds > 0.0f || entry.toggleMode)) {
 						modKeyEntries.push_back(std::move(entry));
 					}
 				}
@@ -2361,7 +2363,7 @@ namespace RadarKeys {
 					b.holdSeconds = 0.0f;
 					b.repeatAccelMult = 1.0f;
 				}
-				ModKeyBindings::SetTriggerConfigWithoutSave(info.scriptName, info.functionName, 0, 0.0f, 1.0f);
+				ModKeyBindings::SetTriggerConfigWithoutSave(info.scriptName, info.functionName, 0, 0.0f, 1.0f, false);
 				ModKeyBindings::SetOverrideWithoutSave(info.scriptName, info.functionName, "");
 				USHORT bulkNativeVKey = memberNative;
 				if (bulkNativeVKey == 0 && storedNativeResolved > 0 && SlotOfVKey((USHORT)storedNativeResolved) == SlotOfVKey(info.vKey)) bulkNativeVKey = (USHORT)storedNativeResolved;
@@ -3037,12 +3039,7 @@ namespace RadarKeys {
 			if (!isAssigningMenuToggleKey && !captureIsInject) {
 
 				if (capturedInstantMode && !isAssigningModKey) ImGui::BeginDisabled();
-				if (isAssigningModKey) ImGui::BeginDisabled();
 				ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
-				if (isAssigningModKey && ImGui::IsItemHovered()) {
-					ImGui::SetTooltip(UI_TIP_TOGGLE_SCRIPT_UNAVAILABLE);
-				}
-				if (isAssigningModKey) ImGui::EndDisabled();
 				if (capturedInstantMode && !isAssigningModKey && ImGui::IsItemHovered()) {
 					ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 				}
@@ -3326,10 +3323,10 @@ namespace RadarKeys {
 				float repeatMult = 1.0f;
 				if (capturedInstantMode) {
 					if (triggerType == 2) repeatMult = capturedRepeatAccelMult;
-				} else if (capturedLongPressMode && !capturedToggleMode) {
+				} else if (capturedLongPressMode) {
 					holdSeconds = capturedHoldSeconds;
 				}
-				ModKeyBindings::SetTriggerConfigWithoutSave(modKeyCaptureScriptName, modKeyCaptureFunctionName, triggerType, holdSeconds, repeatMult);
+				ModKeyBindings::SetTriggerConfigWithoutSave(modKeyCaptureScriptName, modKeyCaptureFunctionName, triggerType, holdSeconds, repeatMult, capturedToggleMode);
 				for (auto& b : bindings) {
 					if (!b.isInject || !b.scriptDescribed || b.injectScriptName != modKeyCaptureScriptName || b.injectFunctionName != modKeyCaptureFunctionName) continue;
 					b.isInstant = (triggerType == 1 || triggerType == 2);
@@ -4493,6 +4490,7 @@ namespace RadarKeys {
 							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
 							capturedHasFuncOn = capturedHasFuncOff = false;
 							capturedToggleType = 0;
+							capturedToggleMode = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).toggleMode;
 							capturedInstantUserSet = false;
 							editingBindingIndex = -1;
 							isAssigningMenuToggleKey = false;
@@ -4531,6 +4529,7 @@ namespace RadarKeys {
 							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
 							capturedHasFuncOn = capturedHasFuncOff = false;
 							capturedToggleType = 0;
+							capturedToggleMode = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).toggleMode;
 							capturedInstantUserSet = false;
 							editingBindingIndex = -1;
 							isAssigningMenuToggleKey = false;
@@ -4695,7 +4694,7 @@ namespace RadarKeys {
 								break;
 							}
 						}
-						ModKeyBindings::SetTriggerConfigWithoutSave(pendingResetScriptName, pendingResetFunctionName, 0, 0.0f, 1.0f);
+						ModKeyBindings::SetTriggerConfigWithoutSave(pendingResetScriptName, pendingResetFunctionName, 0, 0.0f, 1.0f, false);
 						ModKeyBindings::SetDisabled(pendingResetScriptName, pendingResetFunctionName, false);
 						LogActivity("KeyBindMenu: Reset mod key to default: " + pendingResetScriptName + " [" + pendingResetFunctionName + "]");
 						pendingResetActive = false;
