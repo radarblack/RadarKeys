@@ -100,12 +100,10 @@ namespace RadarKeys {
 		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
 		static const char* UI_CHK_TOGGLE = "Toggle";
 		static const char* UI_TIP_TOGGLE_SCRIPT_DECLARED = "This key is declared from the mod! Toggle triggers should be declared from the script.";
-		static const char* UI_TIP_UNCHECK_INSTANT_FIRST = "Uncheck Instant first to use Long Press.";
 		static const char* UI_CHK_LONG_PRESS = "Long Press";
 		static const char* UI_BTN_MINUS = " - ";
 		static const char* UI_BTN_PLUS = " + ";
 		static const char* UI_CHK_INSTANT = "Instant";
-		static const char* UI_TIP_UNCHECK_TOGGLE_FIRST = "Uncheck Long Press first to use Instant.";
 		static const char* UI_OPT_ON_PRESS = "On Press";
 		static const char* UI_OPT_ON_RELEASE = "On Release";
 		static const char* UI_TT_REPEAT_FMT = "Repeat (every %s seconds)";
@@ -3068,16 +3066,9 @@ namespace RadarKeys {
 					ImGui::SetTooltip(UI_TIP_TOGGLE_SCRIPT_DECLARED);
 				}
 				if (toggleLockedForScript) ImGui::EndDisabled();
-				if (isAssigningModKey) {
-					if (ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode)) {
-						capturedInstantMode = !capturedLongPressMode;
-						capturedInstantUserSet = true;
-					}
-				} else {
-					ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode);
-					if (capturedInstantMode && ImGui::IsItemHovered()) {
-						ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
-					}
+				if (ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode)) {
+					capturedInstantMode = !capturedLongPressMode;
+					capturedInstantUserSet = true;
 				}
 				
 				if (capturedLongPressMode) {
@@ -3088,23 +3079,12 @@ namespace RadarKeys {
 				    if (ImGui::Button(UI_BTN_PLUS, ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
 				}
 
-				if (!isAssigningModKey && capturedLongPressMode) ImGui::BeginDisabled();
-				if (isAssigningModKey) {
-					bool instantSelected = capturedInstantMode;
-					if (ImGui::Checkbox(UI_CHK_INSTANT, &instantSelected)) {
-						capturedInstantMode = true;
-						capturedLongPressMode = false;
-						capturedInstantUserSet = true;
-					}
-				} else {
-					if (ImGui::Checkbox(UI_CHK_INSTANT, &capturedInstantMode)) {
-						capturedInstantUserSet = true;
-					}
-					if (capturedLongPressMode && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-						ImGui::SetTooltip(UI_TIP_UNCHECK_TOGGLE_FIRST);
-					}
+				bool instantSelected = capturedInstantMode;
+				if (ImGui::Checkbox(UI_CHK_INSTANT, &instantSelected)) {
+					capturedInstantMode = true;
+					capturedLongPressMode = false;
+					capturedInstantUserSet = true;
 				}
-				if (!isAssigningModKey && capturedLongPressMode) ImGui::EndDisabled();
 
 				if (capturedInstantMode) {
 					static const char* instantTriggerLabels[] = { UI_OPT_ON_PRESS, UI_OPT_ON_RELEASE, UI_OPT_REPEAT };
