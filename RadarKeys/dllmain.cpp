@@ -209,6 +209,19 @@ namespace RadarKeys {
 		return 0;
 	}
 
+	static int l_GetTriggerType(lua_State* L) {
+		const char* scriptName = LuaToString(L, 1);
+		const char* functionName = LuaToString(L, 2);
+		if (!scriptName || !functionName || !ModKeyBindings::HasTriggerConfig(scriptName, functionName)) {
+			LuaPushNumber(L, -1.0);
+			return 1;
+		}
+		ModKeyBindings::TriggerConfig config = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
+		LuaPushNumber(L, (double)config.triggerType);
+		LuaPushNumber(L, (double)config.holdSeconds);
+		return 2;
+	}
+
 	static int l_DebugLog(lua_State* L) {
 		const char* message = LuaToString(L, 1);
 		if (message) {
@@ -374,6 +387,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "DescribeMod", RadarKeys::l_DescribeMod },
 		{ "DescribeKeyLines", RadarKeys::l_DescribeKeyLines },
 		{ "GetModKeyBinding", RadarKeys::l_GetModKeyBinding },
+		{ "GetTriggerType", RadarKeys::l_GetTriggerType },
 		{ NULL, NULL }
 	};
 
