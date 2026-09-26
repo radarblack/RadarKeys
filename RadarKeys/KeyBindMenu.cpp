@@ -99,7 +99,7 @@ namespace RadarKeys {
 		static const char* UI_LBL_2_3_KEYS = "  2-3 KEYS";
 		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
 		static const char* UI_CHK_TOGGLE = "Toggle";
-		static const char* UI_TIP_TOGGLE_SCRIPT_DECLARED = "Declared as a Toggle by the mod script";
+		static const char* UI_TIP_TOGGLE_SCRIPT_DECLARED = "This key is declared from the mod! Toggle triggers should be declared from the script.";
 		static const char* UI_TIP_UNCHECK_INSTANT_FIRST = "Uncheck Instant first to use Toggle or Long Press.";
 		static const char* UI_CHK_LONG_PRESS = "Long Press";
 		static const char* UI_BTN_MINUS = " - ";
@@ -4503,7 +4503,7 @@ namespace RadarKeys {
 							capturedToggleType = 0;
 							capturedToggleMode = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).toggleMode;
 							capturedToggleLocked = row.isComboScript ? row.comboInfo.hasToggleState : row.info.hasToggleState;
-							if (capturedToggleLocked) capturedToggleMode = true;
+							if (capturedToggleLocked) capturedToggleMode = false;
 							capturedInstantUserSet = false;
 							editingBindingIndex = -1;
 							isAssigningMenuToggleKey = false;
@@ -4544,7 +4544,7 @@ namespace RadarKeys {
 							capturedToggleType = 0;
 							capturedToggleMode = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).toggleMode;
 							capturedToggleLocked = row.isComboScript ? row.comboInfo.hasToggleState : row.info.hasToggleState;
-							if (capturedToggleLocked) capturedToggleMode = true;
+							if (capturedToggleLocked) capturedToggleMode = false;
 							capturedInstantUserSet = false;
 							editingBindingIndex = -1;
 							isAssigningMenuToggleKey = false;
