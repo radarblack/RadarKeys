@@ -435,6 +435,10 @@ namespace RadarKeys {
 			return states[vKey].currentIncrementMult;
 		}
 
+		double GetRepeatBaseSeconds() {
+			return kRepeatRateSeconds;
+		}
+
 		void SetRepeatMult(USHORT vKey, double mult) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey) || !(mult > 0.0)) {
