@@ -733,6 +733,16 @@ namespace RadarKeys {
 			state.pendingUsesOnRelease = false;
 			state.pendingLastHoldSeconds = 0.0;
 			std::string identity = scriptName + "\x1f" + functionName;
+			auto existingDesc = comboDescriptions.find(identity);
+			bool keysChanged = existingDesc != comboDescriptions.end() && existingDesc->second.nativeKeys != vKeys;
+			if (keysChanged) {
+				obsOnPress = obsOnPress || existingDesc->second.usesOnPress;
+				obsHoldTime = obsHoldTime || existingDesc->second.usesHoldTime;
+				obsRepeat = obsRepeat || existingDesc->second.usesRepeat;
+				obsOnRelease = obsOnRelease || existingDesc->second.usesOnRelease;
+				if (obsHoldSeconds == 0.0) obsHoldSeconds = existingDesc->second.lastHoldSeconds;
+				comboRedirectTarget.erase(ComboStateKey(existingDesc->second.nativeKeys));
+			}
 			ComboKeyDescription& d = comboDescriptions[identity];
 			d.nativeKeys = vKeys;
 			d.scriptName = scriptName;
