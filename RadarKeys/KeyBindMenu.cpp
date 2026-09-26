@@ -3321,6 +3321,7 @@ namespace RadarKeys {
 			if (!canFinalize) ImGui::BeginDisabled();
 			auto applyTriggerChoice = [&]() {
 				int triggerType = capturedInstantMode ? capturedInstantTriggerType : 0;
+				if (capturedInstantMode && capturedInstantTriggerType == 0) triggerType = 3;
 				float holdSeconds = 0.0f;
 				float repeatMult = 1.0f;
 				if (capturedInstantMode) {
