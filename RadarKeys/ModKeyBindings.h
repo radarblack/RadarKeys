@@ -18,6 +18,7 @@ namespace RadarKeys {
 			int triggerType = 0;
 			float holdSeconds = 0.0f;
 			float repeatAccelMult = 1.0f;
+			bool toggleMode = false;
 			std::string nativeKeyName;
 		};
 
@@ -40,10 +41,11 @@ namespace RadarKeys {
 			int triggerType = 0;
 			float holdSeconds = 0.0f;
 			float repeatAccelMult = 1.0f;
+			bool toggleMode = false;
 		};
 
 		TriggerConfig GetTriggerConfig(const std::string& scriptName, const std::string& functionName);
-		void SetTriggerConfigWithoutSave(const std::string& scriptName, const std::string& functionName, int triggerType, float holdSeconds, float repeatAccelMult);
+		void SetTriggerConfigWithoutSave(const std::string& scriptName, const std::string& functionName, int triggerType, float holdSeconds, float repeatAccelMult, bool toggleMode);
 		bool HasTriggerConfig(const std::string& scriptName, const std::string& functionName);
 
 		std::vector<OverrideEntry> GetAllOverrides();
