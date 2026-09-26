@@ -4435,7 +4435,7 @@ namespace RadarKeys {
 
 					if (row.isManual) {
 						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
-						ImGui::PushStyleColor(ImGuiCol_Text, bindings[bindIdx].isToggle ? (bindings[bindIdx].toggleState ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f)) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+						ImGui::PushStyleColor(ImGuiCol_Text, bindings[row.bindIndex].isToggle ? (bindings[row.bindIndex].toggleState ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f)) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 						bool keyClicked = ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
 						ImGui::PopStyleColor();
 						if (keyClicked) {
