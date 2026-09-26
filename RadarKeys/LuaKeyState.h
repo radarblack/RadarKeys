@@ -24,6 +24,7 @@ namespace RadarKeys {
 		void ResetRepeat(USHORT vKey);
 		double GetRepeatMult(USHORT vKey);
 		double GetRepeatIntervalSeconds(USHORT vKey);
+		double GetRepeatBaseSeconds();
 		void SetComboRepeatMult(const std::vector<USHORT>& vKeys, double mult);
 		void SetRepeatMult(USHORT vKey, double mult);
 		bool PhysicalOnButtonDown(USHORT vKey);
