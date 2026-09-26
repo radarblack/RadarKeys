@@ -219,7 +219,8 @@ namespace RadarKeys {
 		ModKeyBindings::TriggerConfig config = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
 		LuaPushNumber(L, (double)config.triggerType);
 		LuaPushNumber(L, (double)config.holdSeconds);
-		return 2;
+		LuaPushNumber(L, (double)config.repeatAccelMult);
+		return 3;
 	}
 
 	static int l_DebugLog(lua_State* L) {
