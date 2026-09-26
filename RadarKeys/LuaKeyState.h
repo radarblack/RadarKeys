@@ -40,6 +40,8 @@ namespace RadarKeys {
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
 		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
 		void SweepStaleComboDescriptions();
+		double GetStaleSweepSecondsRemaining();
+		double GetStaleSweepSecondsTotal();
 		void OnFocusLost();
 		USHORT FindRedirectSource(USHORT activeVKey);
 		void ClearComboRedirect(const std::vector<USHORT>& nativeVKeys);
