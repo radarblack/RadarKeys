@@ -183,6 +183,8 @@ namespace RadarKeys {
 		static const char* UI_FMT_RESET_CONFIRM = "Reset \"%s [%s]\" to the mod's default key?";
 		static const char* UI_TXT_CLEARS_REASSIGNMENT = "This clears the reassignment made in this menu.";
 		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Disable All Hotkeys";
+		static const char* UI_LBL_SWEEPING = "Sweeping...";
+		constexpr float kSweepBarWidth = 110.0f;
 		static const char* UI_BTN_ENABLE_ALL_KEYS = "Enable All Hotkeys";
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
@@ -4779,6 +4781,14 @@ namespace RadarKeys {
 			bool clearAllClicked = ImGui::Button(enableAllMode ? UI_BTN_ENABLE_ALL_KEYS : UI_BTN_CLEAR_ALL_HOTKEYS, ImVec2(145, 24));
 			ImVec2 clearAllBtnMin = ImGui::GetItemRectMin();
 			ImVec2 clearAllBtnMax = ImGui::GetItemRectMax();
+			double sweepRemaining = LuaKeyState::GetStaleSweepSecondsRemaining();
+			if (sweepRemaining > 0.0) {
+				ImGui::SameLine();
+				ImGui::TextDisabled("%s", UI_LBL_SWEEPING);
+				ImGui::SameLine();
+				float sweepFraction = 1.0f - (float)(sweepRemaining / LuaKeyState::GetStaleSweepSecondsTotal());
+				ImGui::ProgressBar(sweepFraction, ImVec2(kSweepBarWidth, 0.0f));
+			}
 			if (ImGui::IsItemActive()) {
 				if (!clearAllHoldActive) {
 					clearAllHoldActive = true;
