@@ -184,7 +184,8 @@ namespace RadarKeys {
 		static const char* UI_TXT_CLEARS_REASSIGNMENT = "This clears the reassignment made in this menu.";
 		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Disable All Hotkeys";
 		static const char* UI_LBL_SWEEPING = "Sweeping...";
-		constexpr float kSweepBarWidth = 110.0f;
+		constexpr float kSweepBoxWidth = 210.0f;
+		constexpr float kButtonLabelRowNudge = 3.5f;
 		static const char* UI_BTN_ENABLE_ALL_KEYS = "Enable All Hotkeys";
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
@@ -4614,7 +4615,6 @@ namespace RadarKeys {
 					if (!row.conflicted) {
 						float buttonCenterY = rowTopY + keyButtonYOffset + row.keyButtonH * 0.5f;
 						float labelLineH = ImGui::GetTextLineHeight();
-						constexpr float kButtonLabelRowNudge = 3.5f;
 						float buttonLabelRowY = buttonCenterY - labelLineH * 0.5f - kButtonLabelRowNudge;
 						if (!triggerLabel.empty()) {
 							ImGui::SameLine();
@@ -4784,10 +4784,14 @@ namespace RadarKeys {
 			double sweepRemaining = LuaKeyState::GetStaleSweepSecondsRemaining();
 			if (sweepRemaining > 0.0) {
 				ImGui::SameLine();
+				ImGui::BeginChild("##sweepStatus", ImVec2(kSweepBoxWidth, clearAllBtnMax.y - clearAllBtnMin.y), true);
+				float sweepLabelY = (clearAllBtnMin.y - ImGui::GetWindowPos().y) + ((clearAllBtnMax.y - clearAllBtnMin.y) - ImGui::GetTextLineHeight()) * 0.5f - kButtonLabelRowNudge;
+				ImGui::SetCursorPosY(sweepLabelY);
 				ImGui::TextDisabled("%s", UI_LBL_SWEEPING);
 				ImGui::SameLine();
 				float sweepFraction = 1.0f - (float)(sweepRemaining / LuaKeyState::GetStaleSweepSecondsTotal());
-				ImGui::ProgressBar(sweepFraction, ImVec2(kSweepBarWidth, 0.0f));
+				ImGui::ProgressBar(sweepFraction, ImVec2(110.0f, 0.0f));
+				ImGui::EndChild();
 			}
 			if (ImGui::IsItemActive()) {
 				if (!clearAllHoldActive) {
