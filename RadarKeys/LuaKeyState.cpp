@@ -26,6 +26,7 @@ namespace RadarKeys {
 		constexpr double kMaxIncrementMult = 50.0;
 		constexpr int kMaxQueuedEdges = 8;
 		constexpr double kDescriptionStaleSeconds = 5.0;
+		constexpr double kStaleSweepActiveThreshold = 0.25;
 
 		struct KeyDescription {
 			bool hasToggleState = false;
@@ -889,6 +890,31 @@ namespace RadarKeys {
 				}
 				RetireIfUndescribed(static_cast<USHORT>(vKeyInt));
 			}
+		}
+
+		double GetStaleSweepSecondsRemaining() {
+			KeyStateLock lock(g_keyStateMutex);
+			const clock::time_point now = clock::now();
+			double maxRemaining = 0.0;
+			for (int vKeyInt = 0; vKeyInt < RawInput::kMaxVKey; ++vKeyInt) {
+				for (const KeyDescription& d : states[vKeyInt].descriptions) {
+					double ageSeconds = std::chrono::duration<double>(now - d.lastTouched).count();
+					if (ageSeconds <= kStaleSweepActiveThreshold) continue;
+					double remaining = kDescriptionStaleSeconds - ageSeconds;
+					if (remaining > maxRemaining) maxRemaining = remaining;
+				}
+			}
+			for (const auto& entry : comboDescriptions) {
+				double ageSeconds = std::chrono::duration<double>(now - entry.second.lastTouched).count();
+				if (ageSeconds <= kStaleSweepActiveThreshold) continue;
+				double remaining = kDescriptionStaleSeconds - ageSeconds;
+				if (remaining > maxRemaining) maxRemaining = remaining;
+			}
+			return maxRemaining;
+		}
+
+		double GetStaleSweepSecondsTotal() {
+			return kDescriptionStaleSeconds;
 		}
 
 		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName) {
