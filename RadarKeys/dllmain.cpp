@@ -220,7 +220,8 @@ namespace RadarKeys {
 		LuaPushNumber(L, (double)config.triggerType);
 		LuaPushNumber(L, (double)config.holdSeconds);
 		LuaPushNumber(L, (double)config.repeatAccelMult);
-		return 3;
+		LuaPushNumber(L, (double)(config.toggleMode ? 1.0 : 0.0));
+		return 4;
 	}
 
 	static int l_DebugLog(lua_State* L) {
