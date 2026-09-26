@@ -100,12 +100,12 @@ namespace RadarKeys {
 		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
 		static const char* UI_CHK_TOGGLE = "Toggle";
 		static const char* UI_TIP_TOGGLE_SCRIPT_DECLARED = "This key is declared from the mod! Toggle triggers should be declared from the script.";
-		static const char* UI_TIP_UNCHECK_INSTANT_FIRST = "Uncheck Instant first to use Toggle or Long Press.";
+		static const char* UI_TIP_UNCHECK_INSTANT_FIRST = "Uncheck Instant first to use Long Press.";
 		static const char* UI_CHK_LONG_PRESS = "Long Press";
 		static const char* UI_BTN_MINUS = " - ";
 		static const char* UI_BTN_PLUS = " + ";
 		static const char* UI_CHK_INSTANT = "Instant";
-		static const char* UI_TIP_UNCHECK_TOGGLE_FIRST = "Uncheck Toggle or Long Press first to use Instant.";
+		static const char* UI_TIP_UNCHECK_TOGGLE_FIRST = "Uncheck Long Press first to use Instant.";
 		static const char* UI_OPT_ON_PRESS = "On Press";
 		static const char* UI_OPT_ON_RELEASE = "On Release";
 		static const char* UI_TT_REPEAT_FMT = "Repeat (every %s seconds)";
@@ -3045,13 +3045,10 @@ namespace RadarKeys {
 			if (!isAssigningMenuToggleKey && !captureIsInject) {
 
 				bool toggleLockedForScript = capturedToggleLocked && isAssigningModKey;
-				if ((capturedInstantMode && !isAssigningModKey) || toggleLockedForScript) ImGui::BeginDisabled();
+				if (toggleLockedForScript) ImGui::BeginDisabled();
 				ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
 				if (toggleLockedForScript && ImGui::IsItemHovered()) {
 					ImGui::SetTooltip(UI_TIP_TOGGLE_SCRIPT_DECLARED);
-				}
-				if (capturedInstantMode && !isAssigningModKey && ImGui::IsItemHovered()) {
-					ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 				}
 				if (isAssigningModKey) {
 					if (ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode)) {
@@ -3064,7 +3061,7 @@ namespace RadarKeys {
 						ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 					}
 				}
-				if ((capturedInstantMode && !isAssigningModKey) || toggleLockedForScript) ImGui::EndDisabled();
+				if (toggleLockedForScript) ImGui::EndDisabled();
 				
 				if (capturedLongPressMode) {
 				    ImGui::SetNextItemWidth(75);
@@ -3074,8 +3071,7 @@ namespace RadarKeys {
 				    if (ImGui::Button(UI_BTN_PLUS, ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
 				}
 
-				bool toggleOrLongPress = capturedToggleMode || capturedLongPressMode;
-				if (!isAssigningModKey && toggleOrLongPress) ImGui::BeginDisabled();
+				if (!isAssigningModKey && capturedLongPressMode) ImGui::BeginDisabled();
 				if (isAssigningModKey) {
 					bool instantSelected = capturedInstantMode;
 					if (ImGui::Checkbox(UI_CHK_INSTANT, &instantSelected)) {
@@ -3087,11 +3083,11 @@ namespace RadarKeys {
 					if (ImGui::Checkbox(UI_CHK_INSTANT, &capturedInstantMode)) {
 						capturedInstantUserSet = true;
 					}
-					if (toggleOrLongPress && ImGui::IsItemHovered()) {
+					if (capturedLongPressMode && ImGui::IsItemHovered()) {
 						ImGui::SetTooltip(UI_TIP_UNCHECK_TOGGLE_FIRST);
 					}
 				}
-				if (!isAssigningModKey && toggleOrLongPress) ImGui::EndDisabled();
+				if (!isAssigningModKey && capturedLongPressMode) ImGui::EndDisabled();
 
 				if (capturedInstantMode) {
 					static const char* instantTriggerLabels[] = { UI_OPT_ON_PRESS, UI_OPT_ON_RELEASE, UI_OPT_REPEAT };
@@ -4439,7 +4435,10 @@ namespace RadarKeys {
 
 					if (row.isManual) {
 						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
-						if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
+						ImGui::PushStyleColor(ImGuiCol_Text, bindings[bindIdx].isToggle ? (bindings[bindIdx].toggleState ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f)) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+						bool keyClicked = ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
+						ImGui::PopStyleColor();
+						if (keyClicked) {
 							int i = row.bindIndex;
 							editingBindingIndex = i;
 							captureIsCombo = bindings[i].IsCombo();
