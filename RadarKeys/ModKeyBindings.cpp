@@ -185,7 +185,7 @@ namespace RadarKeys {
 			if (!loaded) {
 				Load();
 			}
-			if (triggerType < 0 || triggerType > 2) {
+			if (triggerType < 0 || triggerType > 3) {
 				triggerType = 0;
 			}
 			if (!std::isfinite(holdSeconds) || holdSeconds < 0.0f) {
