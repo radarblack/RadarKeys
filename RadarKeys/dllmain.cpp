@@ -199,6 +199,11 @@ namespace RadarKeys {
 		return 0;
 	}
 
+	static int l_GetRepeatBaseSeconds(lua_State* L) {
+		LuaPushNumber(L, LuaKeyState::GetRepeatBaseSeconds());
+		return 1;
+	}
+
 	static int l_SetRepeatMult(lua_State* L) {
 		if (ArgIsCombo(L)) { LuaKeyState::SetComboRepeatMult(ResolveKeyListArg(L), ResolveHoldSecondsArg(L)); return 0; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
@@ -390,6 +395,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "DescribeKeyLines", RadarKeys::l_DescribeKeyLines },
 		{ "GetModKeyBinding", RadarKeys::l_GetModKeyBinding },
 		{ "GetTriggerType", RadarKeys::l_GetTriggerType },
+		{ "GetRepeatBaseSeconds", RadarKeys::l_GetRepeatBaseSeconds },
 		{ NULL, NULL }
 	};
 
