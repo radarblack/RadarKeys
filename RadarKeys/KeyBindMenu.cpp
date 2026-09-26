@@ -4548,13 +4548,13 @@ namespace RadarKeys {
 							ModKeyReadOnlyInfo seededInfo = captureIsCombo
 								? ComputeComboModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName)
 								: ComputeModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
-							capturedToggleMode = false;
 							capturedLongPressMode = seededInfo.anyLongPress;
 							capturedHoldSeconds = (float)seededInfo.longPressSeconds;
 							capturedInstantMode = seededInfo.anyInstant || !seededInfo.anyLongPress;
 							capturedInstantTriggerType = seededInfo.instantType;
-							capturedRepeatAccelMult = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).repeatAccelMult;
-							capturedRepeatIntervalSeconds = (float)(kModKeyRepeatBaseSeconds / (capturedRepeatAccelMult > 0.0f ? capturedRepeatAccelMult : 1.0f));
+							capturedRepeatIntervalSeconds = row.isComboScript ? (float)LuaKeyState::GetComboRepeatIntervalSeconds(row.comboInfo.activeKeys) : (float)LuaKeyState::GetRepeatIntervalSeconds(row.displayVKey);
+							if (capturedRepeatIntervalSeconds <= 0.0f) capturedRepeatIntervalSeconds = (float)kModKeyRepeatBaseSeconds;
+							capturedRepeatAccelMult = (float)(kModKeyRepeatBaseSeconds / (double)capturedRepeatIntervalSeconds);
 							capturedInstantUserSet = false;
 							requestCaptureFocus = true;
 							showCapturePrompt = true;
@@ -4589,13 +4589,13 @@ namespace RadarKeys {
 							ModKeyReadOnlyInfo seededInfo = captureIsCombo
 								? ComputeComboModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName)
 								: ComputeModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
-							capturedToggleMode = false;
 							capturedLongPressMode = seededInfo.anyLongPress;
 							capturedHoldSeconds = (float)seededInfo.longPressSeconds;
 							capturedInstantMode = seededInfo.anyInstant || !seededInfo.anyLongPress;
 							capturedInstantTriggerType = seededInfo.instantType;
-							capturedRepeatAccelMult = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).repeatAccelMult;
-							capturedRepeatIntervalSeconds = (float)(kModKeyRepeatBaseSeconds / (capturedRepeatAccelMult > 0.0f ? capturedRepeatAccelMult : 1.0f));
+							capturedRepeatIntervalSeconds = row.isComboScript ? (float)LuaKeyState::GetComboRepeatIntervalSeconds(row.comboInfo.activeKeys) : (float)LuaKeyState::GetRepeatIntervalSeconds(row.displayVKey);
+							if (capturedRepeatIntervalSeconds <= 0.0f) capturedRepeatIntervalSeconds = (float)kModKeyRepeatBaseSeconds;
+							capturedRepeatAccelMult = (float)(kModKeyRepeatBaseSeconds / (double)capturedRepeatIntervalSeconds);
 							capturedInstantUserSet = false;
 							requestCaptureFocus = true;
 							showCapturePrompt = true;
