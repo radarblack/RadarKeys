@@ -1105,6 +1105,14 @@ namespace RadarKeys {
 				if (bind.scriptDescribed && ModKeyBindings::IsDisabled(bind.injectScriptName, bind.injectFunctionName)) {
 					return;
 				}
+				if (bind.isToggle) {
+					if (bind.toggleState) {
+						bind.toggleState = false;
+						LogActivity("KeyBindMenu: Toggled OFF script lines " + std::to_string(bind.injectLineStart) + "-" + std::to_string(bind.injectLineEnd));
+						return;
+					}
+					bind.toggleState = true;
+				}
 				if (bind.scriptDescribed && ModKeyBindings::GetOverride(bind.injectScriptName, bind.injectFunctionName).empty() && !ModKeyBindings::HasTriggerConfig(bind.injectScriptName, bind.injectFunctionName)) {
 					std::string keyNames;
 					if (bind.IsCombo()) {
@@ -1831,7 +1839,7 @@ namespace RadarKeys {
 
 				if (b.isInject) {
 					if (b.scriptDescribed) continue;
-					outFile << "INJECT|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|" << (b.isInstant ? "1|" : "0|") << b.instantTriggerType << "|" << b.repeatAccelMult << "|" << (b.disabled ? "1|" : "0|") << b.injectLineStart << "|" << b.injectLineEnd << "|" << genericOn << "\n";
+					outFile << "INJECT|" << b.keyName << "|" << (b.needCtrl ? "1|" : "0|") << (b.needShift ? "1|" : "0|") << (b.needAlt ? "1|" : "0|") << b.holdSeconds << "|" << (b.isInstant ? "1|" : "0|") << b.instantTriggerType << "|" << b.repeatAccelMult << "|" << (b.disabled ? "1|" : "0|") << b.injectLineStart << "|" << b.injectLineEnd << "|" << genericOn << "|" << (b.isToggle ? "1" : "0") << "\n";
 					continue;
 				}
 
@@ -2009,6 +2017,9 @@ namespace RadarKeys {
 					newInjectBind.instantTriggerType = injectInstantType;
 					newInjectBind.repeatAccelMult = injectRepeatMult;
 					newInjectBind.disabled = injectDisabled;
+					if (parts.size() >= 14) {
+						newInjectBind.isToggle = trim(parts[13]) == "1";
+					}
 					newInjectBind.scriptPathOn = ResolveScriptPath(trim(parts[12]));
 					newInjectBind.isInject = true;
 					newInjectBind.injectLineStart = injectLineStart;
@@ -3042,7 +3053,7 @@ namespace RadarKeys {
 			ImGui::SetCursorPos(ImVec2(optionsColX, captureColTopY));
 
 			ImGui::BeginGroup();
-			if (!isAssigningMenuToggleKey && !captureIsInject) {
+			if (!isAssigningMenuToggleKey) {
 
 				bool toggleLockedForScript = capturedToggleLocked && isAssigningModKey;
 				if (toggleLockedForScript) ImGui::BeginDisabled();
@@ -3441,7 +3452,11 @@ namespace RadarKeys {
 								editedBind.needShift = capturedShift;
 								editedBind.needAlt = capturedAlt;
 								editedBind.keyName = NameForVKey(capturedVKey);
-								editedBind.isToggle = false;
+								editedBind.isToggle = capturedToggleMode;
+								editedBind.holdSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
+								editedBind.isInstant = capturedInstantMode;
+								editedBind.instantTriggerType = capturedInstantTriggerType;
+								editedBind.repeatAccelMult = capturedRepeatAccelMult;
 								editedBind.scriptPathOn = injectSourcePath;
 								editedBind.scriptPathOff = "";
 								editedBind.functionOn = "";
@@ -3467,6 +3482,11 @@ namespace RadarKeys {
 								newInjectBind.isInject = true;
 								newInjectBind.injectLineStart = injectStart;
 								newInjectBind.injectLineEnd = injectEnd;
+								newInjectBind.isToggle = capturedToggleMode;
+								newInjectBind.holdSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
+								newInjectBind.isInstant = capturedInstantMode;
+								newInjectBind.instantTriggerType = capturedInstantTriggerType;
+								newInjectBind.repeatAccelMult = capturedRepeatAccelMult;
 								bindings.push_back(newInjectBind);
 								EnsureDispatcherRegistered(capturedVKey);
 								SaveBindings();
