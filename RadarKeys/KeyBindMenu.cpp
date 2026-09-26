@@ -1935,7 +1935,7 @@ namespace RadarKeys {
 					if (parts.size() >= 7) {
 						try { entry.triggerType = std::stoi(trim(parts[6])); }
 						catch (...) { entry.triggerType = 0; }
-						if (entry.triggerType < 0 || entry.triggerType > 2) entry.triggerType = 0;
+						if (entry.triggerType < 0 || entry.triggerType > 3) entry.triggerType = 0;
 					}
 					if (parts.size() >= 8) {
 						try { entry.holdSeconds = std::stof(trim(parts[7])); }
