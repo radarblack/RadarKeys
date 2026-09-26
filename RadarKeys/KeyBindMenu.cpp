@@ -4129,6 +4129,8 @@ namespace RadarKeys {
 						for (UnifiedRow& r : rows) {
 							if (r.isComboScript || r.isManual || !r.info.hasDescription) continue;
 							if (r.info.scriptName == cinfo.scriptName && r.info.functionName == cinfo.functionName) {
+								std::vector<USHORT> rowOverrideMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(r.info.scriptName, r.info.functionName));
+								if (rowOverrideMembers.size() >= 2) continue;
 								r.mergedCombos.push_back(cinfo);
 								if (rows[i].conflicted) r.conflicted = true;
 								merged = true;
@@ -4576,14 +4578,14 @@ namespace RadarKeys {
 					}
 					if (!row.conflicted) {
 						float buttonCenterY = rowTopY + keyButtonYOffset + row.keyButtonH * 0.5f;
+						float labelLineH = ImGui::GetTextLineHeight();
 						if (!triggerLabel.empty()) {
-							float triggerLineH = ImGui::CalcTextSize(triggerLabel.c_str()).y;
 							ImGui::SameLine();
-							ImGui::SetCursorPosY(buttonCenterY - triggerLineH * 0.5f);
+							ImGui::SetCursorPosY(buttonCenterY - labelLineH * 0.5f);
 							ImGui::TextDisabled("%s", triggerLabel.c_str());
 						}
 						ImGui::SameLine(notesColumnX);
-						ImGui::SetCursorPosY(buttonCenterY - detailPredictedHeight * 0.5f);
+						ImGui::SetCursorPosY(buttonCenterY - labelLineH * 0.5f);
 						ImGui::BeginGroup();
 						ImGui::TextWrapped("%s", detailText.c_str());
 						ImGui::EndGroup();
