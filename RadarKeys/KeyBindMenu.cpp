@@ -99,6 +99,7 @@ namespace RadarKeys {
 		static const char* UI_LBL_2_3_KEYS = "  2-3 KEYS";
 		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
 		static const char* UI_CHK_TOGGLE = "Toggle";
+		static const char* UI_TIP_TOGGLE_SCRIPT_DECLARED = "Declared as a Toggle by the mod script";
 		static const char* UI_TIP_UNCHECK_INSTANT_FIRST = "Uncheck Instant first to use Toggle or Long Press.";
 		static const char* UI_CHK_LONG_PRESS = "Long Press";
 		static const char* UI_BTN_MINUS = " - ";
@@ -2414,6 +2415,7 @@ namespace RadarKeys {
 		static char capturedFuncOffBuffer[128] = "";
 		static char capturedFuncTapBuffer[128] = "";
 		static bool capturedToggleMode = false;
+		static bool capturedToggleLocked = false;
 		static bool capturedLongPressMode = false;
 		static float capturedRepeatAccelMult = 1.0f;
 		static bool capturedHasFuncOn = false;
@@ -2453,6 +2455,7 @@ namespace RadarKeys {
 			capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 			capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
 			capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
+			capturedToggleLocked = false;
 			capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
 			capturedInstantUserSet = false;
 			ResetComboCaptureState();
@@ -2803,6 +2806,7 @@ namespace RadarKeys {
 				}
 				if (captureIsInject != wasInject) {
 					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
+					capturedToggleLocked = false;
 				}
 				ImGui::Separator();
 			}
@@ -2943,6 +2947,7 @@ namespace RadarKeys {
 			if (ImGui::Button(UI_BTN_RESET, ImVec2(105, 22))) {
 				capturedVKey = 0;
 				capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
+				capturedToggleLocked = false;
 				capturedHoldSeconds = 0.0f;
 				capturedToggleType = 0;
 				capturedInstantMode = false;
@@ -3021,6 +3026,7 @@ namespace RadarKeys {
 				if (ImGui::Button(UI_BTN_RESET, ImVec2(105, 22))) {
 					ResetComboCaptureState();
 					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
+					capturedToggleLocked = false;
 					capturedHoldSeconds = 0.0f;
 					capturedToggleType = 0;
 					capturedInstantMode = false;
@@ -3038,8 +3044,12 @@ namespace RadarKeys {
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey && !captureIsInject) {
 
-				if (capturedInstantMode && !isAssigningModKey) ImGui::BeginDisabled();
+				bool toggleLockedForScript = capturedToggleLocked && isAssigningModKey;
+				if ((capturedInstantMode && !isAssigningModKey) || toggleLockedForScript) ImGui::BeginDisabled();
 				ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
+				if (toggleLockedForScript && ImGui::IsItemHovered()) {
+					ImGui::SetTooltip(UI_TIP_TOGGLE_SCRIPT_DECLARED);
+				}
 				if (capturedInstantMode && !isAssigningModKey && ImGui::IsItemHovered()) {
 					ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 				}
@@ -3054,7 +3064,7 @@ namespace RadarKeys {
 						ImGui::SetTooltip(UI_TIP_UNCHECK_INSTANT_FIRST);
 					}
 				}
-				if (capturedInstantMode && !isAssigningModKey) ImGui::EndDisabled();
+				if ((capturedInstantMode && !isAssigningModKey) || toggleLockedForScript) ImGui::EndDisabled();
 				
 				if (capturedLongPressMode) {
 				    ImGui::SetNextItemWidth(75);
@@ -3517,6 +3527,7 @@ namespace RadarKeys {
 					capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 					capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0'; 
 					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
+					capturedToggleLocked = false;
 					capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
 					capturedInstantUserSet = false;
 					ResetComboCaptureState();
@@ -4491,6 +4502,8 @@ namespace RadarKeys {
 							capturedHasFuncOn = capturedHasFuncOff = false;
 							capturedToggleType = 0;
 							capturedToggleMode = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).toggleMode;
+							capturedToggleLocked = row.isComboScript ? row.comboInfo.hasToggleState : row.info.hasToggleState;
+							if (capturedToggleLocked) capturedToggleMode = true;
 							capturedInstantUserSet = false;
 							editingBindingIndex = -1;
 							isAssigningMenuToggleKey = false;
@@ -4530,6 +4543,8 @@ namespace RadarKeys {
 							capturedHasFuncOn = capturedHasFuncOff = false;
 							capturedToggleType = 0;
 							capturedToggleMode = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).toggleMode;
+							capturedToggleLocked = row.isComboScript ? row.comboInfo.hasToggleState : row.info.hasToggleState;
+							if (capturedToggleLocked) capturedToggleMode = true;
 							capturedInstantUserSet = false;
 							editingBindingIndex = -1;
 							isAssigningMenuToggleKey = false;
