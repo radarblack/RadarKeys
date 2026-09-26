@@ -4501,9 +4501,8 @@ namespace RadarKeys {
 							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
 							capturedHasFuncOn = capturedHasFuncOff = false;
 							capturedToggleType = 0;
-							capturedToggleMode = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).toggleMode;
-							capturedToggleLocked = row.isComboScript ? row.comboInfo.hasToggleState : row.info.hasToggleState;
-							if (capturedToggleLocked) capturedToggleMode = false;
+							capturedToggleLocked = true;
+							capturedToggleMode = row.isComboScript ? row.comboInfo.hasToggleState : row.info.hasToggleState;
 							capturedInstantUserSet = false;
 							editingBindingIndex = -1;
 							isAssigningMenuToggleKey = false;
@@ -4542,9 +4541,8 @@ namespace RadarKeys {
 							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
 							capturedHasFuncOn = capturedHasFuncOff = false;
 							capturedToggleType = 0;
-							capturedToggleMode = ModKeyBindings::GetTriggerConfig(modKeyCaptureScriptName, modKeyCaptureFunctionName).toggleMode;
-							capturedToggleLocked = row.isComboScript ? row.comboInfo.hasToggleState : row.info.hasToggleState;
-							if (capturedToggleLocked) capturedToggleMode = false;
+							capturedToggleLocked = true;
+							capturedToggleMode = row.isComboScript ? row.comboInfo.hasToggleState : row.info.hasToggleState;
 							capturedInstantUserSet = false;
 							editingBindingIndex = -1;
 							isAssigningMenuToggleKey = false;
