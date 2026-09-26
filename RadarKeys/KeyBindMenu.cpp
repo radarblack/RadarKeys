@@ -2773,9 +2773,10 @@ namespace RadarKeys {
 		}
 
 		void DrawKeyCapturePrompt() {
+			static float s_capturePromptMinHeight = 330.0f;
 			ImGui::SetNextWindowSize(ImVec2(340, 330), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 165), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowSizeConstraints(ImVec2(340, 330), ImVec2(FLT_MAX, FLT_MAX));
+			ImGui::SetNextWindowSizeConstraints(ImVec2(340, s_capturePromptMinHeight > 330.0f ? s_capturePromptMinHeight : 330.0f), ImVec2(FLT_MAX, FLT_MAX));
 			if (requestCaptureFocus) {
 				ImGui::SetNextWindowFocus();
 				requestCaptureFocus = false;
@@ -3339,7 +3340,10 @@ namespace RadarKeys {
 			bool canFinalize = captureReady && holdValid && (assignmentIsValid && (isAssigningMenuToggleKey || isAssigningModKey || (pathsValid && functionsValid)));
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float buttonHeight = 30.0f;
+			float contentBottomY = ImGui::GetCursorPosY() + ImGui::GetStyle().ItemSpacing.y;
+			s_capturePromptMinHeight = contentBottomY + buttonHeight + paddingY * 2.0f;
 			float bottomAnchorY = ImGui::GetWindowHeight() - paddingY - buttonHeight;
+			if (bottomAnchorY < contentBottomY) bottomAnchorY = contentBottomY;
 			
 			ImGui::SetCursorPosY(bottomAnchorY);
 
