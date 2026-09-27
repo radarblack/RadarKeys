@@ -612,6 +612,7 @@ namespace RadarKeys {
 				state.holdStartSet = true;
 			}
 			return state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime;
+		}
 
 		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
 			KeyStateLock lock(g_keyStateMutex);
