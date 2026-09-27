@@ -596,16 +596,22 @@ namespace RadarKeys {
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesHoldTime = true;
-			if (IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
+			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds; // L46: explicit 0 = immediate
+			state.pendingLastHoldSeconds = holdTime;
+			if (IsComboDisabled(active) || showCapturePrompt) return false;
+			if (!RawComboAllHeld(active)) {
+				state.active = false;
+				state.holdStartSet = false;
+				state.repeatStartSet = false;
+				state.currentIncrementMult = 1.0;
+				return false;
+			}
 			if (!state.active) {
 				state.active = true;
 				state.pressTime = clock::now();
 				state.holdStartSet = true;
 			}
-			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds; // L46: explicit 0 = immediate
-			state.pendingLastHoldSeconds = holdTime;
 			return state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime;
-		}
 
 		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
 			KeyStateLock lock(g_keyStateMutex);
