@@ -3896,6 +3896,7 @@ namespace RadarKeys {
 					bool anyPressed = false;
 					bool anyToggle = false;
 					bool anyToggleEnabled = false;
+					bool stacked = false;
 				};
 				auto BuildModKeyGroupVisual = [&](const UnifiedRow& row) -> ModKeyRowVisual {
 					ModKeyRowVisual visual;
@@ -3960,16 +3961,30 @@ namespace RadarKeys {
 						groupLabelFlat += groupNames[gi];
 					}
 					if (!groupLabelFlat.empty()) keyLabelLines.push_back(groupLabelFlat);
-					for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
-						keyLabelLines.push_back(ComboKeysDisplayName(mergedCombo.activeKeys));
-					}
-					float maxLineWidth = 0.0f;
-					for (const std::string& lineText : keyLabelLines) {
-						maxLineWidth = (std::max)(maxLineWidth, ImGui::CalcTextSize(lineText.c_str()).x);
-					}
-					float width = maxLineWidth + 24.0f;
-					if (width < 104.0f) width = 104.0f;
-					if (row.mergedCombos.empty() && width > 168.0f) width = 168.0f;
+						float standardInner = kComboStackThresholdWidth - ImGui::GetStyle().FramePadding.x * 2.0f;
+						for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
+							std::string comboLine = ComboKeysDisplayName(mergedCombo.activeKeys);
+							if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
+								visual.stacked = true;
+								std::vector<USHORT> stackedKeys = CanonicalizeComboKeys(mergedCombo.activeKeys);
+								for (USHORT stackedKey : stackedKeys) {
+									std::vector<std::string> wrappedKey = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
+									for (const std::string& keyLine : wrappedKey) {
+										keyLabelLines.push_back(keyLine);
+									}
+								}
+							} else {
+								keyLabelLines.push_back(comboLine);
+							}
+						}
+						float maxLineWidth = 0.0f;
+						for (const std::string& lineText : keyLabelLines) {
+							maxLineWidth = (std::max)(maxLineWidth, ImGui::CalcTextSize(lineText.c_str()).x);
+						}
+						float width = maxLineWidth + 24.0f;
+						if (width < 104.0f) width = 104.0f;
+						if (row.mergedCombos.empty() && width > 168.0f) width = 168.0f;
+						if (visual.stacked) width = kComboStackThresholdWidth;
 					float innerWidth = width - ImGui::GetStyle().FramePadding.x * 2.0f;
 					std::vector<std::string> wrappedLines;
 					for (const std::string& lineText : keyLabelLines) {
@@ -4270,6 +4285,7 @@ namespace RadarKeys {
 						row.keyAnyPressed = visual.anyPressed;
 						row.keyAnyToggle = visual.anyToggle;
 						row.keyAnyToggleEnabled = visual.anyToggleEnabled;
+						row.keyButtonStacked = visual.stacked;
 					}
 					if (row.conflicted) {
 						continue;
@@ -4644,6 +4660,12 @@ namespace RadarKeys {
 								ImGui::SetTooltip(UI_TIP_CANNOT_REASSIGN_UNDESCRIBED);
 							}
 						}
+							if (row.keyButtonStacked) {
+								ImVec2 modStackBtnMin = ImGui::GetItemRectMin();
+								ImVec2 modStackBtnMax = ImGui::GetItemRectMax();
+								ImVec2 modPlusSize = ImGui::CalcTextSize("+");
+								ImGui::GetWindowDrawList()->AddText(ImVec2(modStackBtnMax.x - modPlusSize.x - kComboStackPlusOffset, modStackBtnMin.y + kComboStackPlusOffset), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
+							}
 						ImGui::PopStyleColor();
 						ImGui::PopStyleVar();
 					}
