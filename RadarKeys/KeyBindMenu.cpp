@@ -185,6 +185,8 @@ namespace RadarKeys {
 		static const char* UI_BTN_CLEAR_ALL_HOTKEYS = "Disable All Hotkeys";
 		static const char* UI_LBL_SWEEPING = "Sweeping...";
 		constexpr float kSweepBoxWidth = 210.0f;
+		constexpr float kSweepBarWidth = 110.0f;
+		constexpr float kSweepBarHeight = 16.0f;
 		constexpr float kButtonLabelRowNudge = 3.5f;
 		static const char* UI_BTN_ENABLE_ALL_KEYS = "Enable All Hotkeys";
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
@@ -4784,13 +4786,14 @@ namespace RadarKeys {
 			double sweepRemaining = LuaKeyState::GetStaleSweepSecondsRemaining();
 			if (sweepRemaining > 0.0) {
 				ImGui::SameLine();
-				ImGui::BeginChild("##sweepStatus", ImVec2(kSweepBoxWidth, clearAllBtnMax.y - clearAllBtnMin.y), true);
-				float sweepLabelY = (clearAllBtnMin.y - ImGui::GetWindowPos().y) + ((clearAllBtnMax.y - clearAllBtnMin.y) - ImGui::GetTextLineHeight()) * 0.5f - kButtonLabelRowNudge;
-				ImGui::SetCursorPosY(sweepLabelY);
+				const float sweepBoxHeight = clearAllBtnMax.y - clearAllBtnMin.y;
+				ImGui::BeginChild("##sweepStatus", ImVec2(kSweepBoxWidth, sweepBoxHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+				ImGui::SetCursorPosY((sweepBoxHeight - ImGui::GetTextLineHeight()) * 0.5f);
 				ImGui::TextDisabled("%s", UI_LBL_SWEEPING);
 				ImGui::SameLine();
+				ImGui::SetCursorPosY((sweepBoxHeight - kSweepBarHeight) * 0.5f);
 				float sweepFraction = 1.0f - (float)(sweepRemaining / LuaKeyState::GetStaleSweepSecondsTotal());
-				ImGui::ProgressBar(sweepFraction, ImVec2(110.0f, 0.0f));
+				ImGui::ProgressBar(sweepFraction, ImVec2(kSweepBarWidth, kSweepBarHeight));
 				ImGui::EndChild();
 			}
 			if (ImGui::IsItemActive()) {
