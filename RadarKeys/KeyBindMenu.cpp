@@ -4233,6 +4233,7 @@ namespace RadarKeys {
 						row.keyButtonLabel = joined;
 						row.keyButtonW = 104.0f;
 						row.keyButtonH = buttonBaseHeight + (float)(wrapped.size() - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+					} else if (row.isComboScript) {
 						std::string comboLabel = ComboKeysDisplayName(row.comboInfo.activeKeys);
 						float naturalWidth = ImGui::CalcTextSize(comboLabel.c_str()).x + 24.0f;
 						if (naturalWidth > kComboStackThresholdWidth) {
@@ -4563,36 +4564,36 @@ namespace RadarKeys {
 							showCapturePrompt = true;
 						};
 
-							ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
-							bool comboHovered = false;
-							if (row.keyButtonStacked) {
-								ImGui::PushID((const void*)&row);
-								float stackX = ImGui::GetCursorPosX();
-								float stackY = ImGui::GetCursorPosY();
-								for (size_t partIdx = 0; partIdx < row.keyButtonParts.size(); partIdx++) {
-									ImGui::SetCursorPosX(stackX);
-									ImGui::SetCursorPosY(stackY + (float)partIdx * (buttonBaseHeight + kComboStackGap));
-									if (ImGui::Button(row.keyButtonParts[partIdx].c_str(), ImVec2(row.keyButtonW, buttonBaseHeight))) {
-										openComboReassignPrompt();
-									}
-									comboHovered = comboHovered || ImGui::IsItemHovered();
-									if (partIdx + 1 < row.keyButtonParts.size()) {
-										ImVec2 partMin = ImGui::GetItemRectMin();
-										ImVec2 plusSize = ImGui::CalcTextSize("+");
-										ImGui::GetWindowDrawList()->AddText(ImVec2(partMin.x - plusSize.x - kComboStackPlusOffset, partMin.y + buttonBaseHeight + kComboStackGap * 0.5f - plusSize.y * 0.5f), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
-									}
-								}
-								ImGui::PopID();
-							} else {
-								if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
+						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
+						bool comboHovered = false;
+						if (row.keyButtonStacked) {
+							ImGui::PushID((const void*)&row);
+							float stackX = ImGui::GetCursorPosX();
+							float stackY = ImGui::GetCursorPosY();
+							for (size_t partIdx = 0; partIdx < row.keyButtonParts.size(); partIdx++) {
+								ImGui::SetCursorPosX(stackX);
+								ImGui::SetCursorPosY(stackY + (float)partIdx * (buttonBaseHeight + kComboStackGap));
+								if (ImGui::Button(row.keyButtonParts[partIdx].c_str(), ImVec2(row.keyButtonW, buttonBaseHeight))) {
 									openComboReassignPrompt();
 								}
-								comboHovered = ImGui::IsItemHovered();
+								comboHovered = comboHovered || ImGui::IsItemHovered();
+								if (partIdx + 1 < row.keyButtonParts.size()) {
+									ImVec2 partMin = ImGui::GetItemRectMin();
+									ImVec2 plusSize = ImGui::CalcTextSize("+");
+									ImGui::GetWindowDrawList()->AddText(ImVec2(partMin.x - plusSize.x - kComboStackPlusOffset, partMin.y + buttonBaseHeight + kComboStackGap * 0.5f - plusSize.y * 0.5f), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
+								}
 							}
-							if (comboHovered) {
-								ImGui::SetTooltip(UI_TIP_REASSIGN_COMBO);
+							ImGui::PopID();
+						} else {
+							if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
+								openComboReassignPrompt();
 							}
-							ImGui::PopStyleColor();
+							comboHovered = ImGui::IsItemHovered();
+						}
+						if (comboHovered) {
+							ImGui::SetTooltip(UI_TIP_REASSIGN_COMBO);
+						}
+						ImGui::PopStyleColor();
 					}
 					else {
 						auto openReassignPrompt = [&row]() {
