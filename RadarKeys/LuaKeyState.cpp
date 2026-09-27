@@ -617,7 +617,14 @@ namespace RadarKeys {
 			state.pendingUsesHoldTime = true;
 			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds; // L46: explicit 0 = immediate
 			state.pendingLastHoldSeconds = holdTime;
-			if (IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
+			if (IsComboDisabled(active) || showCapturePrompt) return false;
+			if (!RawComboAllHeld(active)) {
+				state.active = false;
+				state.holdStartSet = false;
+				state.repeatStartSet = false;
+				state.currentIncrementMult = 1.0;
+				return false;
+			}
 			if (!state.active) {
 				state.active = true;
 				state.pressTime = clock::now();
@@ -638,7 +645,14 @@ namespace RadarKeys {
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesRepeat = true;
-			if (IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
+			if (IsComboDisabled(active) || showCapturePrompt) return false;
+			if (!RawComboAllHeld(active)) {
+				state.active = false;
+				state.holdStartSet = false;
+				state.repeatStartSet = false;
+				state.currentIncrementMult = 1.0;
+				return false;
+			}
 			if (!state.active) {
 				state.active = true;
 				state.pressTime = clock::now();
