@@ -615,14 +615,14 @@ namespace RadarKeys {
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesHoldTime = true;
+			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds; // L46: explicit 0 = immediate
+			state.pendingLastHoldSeconds = holdTime;
 			if (IsComboDisabled(active) || showCapturePrompt || !RawComboAllHeld(active)) return false;
 			if (!state.active) {
 				state.active = true;
 				state.pressTime = clock::now();
 				state.holdStartSet = true;
 			}
-			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds; // L46: explicit 0 = immediate
-			state.pendingLastHoldSeconds = holdTime;
 			if (state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime) {
 				state.holdStartSet = false;
 				return true;
@@ -1031,6 +1031,5 @@ namespace RadarKeys {
 			KeyStateLock lock(g_keyStateMutex);
 			comboRedirectTarget.erase(ComboStateKey(nativeVKeys));
 		}
-
 	}
 }
