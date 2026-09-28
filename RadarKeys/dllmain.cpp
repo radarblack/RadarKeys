@@ -341,6 +341,11 @@ namespace RadarKeys {
 		}
 		std::string override = ModKeyBindings::GetOverride(scriptName, functionName);
 		if (override.empty()) {
+			std::string manualName = KeyBindMenu::ManualBindingDisplayNameFor(scriptName, functionName);
+			if (!manualName.empty()) {
+				LuaPushString(L, manualName.c_str());
+				return 1;
+			}
 			std::string nativeName = ModKeyBindings::GetNativeKey(scriptName, functionName);
 			if (!nativeName.empty() && nativeName.find('+') != std::string::npos) {
 				LuaPushString(L, nativeName.c_str());
