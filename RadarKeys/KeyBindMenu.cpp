@@ -196,6 +196,7 @@ namespace RadarKeys {
 		static const char* UI_BTN_ENABLE_ALL_KEYS = "Enable All Hotkeys";
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
+		static const char* UI_TIP_SWEEP_STATUS = "RadarKeys is currently cleaning up. It will update after the process.";
 		static const char* UI_POPUP_CLEAR_ALL_CONFIRM = "Clear All Hotkeys?";
 		static const char* UI_TXT_CLEAR_ALL_CONFIRM = "Reset all mod key overrides to their defaults and remove every manually-assigned binding?";
 		static const char* UI_BTN_ADD_NEW_BINDING = "Add New Binding...";
@@ -5134,6 +5135,9 @@ namespace RadarKeys {
 			bool clearAllClicked = ImGui::Button(enableAllMode ? UI_BTN_ENABLE_ALL_KEYS : UI_BTN_CLEAR_ALL_HOTKEYS, ImVec2(145, 24));
 			ImVec2 clearAllBtnMin = ImGui::GetItemRectMin();
 			ImVec2 clearAllBtnMax = ImGui::GetItemRectMax();
+			if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
+				ImGui::SetTooltip("%s", enableAllMode ? UI_TIP_CLICK_HOLD_ENABLE_ALL : UI_TIP_CLICK_HOLD_CLEAR_ALL);
+			}
 			double sweepRemaining = LuaKeyState::GetStaleSweepSecondsRemaining();
 			if (sweepRemaining > 0.0) {
 				ImGui::SameLine();
@@ -5145,6 +5149,9 @@ namespace RadarKeys {
 				ImGui::SetCursorPosY((sweepBoxHeight - kSweepBarHeight) * 0.5f);
 				float sweepFraction = 1.0f - (float)(sweepRemaining / LuaKeyState::GetStaleSweepSecondsTotal());
 				ImGui::ProgressBar(sweepFraction, ImVec2(kSweepBarWidth, kSweepBarHeight));
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("%s", UI_TIP_SWEEP_STATUS);
+				}
 				ImGui::EndChild();
 			}
 			if (ImGui::IsItemActive()) {
@@ -5171,9 +5178,6 @@ namespace RadarKeys {
 				if (enableAllMode) EnableAllBindingsAndModKeys(); else DisableAllBindingsAndModKeys();
 			}
 
-			if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
-				ImGui::SetTooltip("%s", enableAllMode ? UI_TIP_CLICK_HOLD_ENABLE_ALL : UI_TIP_CLICK_HOLD_CLEAR_ALL);
-			}
 			if (clearAllDisabled) ImGui::EndDisabled();
 
 			if (clearAllConfirmPopupRequested) {
