@@ -171,7 +171,7 @@ namespace RadarKeys {
 		static const char* UI_BTN_SCRIPT_PLACEHOLDER = "Script";
 		static const char* UI_TIP_REASSIGN_COMBO = "Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder.";
 		static const char* UI_TIP_REASSIGN_KEY = "Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder.";
-		static const char* UI_LBL_KEY_GROUP_SEPARATOR = " / ";
+
 		static const char* UI_TIP_CANNOT_REASSIGN_UNDESCRIBED = "Unable to reassign an override - Key is not yet described through RadarKeys module.";
 		static const char* UI_POPUP_REMOVE_BINDING = "Remove Binding?";
 		static const char* UI_FMT_REMOVE_CONFIRM = "Remove \"%s\"?";
@@ -686,6 +686,20 @@ namespace RadarKeys {
 				result += NameForVKey(ordered[i]);
 			}
 			return result;
+		}
+
+		std::string ManualBindingDisplayNameFor(const std::string& scriptName, const std::string& functionName) {
+			std::string matchName;
+			for (const auto& b : bindings) {
+				if (b.isInject || b.disabled) continue;
+				if (FileNameOnly(b.scriptPathOn) != scriptName) continue;
+				bool functionMatches = (!b.functionTap.empty() && b.functionTap == functionName)
+					|| (!b.functionOn.empty() && b.functionOn == functionName)
+					|| (!b.functionOff.empty() && b.functionOff == functionName);
+				if (!functionMatches) continue;
+				matchName = b.IsCombo() ? ComboKeysDisplayName(b.comboKeys) : NameForVKey(b.vKey);
+			}
+			return matchName;
 		}
 
 		bool VectorsEqualUnordered(std::vector<USHORT> a, std::vector<USHORT> b) {
@@ -3749,6 +3763,7 @@ namespace RadarKeys {
 				bool keyAnyToggle = false;
 				bool keyAnyToggleEnabled = false;
 				bool keyButtonStacked = false;
+				bool keyButtonShowPlusBadge = false;
 				};
 				auto FormatTrimmedSeconds = [](double v) -> std::string {
 					char buf[32];
@@ -3798,15 +3813,43 @@ namespace RadarKeys {
 							if (storedTrigger.toggleMode) {
 								usesToggle = true;
 							}
-							if (storedTrigger.triggerType == 0 && storedTrigger.holdSeconds > 0.0f) {
-								usesHold = true;
-								holdSeconds = storedTrigger.holdSeconds;
-							} else if (storedTrigger.triggerType == 2) {
-								usesRepeat = true;
-							} else if (storedTrigger.triggerType == 1) {
-								usesRelease = true;
-							} else {
-								usesPress = true;
+						if (storedTrigger.triggerType == 0 && storedTrigger.holdSeconds > 0.0f) {
+							usesHold = true;
+							holdSeconds = storedTrigger.holdSeconds;
+						} else if (storedTrigger.triggerType == 2) {
+							usesRepeat = true;
+						} else if (storedTrigger.triggerType == 1) {
+							usesRelease = true;
+						} else {
+							usesPress = true;
+						}
+						}
+						bool describedUsesAny = usesPress || usesRelease || usesRepeat || usesToggle || usesHold;
+						if (!describedUsesAny && !row.isComboScript) {
+							for (const KeyBind& describedInject : bindings) {
+								if (!describedInject.isInject || !describedInject.scriptDescribed) continue;
+								if (describedInject.injectScriptName != scriptName || describedInject.injectFunctionName != functionName) continue;
+								if (describedInject.isToggle) {
+									usesToggle = true;
+									toggleOn = describedInject.toggleState;
+								}
+								if (describedInject.holdSeconds > 0.0f) {
+									usesHold = true;
+									holdSeconds = describedInject.holdSeconds;
+								}
+								if (describedInject.isInstant && describedInject.instantTriggerType == 2) {
+									usesRepeat = true;
+									double injectSpeedMult = (describedInject.runtimeRepeatSpeedMult > 0.0) ? (double)describedInject.runtimeRepeatSpeedMult : 1.0;
+									double injectScriptMult = LuaKeyState::GetRepeatMult(describedInject.vKey);
+									repeatInterval = kRepeatIntervalSeconds / (injectSpeedMult * injectScriptMult);
+								} else if (describedInject.isInstant && describedInject.instantTriggerType == 1) {
+									usesRelease = true;
+								} else if (describedInject.isInstant) {
+									usesPress = true;
+								} else if (!describedInject.isToggle && describedInject.holdSeconds <= 0.0f) {
+									usesPress = true;
+								}
+								break;
 							}
 						}
 						auto absorbKey = [&](const LuaKeyState::TrackedKeyInfo& m) {
@@ -3900,6 +3943,7 @@ namespace RadarKeys {
 					bool anyToggle = false;
 					bool anyToggleEnabled = false;
 					bool stacked = false;
+					bool showPlusBadge = false;
 				};
 				auto BuildModKeyGroupVisual = [&](const UnifiedRow& row) -> ModKeyRowVisual {
 					ModKeyRowVisual visual;
@@ -3958,17 +4002,23 @@ namespace RadarKeys {
 						}
 					}
 					std::vector<std::string> keyLabelLines;
-					std::string groupLabelFlat;
-					for (size_t gi = 0; gi < groupNames.size(); gi++) {
-						if (gi) groupLabelFlat += UI_LBL_KEY_GROUP_SEPARATOR;
-						groupLabelFlat += groupNames[gi];
+					float standardInner = kComboStackThresholdWidth - ImGui::GetStyle().FramePadding.x * 2.0f;
+					if (groupNames.size() > 1) {
+						visual.stacked = true;
+						for (const std::string& memberName : groupNames) {
+							std::vector<std::string> wrappedMember = WrapTextToWidth(memberName, standardInner);
+							for (const std::string& memberLine : wrappedMember) {
+								keyLabelLines.push_back(memberLine);
+							}
+						}
+					} else if (!groupNames.empty()) {
+						keyLabelLines.push_back(groupNames.front());
 					}
-					if (!groupLabelFlat.empty()) keyLabelLines.push_back(groupLabelFlat);
-						float standardInner = kComboStackThresholdWidth - ImGui::GetStyle().FramePadding.x * 2.0f;
 						for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
 							std::string comboLine = ComboKeysDisplayName(mergedCombo.activeKeys);
 							if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
 								visual.stacked = true;
+							visual.showPlusBadge = true;
 								std::vector<USHORT> stackedKeys = CanonicalizeComboKeys(mergedCombo.activeKeys);
 								for (USHORT stackedKey : stackedKeys) {
 									std::vector<std::string> wrappedKey = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
@@ -4240,15 +4290,35 @@ namespace RadarKeys {
 				for (UnifiedRow& row : rows) {
 					row.triggerLabel = BuildTriggerTypeLabel(row);
 					if (row.isManual) {
-						std::vector<std::string> wrapped = WrapTextToWidth(displayCache[row.bindIndex].itemLabel, 104.0f - ImGui::GetStyle().FramePadding.x * 2.0f);
-						std::string joined;
-						for (size_t i = 0; i < wrapped.size(); i++) {
-							if (i) joined += "\n";
-							joined += wrapped[i];
+						const KeyBind& manualBind = bindings[row.bindIndex];
+						if (manualBind.IsCombo()) {
+							std::vector<USHORT> manualComboKeys = CanonicalizeComboKeys(manualBind.comboKeys);
+							std::string stackedLabel;
+							size_t stackedLines = 0;
+							for (USHORT manualPartKey : manualComboKeys) {
+								std::vector<std::string> wrappedPart = WrapTextToWidth(NameForVKey(manualPartKey), kComboStackThresholdWidth - ImGui::GetStyle().FramePadding.x * 2.0f);
+								for (size_t partLine = 0; partLine < wrappedPart.size(); partLine++) {
+									if (stackedLines) stackedLabel += "\n";
+									stackedLabel += wrappedPart[partLine];
+									stackedLines++;
+								}
+							}
+							row.keyButtonLabel = stackedLabel;
+							row.keyButtonStacked = true;
+							row.keyButtonShowPlusBadge = true;
+							row.keyButtonW = kComboStackThresholdWidth;
+							row.keyButtonH = buttonBaseHeight + (float)(stackedLines - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+						} else {
+							std::vector<std::string> wrapped = WrapTextToWidth(displayCache[row.bindIndex].itemLabel, 104.0f - ImGui::GetStyle().FramePadding.x * 2.0f);
+							std::string joined;
+							for (size_t i = 0; i < wrapped.size(); i++) {
+								if (i) joined += "\n";
+								joined += wrapped[i];
+							}
+							row.keyButtonLabel = joined;
+							row.keyButtonW = 104.0f;
+							row.keyButtonH = buttonBaseHeight + (float)(wrapped.size() - 1) * (ImGui::GetTextLineHeight() + 2.0f);
 						}
-						row.keyButtonLabel = joined;
-						row.keyButtonW = 104.0f;
-						row.keyButtonH = buttonBaseHeight + (float)(wrapped.size() - 1) * (ImGui::GetTextLineHeight() + 2.0f);
 					} else if (row.isComboScript) {
 						std::string comboLabel = ComboKeysDisplayName(row.comboInfo.activeKeys);
 						float naturalWidth = ImGui::CalcTextSize(comboLabel.c_str()).x + 24.0f;
@@ -4266,6 +4336,7 @@ namespace RadarKeys {
 								}
 								row.keyButtonLabel = stackedLabel;
 								row.keyButtonStacked = true;
+							row.keyButtonShowPlusBadge = true;
 								row.keyButtonW = kComboStackThresholdWidth;
 								row.keyButtonH = buttonBaseHeight + (float)(stackedLines - 1) * (ImGui::GetTextLineHeight() + 2.0f);
 						} else {
@@ -4289,6 +4360,7 @@ namespace RadarKeys {
 						row.keyAnyToggle = visual.anyToggle;
 						row.keyAnyToggleEnabled = visual.anyToggleEnabled;
 						row.keyButtonStacked = visual.stacked;
+						row.keyButtonShowPlusBadge = visual.showPlusBadge;
 					}
 					if (row.conflicted) {
 						continue;
@@ -4500,6 +4572,12 @@ namespace RadarKeys {
 						ImGui::PushStyleColor(ImGuiCol_Text, bindings[row.bindIndex].isToggle ? (bindings[row.bindIndex].toggleState ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f)) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 						bool keyClicked = ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
 						ImGui::PopStyleColor();
+						if (row.keyButtonStacked && row.keyButtonShowPlusBadge) {
+							ImVec2 manualStackBtnMin = ImGui::GetItemRectMin();
+							ImVec2 manualStackBtnMax = ImGui::GetItemRectMax();
+							ImVec2 manualPlusSize = ImGui::CalcTextSize("+");
+							ImGui::GetWindowDrawList()->AddText(ImVec2(manualStackBtnMax.x - manualPlusSize.x - kComboStackPlusOffset, manualStackBtnMin.y + kComboStackPlusOffset), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
+						}
 						if (keyClicked) {
 							int i = row.bindIndex;
 							editingBindingIndex = i;
@@ -4585,16 +4663,18 @@ namespace RadarKeys {
 						};
 
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
-						bool comboHovered = false;
+							bool comboHovered = false;
 							if (row.keyButtonStacked) {
 								if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
 									openComboReassignPrompt();
 								}
 								comboHovered = ImGui::IsItemHovered();
-								ImVec2 plusSize = ImGui::CalcTextSize("+");
-								ImVec2 stackBtnMin = ImGui::GetItemRectMin();
-								ImVec2 stackBtnMax = ImGui::GetItemRectMax();
-								ImGui::GetWindowDrawList()->AddText(ImVec2(stackBtnMax.x - plusSize.x - kComboStackPlusOffset, stackBtnMin.y + kComboStackPlusOffset), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
+								if (row.keyButtonShowPlusBadge) {
+									ImVec2 plusSize = ImGui::CalcTextSize("+");
+									ImVec2 stackBtnMin = ImGui::GetItemRectMin();
+									ImVec2 stackBtnMax = ImGui::GetItemRectMax();
+									ImGui::GetWindowDrawList()->AddText(ImVec2(stackBtnMax.x - plusSize.x - kComboStackPlusOffset, stackBtnMin.y + kComboStackPlusOffset), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
+								}
 						} else {
 							if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
 								openComboReassignPrompt();
@@ -4663,7 +4743,7 @@ namespace RadarKeys {
 								ImGui::SetTooltip(UI_TIP_CANNOT_REASSIGN_UNDESCRIBED);
 							}
 						}
-							if (row.keyButtonStacked) {
+							if (row.keyButtonStacked && row.keyButtonShowPlusBadge) {
 								ImVec2 modStackBtnMin = ImGui::GetItemRectMin();
 								ImVec2 modStackBtnMax = ImGui::GetItemRectMax();
 								ImVec2 modPlusSize = ImGui::CalcTextSize("+");
