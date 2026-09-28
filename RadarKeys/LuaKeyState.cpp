@@ -778,8 +778,14 @@ namespace RadarKeys {
 			d.nativeKeys = vKeys;
 			d.scriptName = scriptName;
 			d.functionName = functionName;
-			d.hasToggleState = (toggleState == "on" || toggleState == "off");
-			d.toggleEnabled = (toggleState == "on");
+			std::string toggleStateLower;
+			toggleStateLower.reserve(toggleState.size());
+			for (char toggleChar : toggleState) {
+				char lowered = (toggleChar >= 'A' && toggleChar <= 'Z') ? (char)(toggleChar - 'A' + 'a') : toggleChar;
+				toggleStateLower += lowered;
+			}
+			d.hasToggleState = (toggleStateLower == "on" || toggleStateLower == "off");
+			d.toggleEnabled = (toggleStateLower == "on");
 			d.usesOnPress = obsOnPress;
 			d.usesHoldTime = obsHoldTime;
 			d.usesRepeat = obsRepeat;
@@ -855,8 +861,14 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
-			bool hasToggleState = (toggleState == "on" || toggleState == "off");
-			bool toggleEnabled = (toggleState == "on");
+			std::string toggleStateLower;
+			toggleStateLower.reserve(toggleState.size());
+			for (char toggleChar : toggleState) {
+				char lowered = (toggleChar >= 'A' && toggleChar <= 'Z') ? (char)(toggleChar - 'A' + 'a') : toggleChar;
+				toggleStateLower += lowered;
+			}
+			bool hasToggleState = (toggleStateLower == "on" || toggleStateLower == "off");
+			bool toggleEnabled = (toggleStateLower == "on");
 			bool obsOnPress = s.pendingUsesOnPress;
 			bool obsHoldTime = s.pendingUsesHoldTime;
 			double obsHoldSeconds = s.pendingLastHoldSeconds;
