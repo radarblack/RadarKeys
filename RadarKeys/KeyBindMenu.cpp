@@ -22,6 +22,7 @@
 #include <cctype>
 #include <sstream>
 #include <algorithm>
+#include <tuple>
 #include <unordered_set>
 #include <unordered_map>
 #include <atomic>
@@ -675,6 +676,35 @@ namespace RadarKeys {
 				vKey == VK_LSHIFT || vKey == VK_RSHIFT ||
 				vKey == VK_LCONTROL || vKey == VK_RCONTROL ||
 				vKey == VK_LMENU || vKey == VK_RMENU;
+		}
+
+		constexpr USHORT kSymbolOemRangeFirst = 0xBA;
+		constexpr USHORT kSymbolOemRangeLast = 0xC0;
+		constexpr USHORT kSymbolOemRange2First = 0xDB;
+		constexpr USHORT kSymbolOemRange2Last = 0xDF;
+		constexpr USHORT kSymbolOem102 = 0xE2;
+		constexpr USHORT kGamepadVKeyLast = 0xDA;
+		constexpr int kCategoryUnranked = 99;
+		constexpr int kVKeyUnranked = 0xFFFF;
+
+		bool IsSymbolVKey(USHORT vKey) {
+			return (vKey >= kSymbolOemRangeFirst && vKey <= kSymbolOemRangeLast)
+				|| (vKey >= kSymbolOemRange2First && vKey <= kSymbolOemRange2Last)
+				|| vKey == kSymbolOem102;
+		}
+
+		int KeyCategoryRank(USHORT vKey) {
+			if (IsMouseVKey(vKey)) return 0;
+			if ((vKey >= '0' && vKey <= '9') || (vKey >= 'A' && vKey <= 'Z')) return 1;
+			if (vKey >= VK_F1 && vKey <= VK_F24) return 2;
+			if (vKey >= VK_NUMPAD0 && vKey <= VK_NUMPAD9) return 3;
+			if (IsSymbolVKey(vKey)) return 5;
+			if ((vKey >= VK_GAMEPAD_A && vKey <= kGamepadVKeyLast) || vKey >= RawInput::VK_PS_CROSS) return 6;
+			return 4;
+		}
+
+		int SymbolPairKey(USHORT vKey) {
+			return (vKey == VK_OEM_6) ? VK_OEM_4 : vKey;
 		}
 
 		std::vector<USHORT> CanonicalizeComboKeys(const std::vector<USHORT>& keys) {
@@ -4347,11 +4377,43 @@ namespace RadarKeys {
 					}
 					return key;
 				};
+				auto RowOrderTuple = [&](const UnifiedRow& r) -> std::tuple<bool, int, size_t, int, int> {
+					bool sortIsCombo = false;
+					std::vector<USHORT> sortKeys;
+					if (r.isManual) {
+						const KeyBind& sortBind = bindings[r.bindIndex];
+						sortIsCombo = sortBind.IsCombo();
+						sortKeys = sortIsCombo ? CanonicalizeComboKeys(sortBind.comboKeys) : std::vector<USHORT>{sortBind.vKey};
+					} else if (r.isComboScript) {
+						sortIsCombo = true;
+						sortKeys = CanonicalizeComboKeys(r.comboInfo.activeKeys);
+					} else {
+						sortIsCombo = !r.mergedCombos.empty();
+						if (sortIsCombo) {
+							sortKeys = CanonicalizeComboKeys(r.mergedCombos.front().activeKeys);
+						} else {
+							for (const LuaKeyState::TrackedKeyInfo& sortMember : r.groupMembers) {
+								sortKeys.push_back(ResolveDisplayVKey(sortMember));
+							}
+						}
+					}
+					int minCategory = kCategoryUnranked;
+					int minVKey = kVKeyUnranked;
+					int minPairKey = kVKeyUnranked;
+					for (USHORT sortKey : sortKeys) {
+						minCategory = (std::min)(minCategory, KeyCategoryRank(sortKey));
+						minVKey = (std::min)(minVKey, (int)sortKey);
+						minPairKey = (std::min)(minPairKey, (int)SymbolPairKey(sortKey));
+					}
+					return std::make_tuple(sortIsCombo, minCategory, sortKeys.size(), minPairKey, minVKey);
+				};
 				std::stable_sort(rows.begin(), rows.end(), [&](const UnifiedRow& a, const UnifiedRow& b) {
 					const std::string ag = rowGroupKey(a);
 					const std::string bg = rowGroupKey(b);
 					if (ag != bg) return ag < bg;
-					if (a.isManual != b.isManual) return !a.isManual;
+					const std::tuple<bool, int, size_t, int, int> ao = RowOrderTuple(a);
+					const std::tuple<bool, int, size_t, int, int> bo = RowOrderTuple(b);
+					if (ao != bo) return ao < bo;
 					const std::string& af = a.isComboScript ? a.comboInfo.functionName : a.info.functionName;
 					const std::string& bf = b.isComboScript ? b.comboInfo.functionName : b.info.functionName;
 					return af < bf;
