@@ -191,6 +191,8 @@ namespace RadarKeys {
 		constexpr float kButtonLabelRowNudge = 3.5f;
 		constexpr float kComboStackPlusOffset = 4.0f;
 		constexpr float kComboStackThresholdWidth = 104.0f;
+		constexpr float kRowBottomGapPx = 10.0f;
+		constexpr float kGroupLineYShare = 0.5f;
 		static const char* UI_BTN_ENABLE_ALL_KEYS = "Enable All Hotkeys";
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
@@ -4547,7 +4549,7 @@ namespace RadarKeys {
 					if (rowStartsGroup) {
 						std::string groupHeaderName = displayScriptName(rowGroupKey(row));
 						ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
-						ImGui::TextDisabled("%s", groupHeaderName.c_str());
+						ImGui::Text("%s", groupHeaderName.c_str());
 						DrawModInfoTooltipIfHovered(row);
 						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
 					}
@@ -4971,18 +4973,16 @@ namespace RadarKeys {
 						ImGui::EndGroup();
 					}
 
-					ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
+					const float rowBottomY = rowTopY + rowContentHeight;
 					bool nextRowChangesGroup = false;
 					if (rowIdx + 1 < rows.size()) {
 						nextRowChangesGroup = rowGroupKey(rows[rowIdx + 1]) != rowGroupKey(row);
 					}
-					if (!nextRowChangesGroup) {
-						ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+					if (nextRowChangesGroup) {
+						const float groupLineY = rowBottomY + kRowBottomGapPx * kGroupLineYShare;
+						ImGui::GetWindowDrawList()->AddLine(ImVec2(0.0f, groupLineY), ImVec2(ImGui::GetWindowWidth(), groupLineY), ImGui::GetColorU32(ImGuiCol_Separator));
 					}
-					ImGui::Separator();
-					if (!nextRowChangesGroup) {
-						ImGui::PopStyleColor();
-					}
+					ImGui::SetCursorPosY(rowBottomY + kRowBottomGapPx);
 					ImGui::PopID();
 				}
 				s_requiredContentWidth = frameRequiredWidth;
