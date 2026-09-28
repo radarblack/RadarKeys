@@ -62,6 +62,7 @@ namespace RadarKeys {
 		void RequestBindingsSave();
 
 		USHORT NativeVKeyForMod(const std::string& scriptName, const std::string& functionName);
+		std::string ManualBindingDisplayNameFor(const std::string& scriptName, const std::string& functionName);
 
 		std::string NameForVKey(USHORT vKey);
 		int VKeyForName(const std::string& name);
