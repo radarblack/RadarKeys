@@ -1472,14 +1472,29 @@ namespace RadarKeys {
 				}
 			}
 
+			std::vector<USHORT> heldBindableKeys;
+			heldBindableKeys.clear();
+			for (USHORT heldScan = 1; heldScan < RawInput::kMaxVKey; ++heldScan) {
+				if (RawInput::IsKeyHeldReal(heldScan)) heldBindableKeys.push_back(heldScan);
+			}
+
 			for (KeyBind& bind : bindings) {
 				if (!bind.IsCombo()) continue;
 				if (bind.disabled || bind.autoDisabled) continue;
 
-				bool allHeld = true;
+				bool allMembersHeld = true;
 				for (USHORT k : bind.comboKeys) {
-					if (!RawInput::IsKeyHeldReal(k)) { allHeld = false; break; }
+					if (!RawInput::IsKeyHeldReal(k)) { allMembersHeld = false; break; }
 				}
+				bool extraHeldKey = false;
+				for (USHORT heldKey : heldBindableKeys) {
+					bool heldKeyIsMember = false;
+					for (USHORT k : bind.comboKeys) {
+						if (k == heldKey) { heldKeyIsMember = true; break; }
+					}
+					if (!heldKeyIsMember) { extraHeldKey = true; break; }
+				}
+				bool allHeld = !extraHeldKey && allMembersHeld;
 				bool hasHold = bind.holdSeconds > 0.0f;
 
 				if (allHeld && !bind.comboActive) {
