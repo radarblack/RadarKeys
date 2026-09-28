@@ -4468,21 +4468,44 @@ namespace RadarKeys {
 					UnifiedRow& row = rows[rowIdx];
 					ImGui::PushID((int)rowIdx);
 					ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
+					const bool rowStartsGroup = (rowIdx == 0) || rowGroupKey(rows[rowIdx - 1]) != rowGroupKey(row);
+					if (rowStartsGroup) {
+						std::string groupHeaderName = displayScriptName(rowGroupKey(row));
+						ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
+						ImGui::TextDisabled("%s", groupHeaderName.c_str());
+						DrawModInfoTooltipIfHovered(row);
+						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
+					}
 					float rowTopY = ImGui::GetCursorPosY();
 					float buttonHeight = 20.0f;
 					const float keyColumnX = 250.0f;
 
 					std::string detailText;
 					if (row.isManual) {
-						detailText = displayCache[row.bindIndex].detailText;
+						const KeyBind& manualDetailBind = bindings[row.bindIndex];
+						if (manualDetailBind.isInject) {
+							char manualLineBuf[48];
+							snprintf(manualLineBuf, sizeof(manualLineBuf), "Lines %d-%d", manualDetailBind.injectLineStart, manualDetailBind.injectLineEnd);
+							detailText = manualLineBuf;
+						} else if (manualDetailBind.isToggle) {
+							std::string funcOnPart = manualDetailBind.functionOn.empty() ? "" : "[" + manualDetailBind.functionOn + "]";
+							std::string funcOffPart = manualDetailBind.functionOff.empty() ? "" : "[" + manualDetailBind.functionOff + "]";
+							std::string holdPrefix;
+							if (manualDetailBind.holdSeconds > 0.0f) {
+								char holdBuf[32];
+								snprintf(holdBuf, sizeof(holdBuf), "(Hold %.1fs) ", manualDetailBind.holdSeconds);
+								holdPrefix = holdBuf;
+							}
+							detailText = holdPrefix + "Toggle: " + funcOnPart + " <-> " + funcOffPart;
+						} else {
+							detailText = manualDetailBind.functionTap.empty() ? "" : "[" + manualDetailBind.functionTap + "]";
+						}
 					}
 					else if (row.isComboScript) {
-						std::string funcStr = row.comboInfo.functionName.empty() ? "" : " [" + row.comboInfo.functionName + "]";
-						detailText = "-> " + displayScriptName(row.comboInfo.scriptName) + funcStr;
+						detailText = row.comboInfo.functionName.empty() ? "" : "[" + row.comboInfo.functionName + "]";
 					}
 					else if (row.info.hasDescription) {
-						std::string funcStr = row.info.functionName.empty() ? "" : " [" + row.info.functionName + "]";
-						detailText = "-> " + displayScriptName(row.info.scriptName) + funcStr;
+						detailText = row.info.functionName.empty() ? "" : "[" + row.info.functionName + "]";
 					}
 					else {
 						detailText = UI_TXT_NOT_YET_DESCRIBED;
@@ -4514,8 +4537,7 @@ namespace RadarKeys {
 						ImGui::PopStyleColor();
 						ImGui::EndChild();
 						ImGui::PopStyleColor();
-						ImGui::EndGroup();
-						DrawModInfoTooltipIfHovered(row);
+						EndGroup();
 					}
 
 					ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + stdButtonYOffset));
@@ -4872,7 +4894,6 @@ namespace RadarKeys {
 						ImGui::BeginGroup();
 						ImGui::TextWrapped("%s", detailText.c_str());
 						ImGui::EndGroup();
-						DrawModInfoTooltipIfHovered(row);
 					}
 
 					ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
