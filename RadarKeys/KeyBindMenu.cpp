@@ -3776,6 +3776,7 @@ namespace RadarKeys {
 				bool keyAnyToggleEnabled = false;
 				bool keyButtonStacked = false;
 				bool keyButtonShowPlusBadge = false;
+				std::vector<std::string> keyButtonLines;
 				};
 				auto FormatTrimmedSeconds = [](double v) -> std::string {
 					char buf[32];
@@ -3956,6 +3957,7 @@ namespace RadarKeys {
 					bool anyToggleEnabled = false;
 					bool stacked = false;
 					bool showPlusBadge = false;
+					std::vector<std::string> lines;
 				};
 				auto BuildModKeyGroupVisual = [&](const UnifiedRow& row) -> ModKeyRowVisual {
 					ModKeyRowVisual visual;
@@ -4061,6 +4063,34 @@ namespace RadarKeys {
 					visual.height = buttonBaseHeight;
 					if (!wrappedLines.empty()) {
 						visual.height += (float)(wrappedLines.size() - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+					}
+					for (const std::string& memberName : groupNames) {
+						std::vector<std::string> memberParts = WrapTextToWidth(memberName, standardInner);
+						std::string memberEntry;
+						for (size_t pi = 0; pi < memberParts.size(); pi++) {
+							if (pi) memberEntry += "\n";
+							memberEntry += memberParts[pi];
+						}
+						visual.lines.push_back(memberEntry);
+					}
+					for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
+						std::string comboLine = ComboKeysDisplayName(mergedCombo.activeKeys);
+						if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
+							for (USHORT stackedKey : CanonicalizeComboKeys(mergedCombo.activeKeys)) {
+								std::vector<std::string> keyParts = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
+								std::string keyEntry;
+								for (size_t pi = 0; pi < keyParts.size(); pi++) {
+									if (pi) keyEntry += "\n";
+									keyEntry += keyParts[pi];
+								}
+								visual.lines.push_back(keyEntry);
+							}
+						} else {
+							visual.lines.push_back(comboLine);
+						}
+					}
+					if (visual.lines.size() > 1) {
+						visual.height = buttonBaseHeight * (float)visual.lines.size() + (float)(visual.lines.size() - 1) * ImGui::GetStyle().ItemSpacing.y;
 					}
 					return visual;
 				};
@@ -4373,6 +4403,7 @@ namespace RadarKeys {
 						row.keyAnyToggleEnabled = visual.anyToggleEnabled;
 						row.keyButtonStacked = visual.stacked;
 						row.keyButtonShowPlusBadge = visual.showPlusBadge;
+						row.keyButtonLines = visual.lines;
 					}
 					if (row.conflicted) {
 						continue;
@@ -4740,27 +4771,61 @@ namespace RadarKeys {
 						ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
 						if (row.info.hasDescription) {
-							if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
+							bool modStackHovered = false;
+							if (row.keyButtonLines.size() > 1) {
+								const float stackStartX = ImGui::GetCursorPosX();
+								float stackY = ImGui::GetCursorPosY();
+								for (size_t li = 0; li < row.keyButtonLines.size(); li++) {
+									ImGui::SetCursorPosX(stackStartX);
+									ImGui::SetCursorPosY(stackY);
+									if (ImGui::Button(row.keyButtonLines[li].c_str(), ImVec2(row.keyButtonW, buttonBaseHeight))) {
+										openReassignPrompt();
+									}
+									modStackHovered = modStackHovered || ImGui::IsItemHovered();
+									if (li == 0 && row.keyButtonShowPlusBadge) {
+										ImVec2 modPlusSize = ImGui::CalcTextSize("+");
+										ImVec2 modStackBtnMin = ImGui::GetItemRectMin();
+										ImVec2 modStackBtnMax = ImGui::GetItemRectMax();
+										ImGui::GetWindowDrawList()->AddText(ImVec2(modStackBtnMax.x - modPlusSize.x - kComboStackPlusOffset, modStackBtnMin.y + kComboStackPlusOffset), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
+									}
+									stackY += buttonBaseHeight + ImGui::GetStyle().ItemSpacing.y;
+								}
+							} else if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
 								openReassignPrompt();
+							} else {
+								modStackHovered = ImGui::IsItemHovered();
 							}
-							if (ImGui::IsItemHovered()) {
+							if (modStackHovered) {
 								ImGui::SetTooltip(UI_TIP_REASSIGN_KEY);
 							}
 						}
 						else {
+							bool modStackHovered = false;
 							ImGui::BeginDisabled();
-							ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
+							if (row.keyButtonLines.size() > 1) {
+								const float stackStartX = ImGui::GetCursorPosX();
+								float stackY = ImGui::GetCursorPosY();
+								for (size_t li = 0; li < row.keyButtonLines.size(); li++) {
+									ImGui::SetCursorPosX(stackStartX);
+									ImGui::SetCursorPosY(stackY);
+									ImGui::Button(row.keyButtonLines[li].c_str(), ImVec2(row.keyButtonW, buttonBaseHeight));
+									modStackHovered = modStackHovered || ImGui::IsItemHovered();
+									stackY += buttonBaseHeight + ImGui::GetStyle().ItemSpacing.y;
+								}
+							} else {
+								ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
+							}
 							ImGui::EndDisabled();
-							if (ImGui::IsItemHovered()) {
+							if (modStackHovered) {
 								ImGui::SetTooltip(UI_TIP_CANNOT_REASSIGN_UNDESCRIBED);
 							}
 						}
-							if (row.keyButtonStacked && row.keyButtonShowPlusBadge) {
-								ImVec2 modStackBtnMin = ImGui::GetItemRectMin();
-								ImVec2 modStackBtnMax = ImGui::GetItemRectMax();
-								ImVec2 modPlusSize = ImGui::CalcTextSize("+");
-								ImGui::GetWindowDrawList()->AddText(ImVec2(modStackBtnMax.x - modPlusSize.x - kComboStackPlusOffset, modStackBtnMin.y + kComboStackPlusOffset), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
-							}
+						if (row.keyButtonStacked && row.keyButtonShowPlusBadge && row.keyButtonLines.size() <= 1) {
+							ImVec2 modStackBtnMin = ImGui::GetItemRectMin();
+							ImVec2 modStackBtnMax = ImGui::GetItemRectMax();
+							ImVec2 modPlusSize = ImGui::CalcTextSize("+");
+							ImGui::GetWindowDrawList()->AddText(ImVec2(modStackBtnMax.x - modPlusSize.x - kComboStackPlusOffset, modStackBtnMin.y + kComboStackPlusOffset), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
+						}
 						ImGui::PopStyleColor();
 						ImGui::PopStyleVar();
 					}
