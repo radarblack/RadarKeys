@@ -4426,21 +4426,34 @@ namespace RadarKeys {
 						const KeyBind& manualBind = bindings[row.bindIndex];
 						if (manualBind.IsCombo()) {
 							std::vector<USHORT> manualComboKeys = CanonicalizeComboKeys(manualBind.comboKeys);
-							std::string stackedLabel;
-							size_t stackedLines = 0;
-							for (USHORT manualPartKey : manualComboKeys) {
-								std::vector<std::string> wrappedPart = WrapTextToWidth(NameForVKey(manualPartKey), kComboStackThresholdWidth - ImGui::GetStyle().FramePadding.x * 2.0f);
-								for (size_t partLine = 0; partLine < wrappedPart.size(); partLine++) {
-									if (stackedLines) stackedLabel += "\n";
-									stackedLabel += wrappedPart[partLine];
-									stackedLines++;
+							std::string comboLabel = ComboKeysDisplayName(manualComboKeys);
+							float manualNaturalWidth = ImGui::CalcTextSize(comboLabel.c_str()).x + 24.0f;
+							if (manualNaturalWidth > kComboStackThresholdWidth) {
+								std::string stackedLabel;
+								size_t stackedLines = 0;
+								for (USHORT manualPartKey : manualComboKeys) {
+									std::vector<std::string> wrappedPart = WrapTextToWidth(NameForVKey(manualPartKey), kComboStackThresholdWidth - ImGui::GetStyle().FramePadding.x * 2.0f);
+									for (size_t partLine = 0; partLine < wrappedPart.size(); partLine++) {
+										if (stackedLines) stackedLabel += "\n";
+										stackedLabel += wrappedPart[partLine];
+										stackedLines++;
+									}
 								}
+								row.keyButtonLabel = stackedLabel;
+								row.keyButtonStacked = true;
+								row.keyButtonShowPlusBadge = true;
+								row.keyButtonH = buttonBaseHeight + (float)(stackedLines - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+							} else {
+								std::vector<std::string> manualWrapped = WrapTextToWidth(comboLabel, kComboStackThresholdWidth - ImGui::GetStyle().FramePadding.x * 2.0f);
+								std::string manualJoined;
+								for (size_t manualLine = 0; manualLine < manualWrapped.size(); manualLine++) {
+									if (manualLine) manualJoined += "\n";
+									manualJoined += manualWrapped[manualLine];
+								}
+								row.keyButtonLabel = manualJoined;
+								row.keyButtonH = buttonBaseHeight + (float)(manualWrapped.size() - 1) * (ImGui::GetTextLineHeight() + 2.0f);
 							}
-							row.keyButtonLabel = stackedLabel;
-							row.keyButtonStacked = true;
-							row.keyButtonShowPlusBadge = true;
 							row.keyButtonW = kComboStackThresholdWidth;
-							row.keyButtonH = buttonBaseHeight + (float)(stackedLines - 1) * (ImGui::GetTextLineHeight() + 2.0f);
 						} else {
 							std::vector<std::string> wrapped = WrapTextToWidth(displayCache[row.bindIndex].itemLabel, 104.0f - ImGui::GetStyle().FramePadding.x * 2.0f);
 							std::string joined;
