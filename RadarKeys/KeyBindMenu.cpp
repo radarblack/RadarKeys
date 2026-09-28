@@ -4537,7 +4537,7 @@ namespace RadarKeys {
 						ImGui::PopStyleColor();
 						ImGui::EndChild();
 						ImGui::PopStyleColor();
-						EndGroup();
+						ImGui::EndGroup();
 					}
 
 					ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().ItemSpacing.x, rowTopY + stdButtonYOffset));
