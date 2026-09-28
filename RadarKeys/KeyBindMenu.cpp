@@ -4359,7 +4359,6 @@ namespace RadarKeys {
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 				float notesColumnX = 0.0f;
 				for (UnifiedRow& row : rows) {
-					const std::string rowGroupKeyValue = rowGroupKey(row);
 					row.triggerLabel = BuildTriggerTypeLabel(row);
 					if (row.isManual) {
 						const KeyBind& manualBind = bindings[row.bindIndex];
@@ -4879,7 +4878,7 @@ namespace RadarKeys {
 					ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
 					bool nextRowChangesGroup = false;
 					if (rowIdx + 1 < rows.size()) {
-						nextRowChangesGroup = rowGroupKey(rows[rowIdx + 1]) != rowGroupKeyValue;
+						nextRowChangesGroup = rowGroupKey(rows[rowIdx + 1]) != rowGroupKey(row);
 					}
 					if (!nextRowChangesGroup) {
 						ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
