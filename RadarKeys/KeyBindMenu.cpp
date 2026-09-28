@@ -4332,19 +4332,41 @@ namespace RadarKeys {
 					row.comboInfo = std::move(synthesized);
 					rows.push_back(std::move(row));
 				}
-				std::stable_sort(rows.begin(), rows.end(), [](const UnifiedRow& a, const UnifiedRow& b) {
+				auto rowGroupKey = [&](const UnifiedRow& row) -> std::string {
+					std::string key;
+					if (row.isManual) key = FileNameOnly(bindings[row.bindIndex].scriptPathOn);
+					else if (row.isComboScript) key = row.comboInfo.scriptName;
+					else key = row.info.scriptName;
+					static const std::string kScriptGroupSuffix = ".lua";
+					if (key.size() >= kScriptGroupSuffix.size()) {
+						std::string tail = key.substr(key.size() - kScriptGroupSuffix.size());
+						for (char& c : tail) {
+							if (c >= 'A' && c <= 'Z') c += (char)('a' - 'A');
+						}
+						if (tail == kScriptGroupSuffix) key.resize(key.size() - kScriptGroupSuffix.size());
+					}
+					return key;
+				};
+				std::stable_sort(rows.begin(), rows.end(), [&](const UnifiedRow& a, const UnifiedRow& b) {
+					const std::string ag = rowGroupKey(a);
+					const std::string bg = rowGroupKey(b);
+					if (ag != bg) return ag < bg;
 					if (a.isManual != b.isManual) return !a.isManual;
-					if (a.isManual || b.isManual) return false;
-					const std::string& an = a.isComboScript ? a.comboInfo.scriptName : a.info.scriptName;
-					const std::string& bn = b.isComboScript ? b.comboInfo.scriptName : b.info.scriptName;
-					if (an != bn) return an < bn;
 					const std::string& af = a.isComboScript ? a.comboInfo.functionName : a.info.functionName;
 					const std::string& bf = b.isComboScript ? b.comboInfo.functionName : b.info.functionName;
 					return af < bf;
 				});
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 				float notesColumnX = 0.0f;
+				std::string lastRowGroupKey;
+				bool firstListRow = true;
 				for (UnifiedRow& row : rows) {
+					const std::string rowGroupKeyValue = rowGroupKey(row);
+					if (!firstListRow && rowGroupKeyValue != lastRowGroupKey) {
+						ImGui::Separator();
+					}
+					firstListRow = false;
+					lastRowGroupKey = rowGroupKeyValue;
 					row.triggerLabel = BuildTriggerTypeLabel(row);
 					if (row.isManual) {
 						const KeyBind& manualBind = bindings[row.bindIndex];
@@ -4862,7 +4884,7 @@ namespace RadarKeys {
 					}
 
 					ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
-					ImGui::PopID(); ImGui::Separator();
+					ImGui::PopID();
 				}
 				s_requiredContentWidth = frameRequiredWidth;
 				ImGui::EndChild();
