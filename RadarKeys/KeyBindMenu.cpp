@@ -3794,10 +3794,10 @@ namespace RadarKeys {
 						const std::string& scriptName = row.isComboScript ? row.comboInfo.scriptName : row.info.scriptName;
 						const std::string& functionName = row.isComboScript ? row.comboInfo.functionName : row.info.functionName;
 						if (ModKeyBindings::HasTriggerConfig(scriptName, functionName)) {
+							ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
 							if (storedTrigger.toggleMode) {
 								usesToggle = true;
 							}
-							ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
 							if (storedTrigger.triggerType == 0 && storedTrigger.holdSeconds > 0.0f) {
 								usesHold = true;
 								holdSeconds = storedTrigger.holdSeconds;
