@@ -4358,15 +4358,8 @@ namespace RadarKeys {
 				});
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 				float notesColumnX = 0.0f;
-				std::string lastRowGroupKey;
-				bool firstListRow = true;
 				for (UnifiedRow& row : rows) {
 					const std::string rowGroupKeyValue = rowGroupKey(row);
-					if (!firstListRow && rowGroupKeyValue != lastRowGroupKey) {
-						ImGui::Separator();
-					}
-					firstListRow = false;
-					lastRowGroupKey = rowGroupKeyValue;
 					row.triggerLabel = BuildTriggerTypeLabel(row);
 					if (row.isManual) {
 						const KeyBind& manualBind = bindings[row.bindIndex];
@@ -4884,6 +4877,17 @@ namespace RadarKeys {
 					}
 
 					ImGui::SetCursorPosY(rowTopY + rowContentHeight + 4.0f);
+					bool nextRowChangesGroup = false;
+					if (rowIdx + 1 < rows.size()) {
+						nextRowChangesGroup = rowGroupKey(rows[rowIdx + 1]) != rowGroupKeyValue;
+					}
+					if (!nextRowChangesGroup) {
+						ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+					}
+					ImGui::Separator();
+					if (!nextRowChangesGroup) {
+						ImGui::PopStyleColor();
+					}
 					ImGui::PopID();
 				}
 				s_requiredContentWidth = frameRequiredWidth;
