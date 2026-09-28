@@ -4124,21 +4124,27 @@ namespace RadarKeys {
 					for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
 						std::string comboLine = ComboKeysDisplayName(mergedCombo.activeKeys);
 						if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
+							std::string stackedEntry;
 							for (USHORT stackedKey : CanonicalizeComboKeys(mergedCombo.activeKeys)) {
 								std::vector<std::string> keyParts = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
-								std::string keyEntry;
 								for (size_t pi = 0; pi < keyParts.size(); pi++) {
-									if (pi) keyEntry += "\n";
-									keyEntry += keyParts[pi];
+									if (pi) stackedEntry += "\n";
+									stackedEntry += keyParts[pi];
 								}
-								visual.lines.push_back(keyEntry);
 							}
+							visual.lines.push_back(stackedEntry);
 						} else {
 							visual.lines.push_back(comboLine);
 						}
 					}
 					if (visual.lines.size() > 1) {
-						visual.height = buttonBaseHeight * (float)visual.lines.size() + (float)(visual.lines.size() - 1) * ImGui::GetStyle().ItemSpacing.y;
+						float stackHeight = 0.0f;
+						for (const std::string& stackEntry : visual.lines) {
+							const int entryLineCount = 1 + (int)std::count(stackEntry.begin(), stackEntry.end(), '\n');
+							stackHeight += buttonBaseHeight + (float)(entryLineCount - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+						}
+						stackHeight += (float)(visual.lines.size() - 1) * ImGui::GetStyle().ItemSpacing.y;
+						visual.height = stackHeight;
 					}
 					return visual;
 				};
@@ -4904,20 +4910,31 @@ namespace RadarKeys {
 							if (row.keyButtonLines.size() > 1) {
 								const float stackStartX = ImGui::GetCursorPosX();
 								float stackY = ImGui::GetCursorPosY();
+								size_t plusBadgeEntry = row.keyButtonLines.size();
+								if (row.keyButtonShowPlusBadge) {
+									for (size_t bi = 0; bi < row.keyButtonLines.size(); bi++) {
+										if (row.keyButtonLines[bi].find('\n') != std::string::npos) {
+											plusBadgeEntry = bi;
+											break;
+										}
+									}
+								}
 								for (size_t li = 0; li < row.keyButtonLines.size(); li++) {
 									ImGui::SetCursorPosX(stackStartX);
 									ImGui::SetCursorPosY(stackY);
-									if (ImGui::Button(row.keyButtonLines[li].c_str(), ImVec2(row.keyButtonW, buttonBaseHeight))) {
+									const int entryLineCount = 1 + (int)std::count(row.keyButtonLines[li].begin(), row.keyButtonLines[li].end(), '\n');
+									const float entryHeight = buttonBaseHeight + (float)(entryLineCount - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+									if (ImGui::Button(row.keyButtonLines[li].c_str(), ImVec2(row.keyButtonW, entryHeight))) {
 										openReassignPrompt();
 									}
 									modStackHovered = modStackHovered || ImGui::IsItemHovered();
-									if (li == 0 && row.keyButtonShowPlusBadge) {
+									if (li == plusBadgeEntry) {
 										ImVec2 modPlusSize = ImGui::CalcTextSize("+");
 										ImVec2 modStackBtnMin = ImGui::GetItemRectMin();
 										ImVec2 modStackBtnMax = ImGui::GetItemRectMax();
 										ImGui::GetWindowDrawList()->AddText(ImVec2(modStackBtnMax.x - modPlusSize.x - kComboStackPlusOffset, modStackBtnMin.y + kComboStackPlusOffset), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
 									}
-									stackY += buttonBaseHeight + ImGui::GetStyle().ItemSpacing.y;
+									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y;
 								}
 							} else if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
 								openReassignPrompt();
@@ -4937,9 +4954,11 @@ namespace RadarKeys {
 								for (size_t li = 0; li < row.keyButtonLines.size(); li++) {
 									ImGui::SetCursorPosX(stackStartX);
 									ImGui::SetCursorPosY(stackY);
-									ImGui::Button(row.keyButtonLines[li].c_str(), ImVec2(row.keyButtonW, buttonBaseHeight));
+									const int entryLineCount = 1 + (int)std::count(row.keyButtonLines[li].begin(), row.keyButtonLines[li].end(), '\n');
+									const float entryHeight = buttonBaseHeight + (float)(entryLineCount - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+									ImGui::Button(row.keyButtonLines[li].c_str(), ImVec2(row.keyButtonW, entryHeight));
 									modStackHovered = modStackHovered || ImGui::IsItemHovered();
-									stackY += buttonBaseHeight + ImGui::GetStyle().ItemSpacing.y;
+									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y;
 								}
 							} else {
 								ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
