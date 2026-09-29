@@ -3824,7 +3824,7 @@ namespace RadarKeys {
 				CancelCaptureIfActive();
 			}
 			ImDrawList* footerDrawList = ImGui::GetWindowDrawList();
-			footerDrawList->AddCircleFilled(ImVec2(finalizeRectMin.x + 4.0f, finalizeRectMin.y + 4.0f), 0.8f, IM_COL32(34, 160, 34, 255), 0);
+			footerDrawList->AddCircleFilled(ImVec2(finalizeRectMin.x + 4.0f, finalizeRectMin.y + 4.0f), 4.0f, IM_COL32(34, 160, 34, 255), 0);
 
 			if (isAssigningModKey) {
 				ImGui::TextDisabled(UI_TXT_TAKES_EFFECT_NEXT_FRAME);
