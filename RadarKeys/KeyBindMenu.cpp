@@ -96,7 +96,7 @@ namespace RadarKeys {
 		static const char* UI_LBL_HOLD = "HOLD";
 		static const char* UI_BTN_RESET = "Reset";
 		static const char* UI_LBL_KEYS = "Keys";
-		static const char* UI_LBL_HOLD_INDENT = "  HOLD";
+		static const char* UI_LBL_HOLD_INDENT = "HOLD";
 		static const char* UI_LBL_2_3_KEYS = "  2-3 KEYS";
 		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
 		static const char* UI_CHK_TOGGLE = "Toggle";
@@ -2781,10 +2781,10 @@ namespace RadarKeys {
 			float blockHeight = lineHeight * lineCount + lineSpacing * (lineCount - 1);
 
 			ImGui::SetCursorPosY(top + (std::max)(0.0f, (areaHeight - blockHeight) * 0.5f));
-			ImGui::SetCursorPosX((std::max)(0.0f, (areaWidth - ImGui::CalcTextSize(line1).x) * 0.5f));
+			ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x + (std::max)(0.0f, (areaWidth - ImGui::CalcTextSize(line1).x) * 0.5f));
 			ImGui::TextColored(color, "%s", line1);
 			if (line2) {
-				ImGui::SetCursorPosX((std::max)(0.0f, (areaWidth - ImGui::CalcTextSize(line2).x) * 0.5f));
+				ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x + (std::max)(0.0f, (areaWidth - ImGui::CalcTextSize(line2).x) * 0.5f));
 				ImGui::TextColored(color, "%s", line2);
 			}
 		}
