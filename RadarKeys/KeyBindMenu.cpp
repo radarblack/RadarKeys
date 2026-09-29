@@ -91,9 +91,8 @@ namespace RadarKeys {
 		static const char* UI_LBL_LINE_START = "Line Start:";
 		static const char* UI_LBL_LINE_END = "Line End:";
 		static const char* UI_LBL_KEY = "Key";
-		static const char* UI_LBL_PRESS = "PRESS";
+		static const char* UI_TXT_PRESS_KEY = "PRESS KEY...";
 		static const char* UI_LBL_HOLD = "HOLD";
-		static const char* UI_LBL_KEY_ELLIPSIS = "KEY...";
 		static const char* UI_BTN_RESET = "Reset";
 		static const char* UI_LBL_KEYS = "Keys";
 		static const char* UI_LBL_HOLD_INDENT = "  HOLD";
@@ -2986,7 +2985,13 @@ namespace RadarKeys {
 			static float s_capturePromptMinHeight = 330.0f;
 			ImGui::SetNextWindowSize(ImVec2(340, 330), ImGuiCond_FirstUseEver);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 165), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowSizeConstraints(ImVec2(340, s_capturePromptMinHeight > 330.0f ? s_capturePromptMinHeight : 330.0f), ImVec2(FLT_MAX, FLT_MAX));
+			float captureMinWidth = ImGui::CalcTextSize(UI_LBL_BIND_TYPE).x + ImGui::GetStyle().ItemSpacing.x;
+			captureMinWidth += (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SINGLE_KEY).x + ImGui::GetStyle().ItemSpacing.x)
+				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_MULTI_KEY_COMBO).x + ImGui::GetStyle().ItemSpacing.x)
+				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SCRIPT_LINES).x);
+			captureMinWidth += ImGui::GetStyle().WindowPadding.x * 2.0f;
+			if (captureMinWidth < 340.0f) captureMinWidth = 340.0f;
+			ImGui::SetNextWindowSizeConstraints(ImVec2(captureMinWidth, s_capturePromptMinHeight > 330.0f ? s_capturePromptMinHeight : 330.0f), ImVec2(FLT_MAX, FLT_MAX));
 			if (requestCaptureFocus) {
 				ImGui::SetNextWindowFocus();
 				requestCaptureFocus = false;
@@ -3017,6 +3022,7 @@ namespace RadarKeys {
 			if (!isAssigningMenuToggleKey) {
 				bool wasCombo = captureIsCombo;
 				bool wasInject = captureIsInject;
+				ImGui::AlignTextToFramePadding();
 				ImGui::TextUnformatted(UI_LBL_BIND_TYPE); ImGui::SameLine();
 				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo && !captureIsInject)) { captureIsCombo = false; captureIsInject = false; }
 				ImGui::SameLine();
@@ -3130,32 +3136,29 @@ namespace RadarKeys {
 				}
 			}
 		
+			ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, kKeyButtonRounding);
 			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 			auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
 			const float contentStartX = ImGui::GetCursorPosX();
+			const float boxContentTopY = ImGui::GetCursorPosY();
 			ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(UI_LBL_KEY).x) * 0.5f)); ImGui::TextUnformatted(UI_LBL_KEY); ImGui::Separator();
-			float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
+			float lowerBoxTopY = ImGui::GetCursorPosY();
+			float lowerBoxRemainingHeight = availHeight - (lowerBoxTopY - boxContentTopY);
 		
 			if (capturedVKey == 0) {
 				const bool showingHold = singleHoldActive && singleHoldKey != 0;
-				float lineHeight = ImGui::GetTextLineHeight();
-				float lineSpacing = ImGui::GetStyle().ItemSpacing.y;
-				float progressHeight = showingHold ? 8.0f : 0.0f;
-				float progressGap = showingHold ? lineSpacing : 0.0f;
-				float blockHeight = lineHeight * 2.0f + lineSpacing + progressGap + progressHeight;
-				float startVerticalY = lowerBoxTopY + ((lowerBoxRemainingHeight - blockHeight) * 0.5f);
-				ImGui::SetCursorPosY(startVerticalY);
-
-				std::string holdName = showingHold ? NameForVKey(singleHoldKey) : "";
-				const char* line1 = showingHold ? holdName.c_str() : UI_LBL_PRESS;
-				const char* line2 = showingHold ? UI_LBL_HOLD : UI_LBL_KEY_ELLIPSIS;
-				float w1 = ImGui::CalcTextSize(line1).x;
-				float w2 = ImGui::CalcTextSize(line2).x;
-				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - w1) * 0.5f));
-				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line1);
-				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - w2) * 0.5f));
-				ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line2);
-				if (showingHold) {
+				if (!showingHold) {
+					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), UI_TXT_PRESS_KEY);
+				} else {
+					std::string holdName = NameForVKey(singleHoldKey);
+					float lineHeight = ImGui::GetTextLineHeight();
+					float lineSpacing = ImGui::GetStyle().ItemSpacing.y;
+					float blockHeight = lineHeight * 2.0f + lineSpacing * 2.0f + 8.0f;
+					ImGui::SetCursorPosY(lowerBoxTopY + ((std::max)(0.0f, lowerBoxRemainingHeight - blockHeight) * 0.5f));
+					ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(holdName.c_str()).x) * 0.5f));
+					ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", holdName.c_str());
+					ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(UI_LBL_HOLD).x) * 0.5f));
+					ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", UI_LBL_HOLD);
 					double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - singleHoldStartTime).count();
 					float progress = (float)(std::min)(heldSeconds / kComboHoldSeconds, 1.0);
 					ImGui::Spacing();
@@ -3168,7 +3171,9 @@ namespace RadarKeys {
 				ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s", keyName.c_str());
 			}
 			ImGui::EndChild();
+			ImGui::PopStyleVar();
 
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyButtonRounding);
 			if (ImGui::Button(UI_BTN_RESET, ImVec2(105, 22))) {
 				capturedVKey = 0;
 				capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
@@ -3182,14 +3187,18 @@ namespace RadarKeys {
 				capturedInstantUserSet = false;
 				LogActivity(LOG_KEYBIND_HAS_BEEN_RESET);
 			}
+			ImGui::PopStyleVar();
 			} else {
 				UpdateComboCapture();
 
+				ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, kKeyButtonRounding);
 				ImGui::BeginChild("ComboKeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
 				auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
 				const float contentStartX = ImGui::GetCursorPosX();
+				const float boxContentTopY = ImGui::GetCursorPosY();
 				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(UI_LBL_KEYS).x) * 0.5f)); ImGui::TextUnformatted(UI_LBL_KEYS); ImGui::Separator();
-				float lowerBoxTopY = ImGui::GetCursorPosY(), lowerBoxRemainingHeight = availHeight - lowerBoxTopY;
+				float lowerBoxTopY = ImGui::GetCursorPosY();
+				float lowerBoxRemainingHeight = availHeight - (lowerBoxTopY - boxContentTopY);
 
 				if (capturedComboKeys.empty() && !comboHoldActive) {
 					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), UI_LBL_HOLD_INDENT, UI_LBL_2_3_KEYS);
@@ -3245,10 +3254,12 @@ namespace RadarKeys {
 					}
 				}
 				ImGui::EndChild();
+				ImGui::PopStyleVar();
 				if (ImGui::IsItemHovered()) {
 					ImGui::SetTooltip(UI_TIP_COMBO_HOLD, kComboHoldSeconds);
 				}
 
+				ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyButtonRounding);
 				if (ImGui::Button(UI_BTN_RESET, ImVec2(105, 22))) {
 					ResetComboCaptureState();
 					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
@@ -3262,6 +3273,7 @@ namespace RadarKeys {
 					capturedInstantUserSet = false;
 					LogActivity(LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET);
 				}
+				ImGui::PopStyleVar();
 			}
 		
 			float captureColBottomY = ImGui::GetCursorPosY();
@@ -3559,6 +3571,7 @@ namespace RadarKeys {
 					b.repeatAccelMult = repeatMult;
 				}
 			};
+			ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x);
 			if (ImGui::Button(UI_BTN_FINALIZE, ImVec2(145, buttonHeight))) {
 				if (isAssigningModKey) {
 					if (captureIsCombo) {
@@ -3768,7 +3781,7 @@ namespace RadarKeys {
 			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
 			
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
-			float targetCancelX = ImGui::GetWindowWidth() - paddingX - 145.0f - 8.0f;
+			float targetCancelX = ImGui::GetWindowWidth() - paddingX - 145.0f;
 			ImGui::SameLine(targetCancelX);
 			
 			if (ImGui::Button(UI_BTN_CANCEL, ImVec2(145, buttonHeight))) {
