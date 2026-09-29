@@ -79,7 +79,6 @@ namespace RadarKeys {
 		static const char* LOG_KEYBINDMENU_CAPTURED_SINGLE_KEY_VKEY_FMT = "KeyBindMenu: captured single key vKey={} name=\"{}\" ctrl={} shift={} alt={}";
 		static const char* LOG_KEYBIND_HAS_BEEN_RESET = "KeyBindMenu: Keybind has been reset";
 		static const char* LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET = "KeyBindMenu: Multi-key combo has been reset";
-		static const char* LOG_KEYBINDMENU_DEBUGGER_OVERLAY_FMT = "KeyBindMenu: Debugger overlay {}";
 		static const char* LOG_MENU_KEY_REASSIGNMENT_PROMPT_OPENED = "KeyBindMenu: Menu Key Reassignment Prompt opened";
 		static const char* LOG_KEY_ASSIGNMENT_BINDING_PROMPT_OPENED = "KeyBindMenu: Key Assignment Binding Prompt opened";
 
@@ -1201,7 +1200,6 @@ namespace RadarKeys {
 					return;
 				}
 				LuaBridge::QueueMessageIn("InjectScript|" + injectContent);
-				LogActivity("KeyBindMenu: Fired script lines " + std::to_string(bind.injectLineStart) + "-" + std::to_string(bind.injectLineEnd) + " of " + FileNameOnly(bind.scriptPathOn));
 				return;
 			}
 			std::string targetPath = bind.scriptPathOn;
@@ -1220,13 +1218,11 @@ namespace RadarKeys {
 
 			if (targetFunc.empty()) {
 				LuaBridge::QueueMessageIn("DoScript|dofile(" + LuaLongBracketWrap(targetPath) + ")");
-				LogActivity("KeyBindMenu: Fired script " + FileNameOnly(targetPath));
 				return;
 			}
 
 			switch (LuaCallGlobalFunction(targetFunc)) {
 				case LuaDirectCallResult::Success:
-					LogActivity("KeyBindMenu: Fired script " + FileNameOnly(targetPath) + " [" + targetFunc + "] (direct)");
 					return;
 				case LuaDirectCallResult::RuntimeError:
 					LogActivity("KeyBindMenu: Script error firing " + FileNameOnly(targetPath) + " [" + targetFunc + "]", false);
@@ -1238,7 +1234,6 @@ namespace RadarKeys {
 
 			std::string luaPayload = "CallFunction|" + targetFunc + "|" + targetPath;
 			LuaBridge::QueueMessageIn(luaPayload);
-			LogActivity("KeyBindMenu: Fired script " + FileNameOnly(targetPath) + " [" + targetFunc + "] (queued)");
 		}
 
 		USHORT ResolveDisplayVKey(const LuaKeyState::TrackedKeyInfo& info) {
@@ -2307,7 +2302,6 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("Bound " + CombinedDisplayName(bindings.back()) + " -> mode toggle: " + (isToggle ? "YES" : "NO"));
-			LogActivity("KeyBindMenu: Bound " + CombinedDisplayName(bindings.back()) + " (toggle: " + (isToggle ? "YES" : "NO") + ")");
 		}
 
 		void AddComboBinding(const std::vector<USHORT>& comboKeys, bool isToggle, const std::string& pathOn, const std::string& pathOff, const std::string& funcOn, const std::string& funcOff, const std::string& funcTap, float holdSeconds, bool isInstant, int instantTriggerType, float repeatAccelMult = 1.0f) {
@@ -2328,7 +2322,6 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("Bound combo " + CombinedDisplayName(bindings.back()));
-			LogActivity("KeyBindMenu: Bound combo " + CombinedDisplayName(bindings.back()));
 		}
 
 		void RemoveBinding(int index) {
@@ -2345,7 +2338,6 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("Unbound " + removedDesc);
-			LogActivity("KeyBindMenu: Unbound " + removedDesc);
 		}
 
 		void RemoveAllBindings() {
@@ -2363,7 +2355,6 @@ namespace RadarKeys {
 			SaveBindings();
 			MarkDisplayCacheDirty();
 			DebuggerMenu::LogBindEvent("unbound all (" + std::to_string(count) + " binding(s))");
-			LogActivity("KeyBindMenu: Cleared all bindings (" + std::to_string(count) + " binding(s))");
 		}
 
 		void SetAllHotkeysDisabled(bool disabled) {
@@ -2766,6 +2757,16 @@ namespace RadarKeys {
 				}
 				LogActivity("KeyBindMenu: Multi-key combo captured: " + ComboKeysDisplayName(capturedComboKeys));
 			}
+		}
+
+		std::string CenteredFloatInputFormat(float value, const char* valueFmt, float itemWidth) {
+			char rendered[64];
+			snprintf(rendered, sizeof(rendered), valueFmt, value);
+			const float innerWidth = itemWidth - ImGui::GetStyle().FramePadding.x * 2.0f;
+			const float textWidth = ImGui::CalcTextSize(rendered).x;
+			const float spaceWidth = ImGui::CalcTextSize(" ").x;
+			const int padCount = innerWidth > textWidth ? (int)((innerWidth - textWidth) / spaceWidth) : 0;
+			return std::string(padCount, ' ') + valueFmt;
 		}
 
 		void DrawCenteredPlaceholder(float areaWidth, float top, float areaHeight, ImVec4 color, const char* line1, const char* line2 = nullptr) {
@@ -3324,7 +3325,8 @@ namespace RadarKeys {
 				    const float stepperPairWidth = stepperSize * 2.0f + ImGui::GetStyle().ItemSpacing.x;
 				    ImGui::SetCursorPosX(triggerInputStartX);
 				    ImGui::SetNextItemWidth(stepperPairWidth);
-				    ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
+				    const std::string holdInputFormat = CenteredFloatInputFormat(capturedHoldSeconds, "%.1fs", stepperPairWidth);
+				    ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, holdInputFormat.c_str());
 				    if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
 				    ImGui::SetCursorPosX(triggerInputStartX);
 				    if (ImGui::Button(UI_BTN_MINUS, ImVec2(stepperSize, stepperSize))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine();
@@ -3350,7 +3352,8 @@ namespace RadarKeys {
 					if (capturedInstantTriggerType == 2) {
 						ImGui::SetCursorPosX(triggerInputStartX + (instantComboWidth - kRepeatIntervalInputWidth) * 0.5f);
 						ImGui::SetNextItemWidth(kRepeatIntervalInputWidth);
-						if (ImGui::InputFloat("##capturedRepeatInterval", &capturedRepeatIntervalSeconds, 0.0f, 0.0f, "%.2fs")) {
+						const std::string repeatIntervalFormat = CenteredFloatInputFormat(capturedRepeatIntervalSeconds, "%.2fs", kRepeatIntervalInputWidth);
+						if (ImGui::InputFloat("##capturedRepeatInterval", &capturedRepeatIntervalSeconds, 0.0f, 0.0f, repeatIntervalFormat.c_str())) {
 							float baseSeconds = isAssigningModKey ? (float)kModKeyRepeatBaseSeconds : (float)kRepeatIntervalSeconds;
 							float minSeconds = baseSeconds / (float)kMaxRepeatSpeedMult;
 							float maxSeconds = baseSeconds / kMinRepeatAccelMult;
@@ -3907,7 +3910,6 @@ namespace RadarKeys {
 			if (ImGui::Button(UI_BTN_DEBUGGER)) {
 				DebuggerMenu::menuOpen = !DebuggerMenu::menuOpen;
 				LogActivity(DebuggerMenu::menuOpen ? UI_LOG_DEBUGGER_OPENED : UI_LOG_DEBUGGER_CLOSED);
-				spdlog::info(LOG_KEYBINDMENU_DEBUGGER_OVERLAY_FMT, DebuggerMenu::menuOpen ? "OPENED" : "CLOSED");
 			}
 			ImGui::SameLine();
 			
