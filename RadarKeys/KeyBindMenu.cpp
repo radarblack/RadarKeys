@@ -3794,18 +3794,14 @@ namespace RadarKeys {
 				if (bind.isToggle) {
 				    std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
 				    std::string fileOff = std::filesystem::path(bind.scriptPathOff).filename().string();
-				    std::string funcOnStr = bind.functionOn.empty() ? "" : " [" + bind.functionOn + "]";
-				    std::string funcOffStr = bind.functionOff.empty() ? "" : " [" + bind.functionOff + "]";
-				    std::string holdPrefix = "";
-				    if (bind.holdSeconds > 0.0f) {
-				        char buf[32];
-				        snprintf(buf, sizeof(buf), "(Hold %.1fs) ", bind.holdSeconds);
-				        holdPrefix = buf;
-				    }
+				    std::string funcOnStr = bind.functionOn.empty() ? "" : "[" + bind.functionOn + "]";
+				    std::string funcOffStr = bind.functionOff.empty() ? "" : "[" + bind.functionOff + "]";
+				    std::string onPrefix = fileOn.empty() ? "" : fileOn + " ";
+				    std::string offPrefix = fileOff.empty() ? "" : fileOff + " ";
 				    if (bind.scriptPathOn == bind.scriptPathOff) {
-				        entry.detailText = holdPrefix + "Toggle: " + fileOn + funcOnStr + " <-> " + funcOffStr;
+				        entry.detailText = onPrefix + funcOnStr + " <-> " + funcOffStr;
 				    } else {
-				        entry.detailText = holdPrefix + "Toggle: " + fileOn + funcOnStr + " <-> " + fileOff + funcOffStr;
+				        entry.detailText = onPrefix + funcOnStr + " <-> " + offPrefix + funcOffStr;
 				    }
 				} else if (bind.isInject) {
 					std::string injectFileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
@@ -4737,13 +4733,7 @@ namespace RadarKeys {
 						} else if (manualDetailBind.isToggle) {
 							std::string funcOnPart = manualDetailBind.functionOn.empty() ? "" : "[" + manualDetailBind.functionOn + "]";
 							std::string funcOffPart = manualDetailBind.functionOff.empty() ? "" : "[" + manualDetailBind.functionOff + "]";
-							std::string holdPrefix;
-							if (manualDetailBind.holdSeconds > 0.0f) {
-								char holdBuf[32];
-								snprintf(holdBuf, sizeof(holdBuf), "(Hold %.1fs) ", manualDetailBind.holdSeconds);
-								holdPrefix = holdBuf;
-							}
-							detailText = holdPrefix + "Toggle: " + funcOnPart + " <-> " + funcOffPart;
+							detailText = funcOnPart + " <-> " + funcOffPart;
 						} else {
 							detailText = manualDetailBind.functionTap.empty() ? "" : "[" + manualDetailBind.functionTap + "]";
 						}
