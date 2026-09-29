@@ -744,6 +744,14 @@ namespace RadarKeys {
 		};
 		std::map<std::string, ComboKeyDescription> comboDescriptions;
 
+		std::string LowercaseCopy(const std::string& text) {
+			std::string out;
+			out.reserve(text.size());
+			for (char c : text) {
+				out += (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+			}
+			return out;
+		}
 		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) {
@@ -778,12 +786,7 @@ namespace RadarKeys {
 			d.nativeKeys = vKeys;
 			d.scriptName = scriptName;
 			d.functionName = functionName;
-			std::string toggleStateLower;
-			toggleStateLower.reserve(toggleState.size());
-			for (char toggleChar : toggleState) {
-				char lowered = (toggleChar >= 'A' && toggleChar <= 'Z') ? (char)(toggleChar - 'A' + 'a') : toggleChar;
-				toggleStateLower += lowered;
-			}
+			std::string toggleStateLower = LowercaseCopy(toggleState);
 			d.hasToggleState = (toggleStateLower == "on" || toggleStateLower == "off");
 			d.toggleEnabled = (toggleStateLower == "on");
 			d.usesOnPress = obsOnPress;
@@ -861,12 +864,7 @@ namespace RadarKeys {
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
-			std::string toggleStateLower;
-			toggleStateLower.reserve(toggleState.size());
-			for (char toggleChar : toggleState) {
-				char lowered = (toggleChar >= 'A' && toggleChar <= 'Z') ? (char)(toggleChar - 'A' + 'a') : toggleChar;
-				toggleStateLower += lowered;
-			}
+			std::string toggleStateLower = LowercaseCopy(toggleState);
 			bool hasToggleState = (toggleStateLower == "on" || toggleStateLower == "off");
 			bool toggleEnabled = (toggleStateLower == "on");
 			bool obsOnPress = s.pendingUsesOnPress;
