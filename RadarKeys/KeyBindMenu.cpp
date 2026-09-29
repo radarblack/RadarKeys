@@ -117,8 +117,6 @@ namespace RadarKeys {
 			"Seconds before the next repeat fires.\n"
 			"- ? Higher: Slower\n"
 			"- ? Lower: Faster";
-		static const char* UI_LBL_READY = "[ READY ]";
-		static const char* UI_LBL_UNFIT = "[ UNFIT ]";
 		static const char* UI_TIP_COMBO_VALID = "The key combination is valid. Key assignment can finalize.";
 		static const char* UI_TIP_COMBO_CONFLICT = "Conflict! Key combination is already in use.\nThis includes bindings declared by mods and existing manual bindings.\nChange the combination before finalizing.";
 		static const char* UI_RADIO_SINGLE = "Single";
@@ -3399,15 +3397,6 @@ namespace RadarKeys {
 			}
 			ImGui::Spacing();
 			
-			const char* comboStatusLabel = comboAvailable ? UI_LBL_READY : UI_LBL_UNFIT;
-			ImVec2 comboStatusSize = ImGui::CalcTextSize(comboStatusLabel);
-			ImGui::BeginChild("ComboStatusBox", ImVec2(comboStatusSize.x + ImGui::GetStyle().WindowPadding.x * 2.0f, comboStatusSize.y + ImGui::GetStyle().WindowPadding.y * 2.0f), true, ImGuiWindowFlags_NoScrollbar);
-			ImGui::TextColored(comboAvailable ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", comboStatusLabel);
-			ImGui::EndChild();
-			
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(comboAvailable ? UI_TIP_COMBO_VALID : UI_TIP_COMBO_CONFLICT);
-			}
 			ImGui::EndGroup();
 			ImGui::SetCursorPosY((std::max)(ImGui::GetCursorPosY(), captureColBottomY));
 			ImGui::Separator();
@@ -3825,7 +3814,15 @@ namespace RadarKeys {
 			}
 			ImDrawList* footerDrawList = ImGui::GetWindowDrawList();
 			const float kFooterDotInsetPx = 3.0f;
-			footerDrawList->AddCircleFilled(ImVec2(finalizeRectMin.x + 4.0f + kFooterDotInsetPx, finalizeRectMin.y + 4.0f + kFooterDotInsetPx), 4.0f, IM_COL32(34, 160, 34, 255), 0);
+			const float kFooterDotRadiusPx = 4.0f;
+			const ImVec2 kFooterDotCenter(finalizeRectMin.x + 4.0f + kFooterDotInsetPx, finalizeRectMin.y + 4.0f + kFooterDotInsetPx);
+			const ImU32 kFooterDotReadyCol = IM_COL32(34, 160, 34, 255);
+			const ImU32 kFooterDotConflictCol = IM_COL32(160, 34, 34, 255);
+			footerDrawList->AddCircleFilled(kFooterDotCenter, kFooterDotRadiusPx, canFinalize ? kFooterDotReadyCol : kFooterDotConflictCol, 0);
+			const float kFooterDotHoverPadPx = 2.0f;
+			if (ImGui::IsMouseHoveringRect(ImVec2(kFooterDotCenter.x - kFooterDotRadiusPx - kFooterDotHoverPadPx, kFooterDotCenter.y - kFooterDotRadiusPx - kFooterDotHoverPadPx), ImVec2(kFooterDotCenter.x + kFooterDotRadiusPx + kFooterDotHoverPadPx, kFooterDotCenter.y + kFooterDotRadiusPx + kFooterDotHoverPadPx))) {
+				ImGui::SetTooltip(canFinalize ? UI_TIP_COMBO_VALID : UI_TIP_COMBO_CONFLICT);
+			}
 
 			if (isAssigningModKey) {
 				ImGui::TextDisabled(UI_TXT_TAKES_EFFECT_NEXT_FRAME);
