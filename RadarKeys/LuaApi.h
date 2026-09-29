@@ -43,7 +43,6 @@ namespace RadarKeys {
 
 	bool ResolveLuaApi();
 	void LuaApiCaptureState(lua_State* L);
-	lua_State* LuaApiGetCapturedState();
 
 	enum class LuaDirectCallResult {
 		NotAvailable,
