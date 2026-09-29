@@ -3306,6 +3306,8 @@ namespace RadarKeys {
 				float triggerRightX = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
 				float maxTriggerLabelW = (std::max)((std::max)(ImGui::CalcTextSize(UI_CHK_TOGGLE).x, ImGui::CalcTextSize(UI_CHK_LONG_PRESS).x), ImGui::CalcTextSize(UI_CHK_INSTANT).x);
 				float triggerColX = (std::max)(optionsColX, triggerRightX - maxTriggerLabelW - ImGui::GetStyle().ItemInnerSpacing.x - ImGui::GetFrameHeight());
+				float triggerInputStartX = triggerColX + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x;
+				float triggerInputWidth = triggerRightX - triggerInputStartX;
 				bool toggleLockedForScript = capturedToggleLocked && isAssigningModKey;
 				if (toggleLockedForScript) ImGui::BeginDisabled();
 				ImGui::SetCursorPosX(triggerColX);
@@ -3321,13 +3323,15 @@ namespace RadarKeys {
 				}
 				
 				if (capturedLongPressMode) {
-				    ImGui::SetCursorPosX(triggerRightX - 75.0f);
-				    ImGui::SetNextItemWidth(75);
+				    ImGui::SetCursorPosX(triggerInputStartX);
+				    ImGui::SetNextItemWidth(triggerInputWidth);
 				    ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
 				    if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
-				    ImGui::SetCursorPosX(triggerRightX - 78.0f);
-				    if (ImGui::Button(UI_BTN_MINUS, ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine();
-				    if (ImGui::Button(UI_BTN_PLUS, ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
+				    const float stepperSize = ImGui::GetFrameHeight();
+				    const float stepperPairWidth = stepperSize * 2.0f + ImGui::GetStyle().ItemSpacing.x;
+				    ImGui::SetCursorPosX(triggerInputStartX + (std::max)(0.0f, (triggerInputWidth - stepperPairWidth) * 0.5f));
+				    if (ImGui::Button(UI_BTN_MINUS, ImVec2(stepperSize, stepperSize))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine();
+				    if (ImGui::Button(UI_BTN_PLUS, ImVec2(stepperSize, stepperSize))) capturedHoldSeconds += 0.5f;
 				}
 
 				bool instantSelected = capturedInstantMode;
@@ -3340,8 +3344,8 @@ namespace RadarKeys {
 
 				if (capturedInstantMode) {
 					static const char* instantTriggerLabels[] = { UI_OPT_ON_PRESS, UI_OPT_ON_RELEASE, UI_OPT_REPEAT };
-					ImGui::SetCursorPosX(triggerRightX - 120.0f);
-					ImGui::SetNextItemWidth(120);
+					ImGui::SetCursorPosX(triggerInputStartX);
+					ImGui::SetNextItemWidth(triggerRightX - triggerInputStartX);
 					if (ImGui::Combo("##capturedInstantTrigger", &capturedInstantTriggerType, instantTriggerLabels, IM_ARRAYSIZE(instantTriggerLabels))) {
 						capturedInstantUserSet = true;
 					}
@@ -3601,7 +3605,10 @@ namespace RadarKeys {
 				}
 			};
 			ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x);
-			if (ImGui::Button(UI_BTN_FINALIZE, ImVec2(145, buttonHeight))) {
+			const bool finalizeClicked = ImGui::Button(UI_BTN_FINALIZE, ImVec2(145, buttonHeight));
+			const ImVec2 finalizeRectMin = ImGui::GetItemRectMin();
+			const ImVec2 finalizeRectMax = ImGui::GetItemRectMax();
+			if (finalizeClicked) {
 				if (isAssigningModKey) {
 					if (captureIsCombo) {
 						std::string comboKeyName = ComboKeysDisplayName(capturedComboKeys);
@@ -3813,9 +3820,15 @@ namespace RadarKeys {
 			float targetCancelX = ImGui::GetWindowWidth() - paddingX - 145.0f;
 			ImGui::SameLine(targetCancelX);
 			
-			if (ImGui::Button(UI_BTN_CANCEL, ImVec2(145, buttonHeight))) {
+			const bool cancelClicked = ImGui::Button(UI_BTN_CANCEL, ImVec2(145, buttonHeight));
+			const ImVec2 cancelRectMin = ImGui::GetItemRectMin();
+			const ImVec2 cancelRectMax = ImGui::GetItemRectMax();
+			if (cancelClicked) {
 				CancelCaptureIfActive();
 			}
+			ImDrawList* footerDrawList = ImGui::GetWindowDrawList();
+			footerDrawList->AddCircle(ImVec2((finalizeRectMin.x + finalizeRectMax.x) * 0.5f, (finalizeRectMin.y + finalizeRectMax.y) * 0.5f), 8.0f, IM_COL32(102, 255, 102, 255), 0, 2.0f);
+			footerDrawList->AddCircle(ImVec2((cancelRectMin.x + cancelRectMax.x) * 0.5f, (cancelRectMin.y + cancelRectMax.y) * 0.5f), 8.0f, IM_COL32(255, 102, 102, 255), 0, 2.0f);
 
 			if (isAssigningModKey) {
 				ImGui::TextDisabled(UI_TXT_TAKES_EFFECT_NEXT_FRAME);
