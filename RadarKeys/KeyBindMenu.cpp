@@ -195,6 +195,7 @@ namespace RadarKeys {
 		constexpr float kGroupLineYShare = 0.5f;
 		constexpr float kHeaderBoxPadX = 5.0f;
 		constexpr float kHeaderBoxPadY = 3.0f;
+		constexpr float kStackButtonGapFactor = 0.4f;
 		static const char* UI_BTN_ENABLE_ALL_KEYS = "Enable All Hotkeys";
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
@@ -4145,7 +4146,7 @@ namespace RadarKeys {
 							const int entryLineCount = 1 + (int)std::count(stackEntry.begin(), stackEntry.end(), '\n');
 							stackHeight += buttonBaseHeight + (float)(entryLineCount - 1) * (ImGui::GetTextLineHeight() + 2.0f);
 						}
-						stackHeight += (float)(visual.lines.size() - 1) * ImGui::GetStyle().ItemSpacing.y;
+						stackHeight += (float)(visual.lines.size() - 1) * ImGui::GetStyle().ItemSpacing.y * kStackButtonGapFactor;
 						visual.height = stackHeight;
 					}
 					return visual;
@@ -4557,7 +4558,7 @@ namespace RadarKeys {
 					const bool rowStartsGroup = (rowIdx == 0) || rowGroupKey(rows[rowIdx - 1]) != rowGroupKey(row);
 					if (rowStartsGroup) {
 						std::string groupHeaderName = displayScriptName(rowGroupKey(row));
-						ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
+						ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x + kHeaderBoxPadX);
 						ImGui::Text("%s", groupHeaderName.c_str());
 						const ImVec2 headerBoxMin = ImGui::GetItemRectMin();
 						const ImVec2 headerBoxMax = ImGui::GetItemRectMax();
@@ -4940,7 +4941,7 @@ namespace RadarKeys {
 										ImVec2 modStackBtnMax = ImGui::GetItemRectMax();
 										ImGui::GetWindowDrawList()->AddText(ImVec2(modStackBtnMax.x - modPlusSize.x - kComboStackPlusOffset, modStackBtnMin.y + kComboStackPlusOffset), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
 									}
-									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y;
+									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y * kStackButtonGapFactor;
 								}
 							} else if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
 								openReassignPrompt();
@@ -4964,7 +4965,7 @@ namespace RadarKeys {
 									const float entryHeight = buttonBaseHeight + (float)(entryLineCount - 1) * (ImGui::GetTextLineHeight() + 2.0f);
 									ImGui::Button(row.keyButtonLines[li].c_str(), ImVec2(row.keyButtonW, entryHeight));
 									modStackHovered = modStackHovered || ImGui::IsItemHovered();
-									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y;
+									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y * kStackButtonGapFactor;
 								}
 							} else {
 								ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
