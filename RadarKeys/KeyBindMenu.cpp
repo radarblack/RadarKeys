@@ -193,6 +193,7 @@ namespace RadarKeys {
 		constexpr float kComboStackThresholdWidth = 104.0f;
 		constexpr float kRowBottomGapPx = 4.0f;
 		constexpr float kRowTopPadPx = 2.0f;
+		constexpr float kGroupBreakExtraPx = 10.0f;
 		constexpr float kGroupLineYShare = 0.5f;
 		constexpr float kHeaderBoxPadX = 5.0f;
 		constexpr float kHeaderBoxPadY = 3.0f;
@@ -5007,14 +5008,16 @@ namespace RadarKeys {
 						nextRowChangesGroup = rowGroupKey(rows[rowIdx + 1]) != rowGroupKey(row);
 					}
 					if (nextRowChangesGroup) {
-						const float groupLineY = rowBottomY + kRowBottomGapPx * kGroupLineYShare;
+						const float groupLineY = rowBottomY + (kRowBottomGapPx + kGroupBreakExtraPx) * kGroupLineYShare;
 						const ImVec2 cursorScreen = ImGui::GetCursorScreenPos();
 						const float lineScreenY = cursorScreen.y + (groupLineY - ImGui::GetCursorPosY());
 						const float lineX0 = ImGui::GetWindowPos().x + ImGui::GetStyle().WindowPadding.x;
 						const float lineX1 = ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
 						ImGui::GetWindowDrawList()->AddLine(ImVec2(lineX0, lineScreenY), ImVec2(lineX1, lineScreenY), ImGui::GetColorU32(ImGuiCol_Separator));
+						ImGui::SetCursorPosY(rowBottomY + kRowBottomGapPx + kGroupBreakExtraPx);
+					} else {
+						ImGui::SetCursorPosY(rowBottomY + kRowBottomGapPx);
 					}
-					ImGui::SetCursorPosY(rowBottomY + kRowBottomGapPx);
 					ImGui::PopID();
 				}
 				s_requiredContentWidth = frameRequiredWidth;
