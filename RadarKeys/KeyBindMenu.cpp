@@ -4943,7 +4943,6 @@ namespace RadarKeys {
 					ImGui::SameLine();
 					ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetStyle().ItemSpacing.x * kChipToKeyGapTrim);
 					ImGui::SetCursorPosY(rowTopY + keyButtonYOffset);
-					ImGui::PopStyleVar();
 
 					if (row.isManual) {
 						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
@@ -5177,6 +5176,7 @@ namespace RadarKeys {
 						ImGui::PopStyleColor();
 						ImGui::PopStyleVar();
 					}
+					ImGui::PopStyleVar();
 					if (!row.conflicted) {
 						float buttonCenterY = rowTopY + keyButtonYOffset + row.keyButtonH * 0.5f;
 						float labelLineH = ImGui::GetTextLineHeight();
