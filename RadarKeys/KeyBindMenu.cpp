@@ -3304,8 +3304,7 @@ namespace RadarKeys {
 			if (!isAssigningMenuToggleKey) {
 
 				float triggerRightX = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
-				float maxTriggerLabelW = (std::max)((std::max)(ImGui::CalcTextSize(UI_CHK_TOGGLE).x, ImGui::CalcTextSize(UI_CHK_LONG_PRESS).x), ImGui::CalcTextSize(UI_CHK_INSTANT).x);
-				float triggerColX = (std::max)(optionsColX, triggerRightX - maxTriggerLabelW - ImGui::GetStyle().ItemInnerSpacing.x - ImGui::GetFrameHeight());
+				float triggerColX = optionsColX;
 				float triggerInputStartX = triggerColX + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x;
 				float triggerInputWidth = triggerRightX - triggerInputStartX;
 				bool toggleLockedForScript = capturedToggleLocked && isAssigningModKey;
@@ -3821,14 +3820,12 @@ namespace RadarKeys {
 			ImGui::SameLine(targetCancelX);
 			
 			const bool cancelClicked = ImGui::Button(UI_BTN_CANCEL, ImVec2(145, buttonHeight));
-			const ImVec2 cancelRectMin = ImGui::GetItemRectMin();
-			const ImVec2 cancelRectMax = ImGui::GetItemRectMax();
 			if (cancelClicked) {
 				CancelCaptureIfActive();
 			}
 			ImDrawList* footerDrawList = ImGui::GetWindowDrawList();
-			footerDrawList->AddCircle(ImVec2((finalizeRectMin.x + finalizeRectMax.x) * 0.5f, (finalizeRectMin.y + finalizeRectMax.y) * 0.5f), 8.0f, IM_COL32(102, 255, 102, 255), 0, 2.0f);
-			footerDrawList->AddCircle(ImVec2((cancelRectMin.x + cancelRectMax.x) * 0.5f, (cancelRectMin.y + cancelRectMax.y) * 0.5f), 8.0f, IM_COL32(255, 102, 102, 255), 0, 2.0f);
+			footerDrawList->AddCircleFilled(ImVec2(finalizeRectMin.x + 14.0f, (finalizeRectMin.y + finalizeRectMax.y) * 0.5f), 8.0f, IM_COL32(34, 160, 34, 255), 0);
+			footerDrawList->AddCircle(ImVec2(finalizeRectMin.x + 14.0f, (finalizeRectMin.y + finalizeRectMax.y) * 0.5f), 8.0f, IM_COL32(34, 160, 34, 255), 0, 2.0f);
 
 			if (isAssigningModKey) {
 				ImGui::TextDisabled(UI_TXT_TAKES_EFFECT_NEXT_FRAME);
