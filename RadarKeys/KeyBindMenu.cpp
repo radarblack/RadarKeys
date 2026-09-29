@@ -2781,10 +2781,25 @@ namespace RadarKeys {
 			float blockHeight = lineHeight * lineCount + lineSpacing * (lineCount - 1);
 
 			ImGui::SetCursorPosY(top + (std::max)(0.0f, (areaHeight - blockHeight) * 0.5f));
-			ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x + (std::max)(0.0f, (areaWidth - ImGui::CalcTextSize(line1).x) * 0.5f));
+			ImFont* font = ImGui::GetFont();
+			auto opticalShift = [font](const char* text) -> float {
+				if (!text || text[0] == '\0') {
+					return 0.0f;
+				}
+				const char* end = text;
+				while (*end) ++end;
+				const size_t n = (size_t)(end - text);
+				const ImFontGlyph* first = font->FindGlyph((ImWchar)(unsigned char)text[0]);
+				const ImFontGlyph* last = font->FindGlyph((ImWchar)(unsigned char)text[n - 1]);
+				if (!first || !last) {
+					return 0.0f;
+				}
+				return ((last->AdvanceX - (last->X1 - last->X0)) - first->X0) * 0.5f;
+			};
+			ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x + (std::max)(0.0f, (areaWidth - ImGui::CalcTextSize(line1).x) * 0.5f) + opticalShift(line1));
 			ImGui::TextColored(color, "%s", line1);
 			if (line2) {
-				ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x + (std::max)(0.0f, (areaWidth - ImGui::CalcTextSize(line2).x) * 0.5f));
+				ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x + (std::max)(0.0f, (areaWidth - ImGui::CalcTextSize(line2).x) * 0.5f) + opticalShift(line2));
 				ImGui::TextColored(color, "%s", line2);
 			}
 		}
