@@ -203,6 +203,8 @@ namespace RadarKeys {
 		static const char* UI_TIP_GROUP_TOGGLE = "Click to enable/disable this mod's keys.";
 		static const char* UI_POPUP_CLEAR_ALL_CONFIRM = "Clear All Hotkeys?";
 		static const char* UI_TXT_CLEAR_ALL_CONFIRM = "Reset all mod key overrides to their defaults and remove every manually-assigned binding?";
+		static const char* UI_POPUP_GROUP_RESET_CONFIRM = "Reset Mod Hotkeys?";
+		static const char* UI_TXT_GROUP_RESET_CONFIRM_FMT = "Reset all key overrides from %s to its defaults and remove its manually-assigned bindings?";
 		static const char* UI_BTN_ADD_NEW_BINDING = "Add New Binding...";
 
 		struct BindingDisplayCache {
@@ -2554,6 +2556,83 @@ namespace RadarKeys {
 			LogActivity("KeyBindMenu: Reset " + std::to_string(resetCount) + " mod key override(s) to default and removed " + std::to_string(removedCount) + " manual binding(s)");
 		}
 
+		void ResetAndRemoveGroupKeys(const std::string& groupName) {
+			const std::string normalizedGroup = GroupScriptKeyOf(groupName);
+			size_t resetCount = 0;
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (!info.hasDescription || GroupScriptKeyOf(info.scriptName) != normalizedGroup) continue;
+				bool hadOverride = !ModKeyBindings::GetOverride(info.scriptName, info.functionName).empty();
+				bool hadTriggerConfig = ModKeyBindings::HasTriggerConfig(info.scriptName, info.functionName);
+				if (hadOverride || hadTriggerConfig) {
+					std::string storedNativeName = ModKeyBindings::GetNativeKey(info.scriptName, info.functionName);
+					int storedNativeResolved = storedNativeName.empty() ? -1 : ResolveKeyNameForSlot(storedNativeName, info.vKey);
+					USHORT memberNative = 0;
+					for (auto& b : bindings) {
+						if (!b.isInject || !b.scriptDescribed || b.injectScriptName != info.scriptName || b.injectFunctionName != info.functionName) continue;
+						b.comboKeys.clear();
+						USHORT beforeRestore = b.vKey;
+						USHORT bindNative = b.nativeVKey;
+						if (bindNative == 0 && storedNativeResolved > 0 && SlotOfVKey((USHORT)storedNativeResolved) == SlotOfVKey(b.vKey)) bindNative = (USHORT)storedNativeResolved;
+						if (bindNative != 0 && bindNative != b.vKey) {
+							RemoveDispatcherIfUnused(b.vKey);
+							b.vKey = bindNative;
+							b.keyName = NameForVKey(bindNative);
+							EnsureDispatcherRegistered(b.vKey);
+						}
+						if (beforeRestore == info.vKey && bindNative != 0) memberNative = bindNative;
+						b.isInstant = false;
+						b.instantTriggerType = 0;
+						b.holdSeconds = 0.0f;
+						b.repeatAccelMult = 1.0f;
+					}
+					ModKeyBindings::SetTriggerConfigWithoutSave(info.scriptName, info.functionName, 0, 0.0f, 1.0f, false);
+					ModKeyBindings::SetOverrideWithoutSave(info.scriptName, info.functionName, "");
+					USHORT bulkNativeVKey = memberNative;
+					if (bulkNativeVKey == 0 && storedNativeResolved > 0 && SlotOfVKey((USHORT)storedNativeResolved) == SlotOfVKey(info.vKey)) bulkNativeVKey = (USHORT)storedNativeResolved;
+					if (bulkNativeVKey == 0) bulkNativeVKey = LuaKeyState::FindRedirectSource(info.vKey);
+					if (bulkNativeVKey != 0 && bulkNativeVKey != info.vKey) {
+						LuaKeyState::ReassignBinding(info.vKey, bulkNativeVKey, info.scriptName, info.functionName);
+					}
+					resetCount++;
+				}
+				ModKeyBindings::SetDisabledWithoutSave(info.scriptName, info.functionName, false);
+			}
+			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (GroupScriptKeyOf(cinfo.scriptName) != normalizedGroup) continue;
+				if (ModKeyBindings::GetOverride(cinfo.scriptName, cinfo.functionName).empty()) continue;
+				ModKeyBindings::SetOverrideWithoutSave(cinfo.scriptName, cinfo.functionName, "");
+				LuaKeyState::ClearComboRedirect(cinfo.nativeKeys);
+				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, false);
+				resetCount++;
+			}
+			size_t removedCount = 0;
+			std::vector<USHORT> removedVKeys;
+			for (const KeyBind& bind : bindings) {
+				if (GroupScriptKeyOf(bind.scriptPathOn) != normalizedGroup) continue;
+				removedCount++;
+				if (!bind.IsCombo()) {
+					LuaKeyState::RetireIfUndescribed(bind.vKey);
+					removedVKeys.push_back(bind.vKey);
+				}
+			}
+			if (removedCount > 0) {
+				bindings.erase(std::remove_if(bindings.begin(), bindings.end(), [&](const KeyBind& bind) {
+					return GroupScriptKeyOf(bind.scriptPathOn) == normalizedGroup;
+				}), bindings.end());
+				for (USHORT removedVKey : removedVKeys) {
+					for (auto it = activeBindVKeys.begin(); it != activeBindVKeys.end();) {
+						if (*it == removedVKey) it = activeBindVKeys.erase(it); else ++it;
+					}
+					RemoveDispatcherIfUnused(removedVKey);
+					LuaKeyState::PhysicalOnButtonDown(removedVKey);
+					LuaKeyState::PhysicalOnButtonUp(removedVKey);
+				}
+			}
+			if (resetCount > 0 || removedCount > 0) SaveBindings();
+			MarkDisplayCacheDirty();
+			LogActivity("KeyBindMenu: Reset " + std::to_string(resetCount) + " mod key override(s) to default and removed " + std::to_string(removedCount) + " manual binding(s) from " + normalizedGroup);
+		}
+
 		void Init(const std::string& defaultMenuKeyName) {
 			LogActivity(LOG_RADARKEYS_KEYBINDMENU_INITIALIZING);
 			int defaultVKey = VKeyForName(defaultMenuKeyName);
@@ -4613,6 +4692,11 @@ namespace RadarKeys {
 				static std::string pendingResetFunctionName;
 				static bool pendingResetActive = false;
 				static bool resetConfirmPopupRequested = false;
+				static std::string groupResetHoldGroup;
+				static std::chrono::steady_clock::time_point groupResetHoldStart;
+				static bool groupResetConfirmPending = false;
+				static bool groupResetPopupRequested = false;
+				static std::string groupResetConfirmGroup;
 				ImGui::BeginChild("KeyBindingsList", ImVec2(0, listRemainingHeight), true);
 				if (rows.empty()) {
 					ImGui::TextDisabled(UI_TXT_NO_KEYS_ASSIGNED);
@@ -4631,9 +4715,31 @@ namespace RadarKeys {
 						ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
 						ImGui::PushStyleColor(ImGuiCol_Button, groupFullyDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
 						const bool groupHeaderClicked = ImGui::Button(groupHeaderName.c_str(), ImVec2(headerBtnWidth, buttonHeight));
+						const ImVec2 groupResetBtnMin = ImGui::GetItemRectMin();
+						const ImVec2 groupResetBtnMax = ImGui::GetItemRectMax();
 						ImGui::PopStyleColor();
 						DrawModInfoTooltipIfHovered(row);
-						if (groupHeaderClicked) {
+						if (ImGui::IsItemActive()) {
+							if (groupResetHoldGroup != rowGroupKey(row)) {
+								groupResetHoldGroup = rowGroupKey(row);
+								groupResetHoldStart = std::chrono::steady_clock::now();
+							} else if (!groupResetConfirmPending) {
+								double groupHeldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - groupResetHoldStart).count();
+								float holdProgress = (float)((std::min)(1.0, groupHeldSeconds / kRemoveHoldSeconds));
+								float barHeight = 3.0f;
+								ImVec2 barMin(groupResetBtnMin.x, groupResetBtnMax.y - barHeight);
+								ImVec2 barMax(groupResetBtnMin.x + (groupResetBtnMax.x - groupResetBtnMin.x) * holdProgress, groupResetBtnMax.y);
+								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(255, 70, 70, 255));
+								if (groupHeldSeconds >= kRemoveHoldSeconds) {
+									groupResetConfirmPending = true;
+									groupResetPopupRequested = true;
+									groupResetConfirmGroup = rowGroupKey(row);
+								}
+							}
+						} else {
+							groupResetHoldGroup.clear();
+						}
+						if (groupHeaderClicked && !groupResetConfirmPending) {
 							ToggleGroupKeysDisabled(rowGroupKey(row));
 						}
 						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
@@ -5116,6 +5222,35 @@ namespace RadarKeys {
 					ImGui::SameLine();
 					if (ImGui::Button(UI_BTN_NO, ImVec2(80, 0))) {
 						pendingRemoveConfirmIndex = -1;
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::EndPopup();
+				}
+				ImGui::PopStyleColor();
+
+				std::string groupResetPopupName = std::string(UI_POPUP_GROUP_RESET_CONFIRM) + "##" + groupResetConfirmGroup;
+				if (groupResetPopupRequested) {
+					ImGui::OpenPopup(groupResetPopupName.c_str());
+					groupResetPopupRequested = false;
+				}
+				ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+				bool groupResetConfirmOpen = ImGui::BeginPopupModal(groupResetPopupName.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+				if (groupResetConfirmOpen) {
+					char groupResetTextBuf[256];
+					snprintf(groupResetTextBuf, sizeof(groupResetTextBuf), UI_TXT_GROUP_RESET_CONFIRM_FMT, groupResetConfirmGroup.c_str());
+					ImGui::Text("%s", groupResetTextBuf);
+					ImGui::TextDisabled(UI_TXT_CANNOT_BE_UNDONE);
+					ImGui::Spacing();
+					if (ImGui::Button(UI_BTN_YES, ImVec2(80, 0))) {
+						ResetAndRemoveGroupKeys(groupResetConfirmGroup);
+						groupResetConfirmPending = false;
+						groupResetConfirmGroup.clear();
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::SameLine();
+					if (ImGui::Button(UI_BTN_NO, ImVec2(80, 0))) {
+						groupResetConfirmPending = false;
+						groupResetConfirmGroup.clear();
 						ImGui::CloseCurrentPopup();
 					}
 					ImGui::EndPopup();
