@@ -191,7 +191,8 @@ namespace RadarKeys {
 		constexpr float kButtonLabelRowNudge = 3.5f;
 		constexpr float kComboStackPlusOffset = 4.0f;
 		constexpr float kComboStackThresholdWidth = 104.0f;
-		constexpr float kRowBottomGapPx = 10.0f;
+		constexpr float kRowBottomGapPx = 4.0f;
+		constexpr float kRowTopPadPx = 2.0f;
 		constexpr float kGroupLineYShare = 0.5f;
 		constexpr float kHeaderBoxPadX = 5.0f;
 		constexpr float kHeaderBoxPadY = 3.0f;
@@ -4554,7 +4555,7 @@ namespace RadarKeys {
 				for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
 					UnifiedRow& row = rows[rowIdx];
 					ImGui::PushID((int)rowIdx);
-					ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
+					ImGui::SetCursorPosY(ImGui::GetCursorPosY() + kRowTopPadPx);
 					const bool rowStartsGroup = (rowIdx == 0) || rowGroupKey(rows[rowIdx - 1]) != rowGroupKey(row);
 					if (rowStartsGroup) {
 						std::string groupHeaderName = displayScriptName(rowGroupKey(row));
