@@ -96,8 +96,7 @@ namespace RadarKeys {
 		static const char* UI_LBL_HOLD = "HOLD";
 		static const char* UI_BTN_RESET = "Reset";
 		static const char* UI_LBL_KEYS = "Keys";
-		static const char* UI_LBL_HOLD_INDENT = "HOLD";
-		static const char* UI_LBL_2_3_KEYS = "  2-3 KEYS";
+		static const char* UI_TXT_COMBO_PROMPT = "HOLD 2-3 KEYS";
 		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
 		static const char* UI_CHK_TOGGLE = "Toggle";
 		static const char* UI_TIP_TOGGLE_SCRIPT_DECLARED = "This key is declared from the mod! Toggle triggers should be declared from the script.";
@@ -3220,7 +3219,11 @@ namespace RadarKeys {
 				float lowerBoxRemainingHeight = availHeight + ImGui::GetStyle().WindowPadding.y - (lowerBoxTopY - boxContentTopY);
 
 				if (capturedComboKeys.empty() && !comboHoldActive) {
-					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), UI_LBL_HOLD_INDENT, UI_LBL_2_3_KEYS);
+					const std::string comboPrompt = UI_TXT_COMBO_PROMPT;
+					const size_t comboSpace = comboPrompt.find(' ');
+					const std::string comboWord1 = comboPrompt.substr(0, comboSpace);
+					const std::string comboWord2 = comboPrompt.substr(comboSpace + 1);
+					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), comboWord1.c_str(), comboWord2.c_str());
 				} else {
 					bool isFinal = !capturedComboKeys.empty();
 					const std::vector<USHORT>& shownKeys = isFinal ? capturedComboKeys : comboHoldKeys;
