@@ -3001,7 +3001,7 @@ namespace RadarKeys {
 				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SCRIPT_LINES).x)
 				+ ImGui::GetFrameHeight();
 			if (scriptRowMinWidth > captureMinWidth) captureMinWidth = scriptRowMinWidth;
-			float instantComboWidth = (std::max)((std::max)(ImGui::CalcTextSize(UI_OPT_ON_PRESS).x, ImGui::CalcTextSize(UI_OPT_ON_RELEASE).x), ImGui::CalcTextSize(UI_OPT_REPEAT).x) + ImGui::GetStyle().FramePadding.x * 2.0f;
+			float instantComboWidth = (std::max)((std::max)(ImGui::CalcTextSize(UI_OPT_ON_PRESS).x, ImGui::CalcTextSize(UI_OPT_ON_RELEASE).x), ImGui::CalcTextSize(UI_OPT_REPEAT).x) + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetFrameHeight();
 			float triggerBlockMinWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + instantComboWidth;
 			float optionsLayoutMinWidth = (ImGui::GetStyle().WindowPadding.x + 105.0f + ImGui::GetStyle().ItemSpacing.x) + triggerBlockMinWidth + ImGui::GetStyle().WindowPadding.x;
 			if (optionsLayoutMinWidth > captureMinWidth) captureMinWidth = optionsLayoutMinWidth;
@@ -3824,7 +3824,7 @@ namespace RadarKeys {
 				CancelCaptureIfActive();
 			}
 			ImDrawList* footerDrawList = ImGui::GetWindowDrawList();
-			footerDrawList->AddCircleFilled(ImVec2(finalizeRectMin.x + 14.0f, (finalizeRectMin.y + finalizeRectMax.y) * 0.5f), 8.0f, IM_COL32(34, 160, 34, 255), 0);
+			footerDrawList->AddCircleFilled(ImVec2(finalizeRectMin.x + 4.0f, finalizeRectMin.y + 4.0f), 0.8f, IM_COL32(34, 160, 34, 255), 0);
 
 			if (isAssigningModKey) {
 				ImGui::TextDisabled(UI_TXT_TAKES_EFFECT_NEXT_FRAME);
