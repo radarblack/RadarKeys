@@ -84,7 +84,6 @@ namespace RadarKeys {
 		static const char* LOG_KEY_ASSIGNMENT_BINDING_PROMPT_OPENED = "KeyBindMenu: Key Assignment Binding Prompt opened";
 
 		static const char* UI_FMT_SCRIPT_FUNCTION_BRACKETS = "%s [%s]";
-		static const char* UI_LBL_BIND_TYPE = "Bind Type:";
 		static const char* UI_RADIO_SINGLE_KEY = "Single Key";
 		static const char* UI_RADIO_MULTI_KEY_COMBO = "Combo Key";
 		static const char* UI_RADIO_SCRIPT_LINES = "Script Lines";
@@ -156,6 +155,10 @@ namespace RadarKeys {
 		constexpr float kKeyButtonRounding = 5.0f;
 		constexpr float kChipToKeyGapTrim = 0.5f;
 		constexpr float kFooterButtonWidth = 145.0f * 0.65f;
+		constexpr float kKeyDisplayBoxWidth = 105.0f;
+		constexpr float kResetButtonWidth = kKeyDisplayBoxWidth * 0.8f;
+		constexpr float kDefaultHoldSeconds = 1.0f;
+		constexpr float kRepeatIntervalInputWidth = 55.0f;
 		static const ImVec4 kKeyStateRed = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
 		static const ImVec4 kKeyStateGreen = ImVec4(0.4f, 1.0f, 0.4f, 1.0f);
 		static const char* UI_TIP_CLICK_HOLD_REMOVE = "Click to %s.\nHold for 1.5 seconds to remove.";
@@ -1038,7 +1041,6 @@ namespace RadarKeys {
 				if (!info.hasDescription || info.vKey != vKey) continue;
 				if (IsSingleTriggerConflict(manualMask, info)) return false;
 			}
-			if (ManualSingleOverlapsCombo(vKey, manualMask, editingIndex)) return false;
 			return true;
 		}
 
@@ -1064,7 +1066,6 @@ namespace RadarKeys {
 					IsComboTriggerConflict(manualMask, info)) return false;
 			}
 
-			if (ManualComboOverlapsSingle(comboKeys, manualMask, editingIndex, ignoredScriptName, ignoredFunctionName)) return false;
 			return true;
 		}
 
@@ -2992,8 +2993,7 @@ namespace RadarKeys {
 
 		void DrawKeyCapturePrompt() {
 			static float s_capturePromptMinHeight = 330.0f;
-			float captureMinWidth = ImGui::CalcTextSize(UI_LBL_BIND_TYPE).x + ImGui::GetStyle().ItemSpacing.x;
-			captureMinWidth += (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SINGLE_KEY).x + ImGui::GetStyle().ItemSpacing.x)
+			float captureMinWidth = (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SINGLE_KEY).x + ImGui::GetStyle().ItemSpacing.x)
 				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_MULTI_KEY_COMBO).x);
 			float scriptRowMinWidth = (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SCRIPT_PATH).x + ImGui::GetStyle().ItemSpacing.x)
 				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SCRIPT_LINES).x)
@@ -3001,7 +3001,7 @@ namespace RadarKeys {
 			if (scriptRowMinWidth > captureMinWidth) captureMinWidth = scriptRowMinWidth;
 			float instantComboWidth = (std::max)((std::max)(ImGui::CalcTextSize(UI_OPT_ON_PRESS).x, ImGui::CalcTextSize(UI_OPT_ON_RELEASE).x), ImGui::CalcTextSize(UI_OPT_REPEAT).x) + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetFrameHeight();
 			float triggerBlockMinWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + instantComboWidth;
-			float optionsLayoutMinWidth = (ImGui::GetStyle().WindowPadding.x + 105.0f + ImGui::GetStyle().ItemSpacing.x) + triggerBlockMinWidth + ImGui::GetStyle().WindowPadding.x;
+			float optionsLayoutMinWidth = (ImGui::GetStyle().WindowPadding.x + kKeyDisplayBoxWidth + ImGui::GetStyle().ItemSpacing.x) + triggerBlockMinWidth + ImGui::GetStyle().WindowPadding.x;
 			if (optionsLayoutMinWidth > captureMinWidth) captureMinWidth = optionsLayoutMinWidth;
 			captureMinWidth += ImGui::GetStyle().WindowPadding.x * 2.0f;
 			const float captureWindowHeight = s_capturePromptMinHeight > 330.0f ? s_capturePromptMinHeight : 330.0f;
@@ -3037,8 +3037,6 @@ namespace RadarKeys {
 			if (!isAssigningMenuToggleKey) {
 				bool wasCombo = captureIsCombo;
 				bool wasInject = captureIsInject;
-				ImGui::AlignTextToFramePadding();
-				ImGui::TextUnformatted(UI_LBL_BIND_TYPE); ImGui::SameLine();
 				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo)) { captureIsCombo = false; }
 				ImGui::SameLine();
 				if (ImGui::RadioButton(UI_RADIO_MULTI_KEY_COMBO, captureIsCombo)) { captureIsCombo = true; captureIsInject = false; }
@@ -3148,7 +3146,7 @@ namespace RadarKeys {
 			}
 		
 			ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, kKeyButtonRounding);
-			ImGui::BeginChild("KeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
+			ImGui::BeginChild("KeyDisplayFrame", ImVec2(kKeyDisplayBoxWidth, 95), true, ImGuiWindowFlags_NoScrollbar);
 			auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
 			const float contentStartX = ImGui::GetCursorPosX();
 			const float boxContentTopY = ImGui::GetCursorPosY();
@@ -3189,7 +3187,8 @@ namespace RadarKeys {
 			ImGui::PopStyleVar();
 
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyButtonRounding);
-			if (ImGui::Button(UI_BTN_RESET, ImVec2(105, 22))) {
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (kKeyDisplayBoxWidth - kResetButtonWidth) * 0.5f);
+			if (ImGui::Button(UI_BTN_RESET, ImVec2(kResetButtonWidth, 22))) {
 				capturedVKey = 0;
 				capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 				capturedToggleLocked = false;
@@ -3207,7 +3206,7 @@ namespace RadarKeys {
 				UpdateComboCapture();
 
 				ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, kKeyButtonRounding);
-				ImGui::BeginChild("ComboKeyDisplayFrame", ImVec2(105, 95), true, ImGuiWindowFlags_NoScrollbar);
+				ImGui::BeginChild("ComboKeyDisplayFrame", ImVec2(kKeyDisplayBoxWidth, 95), true, ImGuiWindowFlags_NoScrollbar);
 				auto [availWidth, availHeight] = ImGui::GetContentRegionAvail();
 				const float contentStartX = ImGui::GetCursorPosX();
 				const float boxContentTopY = ImGui::GetCursorPosY();
@@ -3279,7 +3278,8 @@ namespace RadarKeys {
 				}
 
 				ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyButtonRounding);
-				if (ImGui::Button(UI_BTN_RESET, ImVec2(105, 22))) {
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (kKeyDisplayBoxWidth - kResetButtonWidth) * 0.5f);
+				if (ImGui::Button(UI_BTN_RESET, ImVec2(kResetButtonWidth, 22))) {
 					ResetComboCaptureState();
 					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 					capturedToggleLocked = false;
@@ -3302,7 +3302,6 @@ namespace RadarKeys {
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
 
-				float triggerRightX = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
 				float triggerColX = optionsColX;
 				float triggerInputStartX = triggerColX + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x;
 				bool toggleLockedForScript = capturedToggleLocked && isAssigningModKey;
@@ -3317,6 +3316,7 @@ namespace RadarKeys {
 				if (ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode)) {
 					capturedInstantMode = !capturedLongPressMode;
 					capturedInstantUserSet = true;
+					if (capturedLongPressMode && capturedHoldSeconds <= 0.0f) capturedHoldSeconds = kDefaultHoldSeconds;
 				}
 				
 				if (capturedLongPressMode) {
@@ -3348,8 +3348,8 @@ namespace RadarKeys {
 					}
 
 					if (capturedInstantTriggerType == 2) {
-						ImGui::SetCursorPosX(triggerRightX - 55.0f);
-						ImGui::SetNextItemWidth(55);
+						ImGui::SetCursorPosX(triggerInputStartX + (instantComboWidth - kRepeatIntervalInputWidth) * 0.5f);
+						ImGui::SetNextItemWidth(kRepeatIntervalInputWidth);
 						if (ImGui::InputFloat("##capturedRepeatInterval", &capturedRepeatIntervalSeconds, 0.0f, 0.0f, "%.2fs")) {
 							float baseSeconds = isAssigningModKey ? (float)kModKeyRepeatBaseSeconds : (float)kRepeatIntervalSeconds;
 							float minSeconds = baseSeconds / (float)kMaxRepeatSpeedMult;
