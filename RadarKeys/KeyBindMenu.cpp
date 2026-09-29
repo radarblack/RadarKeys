@@ -2372,11 +2372,11 @@ namespace RadarKeys {
 			LogActivity("KeyBindMenu: Cleared all bindings (" + std::to_string(count) + " binding(s))");
 		}
 
-		void DisableAllBindingsAndModKeys() {
+		void SetAllHotkeysDisabled(bool disabled) {
 			size_t manualCount = 0;
 			for (KeyBind& bind : bindings) {
-				if (!bind.disabled) {
-					bind.disabled = true;
+				if (bind.disabled != disabled) {
+					bind.disabled = disabled;
 					manualCount++;
 				}
 			}
@@ -2385,56 +2385,30 @@ namespace RadarKeys {
 			size_t modKeyCount = 0;
 			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
 				if (!info.hasDescription) continue;
-				if (ModKeyBindings::IsDisabled(info.scriptName, info.functionName)) continue;
-				ModKeyBindings::SetDisabledWithoutSave(info.scriptName, info.functionName, true);
+				if (ModKeyBindings::IsDisabled(info.scriptName, info.functionName) == disabled) continue;
+				ModKeyBindings::SetDisabledWithoutSave(info.scriptName, info.functionName, disabled);
 				modKeyCount++;
 			}
 			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
-				if (ModKeyBindings::IsDisabled(cinfo.scriptName, cinfo.functionName)) continue;
-				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, true);
+				if (ModKeyBindings::IsDisabled(cinfo.scriptName, cinfo.functionName) == disabled) continue;
+				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, disabled);
 				modKeyCount++;
 			}
 			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
-				if (ModKeyBindings::IsDisabled(entry.scriptName, entry.functionName)) continue;
-				ModKeyBindings::SetDisabledWithoutSave(entry.scriptName, entry.functionName, true);
+				if (ModKeyBindings::IsDisabled(entry.scriptName, entry.functionName) == disabled) continue;
+				ModKeyBindings::SetDisabledWithoutSave(entry.scriptName, entry.functionName, disabled);
 				modKeyCount++;
 			}
 
 			if (modKeyCount > 0) SaveBindings();
 			MarkDisplayCacheDirty();
-			LogActivity("KeyBindMenu: Disabled all hotkeys (" + std::to_string(manualCount) + " manual, " + std::to_string(modKeyCount) + " mod key(s))");
+			LogActivity(std::string(disabled ? "KeyBindMenu: Disabled all hotkeys (" : "KeyBindMenu: Enabled all hotkeys (") + std::to_string(manualCount) + " manual, " + std::to_string(modKeyCount) + " mod key(s))");
 		}
-
+		void DisableAllBindingsAndModKeys() {
+			SetAllHotkeysDisabled(true);
+		}
 		void EnableAllBindingsAndModKeys() {
-			size_t manualCount = 0;
-			for (KeyBind& bind : bindings) {
-				if (bind.disabled) {
-					bind.disabled = false;
-					manualCount++;
-				}
-			}
-			if (manualCount > 0) SaveBindings();
-
-			size_t modKeyCount = 0;
-			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
-				if (!info.hasDescription) continue;
-				if (!ModKeyBindings::IsDisabled(info.scriptName, info.functionName)) continue;
-				ModKeyBindings::SetDisabledWithoutSave(info.scriptName, info.functionName, false);
-				modKeyCount++;
-			}
-			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
-				if (!ModKeyBindings::IsDisabled(cinfo.scriptName, cinfo.functionName)) continue;
-				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, false);
-				modKeyCount++;
-			}
-			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
-				if (!ModKeyBindings::IsDisabled(entry.scriptName, entry.functionName)) continue;
-				ModKeyBindings::SetDisabledWithoutSave(entry.scriptName, entry.functionName, false);
-				modKeyCount++;
-			}
-			if (modKeyCount > 0) SaveBindings();
-			MarkDisplayCacheDirty();
-			LogActivity("KeyBindMenu: Enabled all hotkeys (" + std::to_string(manualCount) + " manual, " + std::to_string(modKeyCount) + " mod key(s))");
+			SetAllHotkeysDisabled(false);
 		}
 
 		std::string GroupScriptKeyOf(const std::string& name) {
