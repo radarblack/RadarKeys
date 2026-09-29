@@ -3028,7 +3028,7 @@ namespace RadarKeys {
 				bool wasInject = captureIsInject;
 				ImGui::AlignTextToFramePadding();
 				ImGui::TextUnformatted(UI_LBL_BIND_TYPE); ImGui::SameLine();
-				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo && !captureIsInject)) { captureIsCombo = false; captureIsInject = false; }
+				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo)) { captureIsCombo = false; }
 				ImGui::SameLine();
 				if (ImGui::RadioButton(UI_RADIO_MULTI_KEY_COMBO, captureIsCombo)) { captureIsCombo = true; captureIsInject = false; }
 				if (captureIsCombo != wasCombo) {
@@ -3143,7 +3143,7 @@ namespace RadarKeys {
 			const float boxContentTopY = ImGui::GetCursorPosY();
 			ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(UI_LBL_KEY).x) * 0.5f)); ImGui::TextUnformatted(UI_LBL_KEY); ImGui::Separator();
 			float lowerBoxTopY = ImGui::GetCursorPosY();
-			float lowerBoxRemainingHeight = availHeight - (lowerBoxTopY - boxContentTopY);
+			float lowerBoxRemainingHeight = availHeight + ImGui::GetStyle().WindowPadding.y - (lowerBoxTopY - boxContentTopY);
 		
 			if (capturedVKey == 0) {
 				const bool showingHold = singleHoldActive && singleHoldKey != 0;
@@ -3202,7 +3202,7 @@ namespace RadarKeys {
 				const float boxContentTopY = ImGui::GetCursorPosY();
 				ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(UI_LBL_KEYS).x) * 0.5f)); ImGui::TextUnformatted(UI_LBL_KEYS); ImGui::Separator();
 				float lowerBoxTopY = ImGui::GetCursorPosY();
-				float lowerBoxRemainingHeight = availHeight - (lowerBoxTopY - boxContentTopY);
+				float lowerBoxRemainingHeight = availHeight + ImGui::GetStyle().WindowPadding.y - (lowerBoxTopY - boxContentTopY);
 
 				if (capturedComboKeys.empty() && !comboHoldActive) {
 					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), UI_LBL_HOLD_INDENT, UI_LBL_2_3_KEYS);
@@ -3431,16 +3431,16 @@ namespace RadarKeys {
 				if (ImGui::RadioButton(UI_RADIO_SCRIPT_LINES, captureIsInject)) { captureIsInject = true; captureIsCombo = false; }
 
 				if (captureIsInject) {
-					ImGui::Text(UI_LBL_SCRIPT_PATH);
 					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
+					const float lineInputX = ImGui::GetCursorPosX() + (std::max)(ImGui::CalcTextSize(UI_LBL_LINE_START).x, ImGui::CalcTextSize(UI_LBL_LINE_END).x) + ImGui::GetStyle().ItemSpacing.x;
 					ImGui::AlignTextToFramePadding();
-					ImGui::Text(UI_LBL_LINE_START); ImGui::SameLine();
+					ImGui::Text(UI_LBL_LINE_START); ImGui::SameLine(lineInputX);
 					ImGui::SetNextItemWidth(100);
 					ImGui::InputInt("##injectLineStart", &capturedInjectLineStart);
 					if (capturedInjectLineStart < 1) capturedInjectLineStart = 1;
 					ImGui::AlignTextToFramePadding();
-					ImGui::Text(UI_LBL_LINE_END); ImGui::SameLine();
+					ImGui::Text(UI_LBL_LINE_END); ImGui::SameLine(lineInputX);
 					ImGui::SetNextItemWidth(100);
 					ImGui::InputInt("##injectLineEnd", &capturedInjectLineEnd);
 					if (capturedInjectLineEnd < 1) capturedInjectLineEnd = 1;
