@@ -158,8 +158,9 @@ namespace RadarKeys {
 		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Described information will be displayed when the script names are hovered by the mouse.";
 		static const char* UI_TXT_NO_KEYS_ASSIGNED = "(No Keys are assigned yet.)";
 		static const char* UI_TXT_NOT_YET_DESCRIBED = "-> (Key is not yet described through RadarKeys module.)";
-		static const char* UI_BTN_ENABLE = "Enable";
-		static const char* UI_BTN_DISABLE = "Disable";
+		constexpr float kKeyStateChipWidth = 17.0f;
+		static const ImVec4 kKeyStateRed = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
+		static const ImVec4 kKeyStateGreen = ImVec4(0.4f, 1.0f, 0.4f, 1.0f);
 		static const char* UI_TIP_CLICK_HOLD_REMOVE = "Click to %s.\nHold for 1.5 seconds to remove.";
 		static const char* UI_WORD_ENABLE = "enable";
 		static const char* UI_WORD_DISABLE = "disable";
@@ -169,7 +170,6 @@ namespace RadarKeys {
 		static const char* UI_TIP_CLICK_HOLD_RESET = "Click to %s.\nHold for 1.5 seconds to reset to the mod's default key.";
 		static const char* UI_TIP_CLICK_NO_REMOVE = "Click to %s.\nMod keys can't be removed - only disabled.";
 		static const char* UI_TIP_INJECT_SOURCE_MISSING = "Script source for this trigger was not found in the modules folder - Restore the file to re-enable.";
-		static const char* UI_BTN_SCRIPT_PLACEHOLDER = "Script";
 		static const char* UI_TIP_REASSIGN_COMBO = "Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder.";
 		static const char* UI_TIP_REASSIGN_KEY = "Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder.";
 
@@ -4813,8 +4813,8 @@ namespace RadarKeys {
 					if (row.isManual) {
 						int bindIdx = row.bindIndex;
 						bool isDisabled = bindings[bindIdx].disabled || bindings[bindIdx].autoDisabled;
-						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
-						bool clicked = ImGui::Button(isDisabled ? UI_BTN_ENABLE : UI_BTN_DISABLE, ImVec2(55, buttonHeight));
+						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? kKeyStateRed : kKeyStateGreen);
+						bool clicked = ImGui::Button("", ImVec2(kKeyStateChipWidth, buttonHeight));
 						ImGui::PopStyleColor();
 						ImVec2 disableBtnMin = ImGui::GetItemRectMin();
 						ImVec2 disableBtnMax = ImGui::GetItemRectMax();
@@ -4825,10 +4825,10 @@ namespace RadarKeys {
 							} else if (pendingRemoveConfirmIndex != bindIdx) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
 								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
-								float barHeight = 3.0f;
-								ImVec2 barMin(disableBtnMin.x, disableBtnMax.y - barHeight);
-								ImVec2 barMax(disableBtnMin.x + (disableBtnMax.x - disableBtnMin.x) * holdProgress, disableBtnMax.y);
-								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(255, 70, 70, 255));
+								float barWidth = 3.0f;
+								ImVec2 barMin(disableBtnMin.x, disableBtnMin.y);
+								ImVec2 barMax(disableBtnMin.x + barWidth, disableBtnMin.y + (disableBtnMax.y - disableBtnMin.y) * holdProgress);
+								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, isDisabled ? IM_COL32(102, 255, 102, 255) : IM_COL32(255, 70, 70, 255));
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingRemoveConfirmIndex = bindIdx;
 									removeConfirmPopupRequested = true;
@@ -4878,8 +4878,8 @@ namespace RadarKeys {
 						std::string mkHoldKey = mkScriptName + "\x1f" + mkFunctionName;
 						bool hasOverride = !ModKeyBindings::GetOverride(mkScriptName, mkFunctionName).empty();
 						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName) || (FindAutoDisabledDescribedInject(mkScriptName, mkFunctionName) != nullptr);
-						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
-						bool clicked = ImGui::Button(isDisabled ? UI_BTN_ENABLE : UI_BTN_DISABLE, ImVec2(55, buttonHeight));
+						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? kKeyStateRed : kKeyStateGreen);
+						bool clicked = ImGui::Button("", ImVec2(kKeyStateChipWidth, buttonHeight));
 						ImGui::PopStyleColor();
 						ImVec2 modKeyBtnMin = ImGui::GetItemRectMin();
 						ImVec2 modKeyBtnMax = ImGui::GetItemRectMax();
@@ -4891,10 +4891,10 @@ namespace RadarKeys {
 							} else if (!isPendingThisKey) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
 								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
-								float barHeight = 3.0f;
-								ImVec2 barMin(modKeyBtnMin.x, modKeyBtnMax.y - barHeight);
-								ImVec2 barMax(modKeyBtnMin.x + (modKeyBtnMax.x - modKeyBtnMin.x) * holdProgress, modKeyBtnMax.y);
-								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(255, 70, 70, 255));
+								float barWidth = 3.0f;
+								ImVec2 barMin(modKeyBtnMin.x, modKeyBtnMin.y);
+								ImVec2 barMax(modKeyBtnMin.x + barWidth, modKeyBtnMin.y + (modKeyBtnMax.y - modKeyBtnMin.y) * holdProgress);
+								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, isDisabled ? IM_COL32(102, 255, 102, 255) : IM_COL32(255, 70, 70, 255));
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingResetScriptName = mkScriptName;
 									pendingResetFunctionName = mkFunctionName;
@@ -4924,7 +4924,7 @@ namespace RadarKeys {
 					}
 					else {
 						ImGui::BeginDisabled();
-						ImGui::Button(UI_BTN_SCRIPT_PLACEHOLDER, ImVec2(55, buttonHeight));
+						ImGui::Button("", ImVec2(kKeyStateChipWidth, buttonHeight));
 						ImGui::EndDisabled();
 					}
 					ImGui::SameLine();
