@@ -159,7 +159,7 @@ namespace RadarKeys {
 		static const char* UI_TXT_NO_KEYS_ASSIGNED = "(No Keys are assigned yet.)";
 		static const char* UI_TXT_NOT_YET_DESCRIBED = "-> (Key is not yet described through RadarKeys module.)";
 		constexpr float kKeyStateChipWidth = 13.0f;
-		constexpr float kKeyStateChipHeight = 17.0f;
+		constexpr float kKeyStateChipHeight = 13.0f;
 		static const ImVec4 kKeyStateRed = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
 		static const ImVec4 kKeyStateGreen = ImVec4(0.4f, 1.0f, 0.4f, 1.0f);
 		static const char* UI_TIP_CLICK_HOLD_REMOVE = "Click to %s.\nHold for 1.5 seconds to remove.";
@@ -4796,7 +4796,7 @@ namespace RadarKeys {
 					float rowContentHeight = (detailPredictedHeight > row.keyButtonH) ? detailPredictedHeight : row.keyButtonH;
 					float keyButtonYOffset = (rowContentHeight - row.keyButtonH) * 0.5f;
 					float stdButtonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
-					float chipYOffset = (rowContentHeight - kKeyStateChipHeight) * 0.5f;
+					float chipYOffset = keyButtonYOffset + (row.keyButtonH - kKeyStateChipHeight) * 0.5f;
 					if (row.conflicted) {
 						ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
 						ImGui::AlignTextToFramePadding();
