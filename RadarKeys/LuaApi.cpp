@@ -183,10 +183,6 @@ static std::atomic<lua_State*> g_CapturedLuaState{ nullptr };
 			g_CapturedLuaState.store(L);
 	}
 
-	lua_State* LuaApiGetCapturedState() {
-		return g_CapturedLuaState.load();
-	}
-
 	LuaDirectCallResult LuaCallGlobalFunction(const std::string& functionName) {
 		if (functionName.empty()) {
 			return LuaDirectCallResult::NotFound;
