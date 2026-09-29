@@ -126,6 +126,7 @@ namespace RadarKeys {
 		static const char* UI_RADIO_DUAL = "Dual";
 		static const char* UI_TIP_TARGET_GLOBAL_FUNCS = "Target specific global functions inside the file";
 		static const char* UI_LBL_SCRIPT_PATH = "Script Path:";
+		static const char* UI_LBL_FUNCTION = "Function";
 		static const char* UI_LBL_ENABLE_FUNCTION = "Enable Function:";
 		static const char* UI_LBL_DISABLE_FUNCTION = "Disable Function:";
 		static const char* UI_TIP_TARGET_ENABLE_SCRIPT = "Target a specific function inside the Enable Script";
@@ -2998,8 +2999,6 @@ namespace RadarKeys {
 
 		void DrawKeyCapturePrompt() {
 			static float s_capturePromptMinHeight = 330.0f;
-			ImGui::SetNextWindowSize(ImVec2(340, 330), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 165), ImGuiCond_FirstUseEver);
 			float captureMinWidth = ImGui::CalcTextSize(UI_LBL_BIND_TYPE).x + ImGui::GetStyle().ItemSpacing.x;
 			captureMinWidth += (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SINGLE_KEY).x + ImGui::GetStyle().ItemSpacing.x)
 				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_MULTI_KEY_COMBO).x);
@@ -3009,14 +3008,16 @@ namespace RadarKeys {
 			if (scriptRowMinWidth > captureMinWidth) captureMinWidth = scriptRowMinWidth;
 			captureMinWidth += ImGui::GetStyle().WindowPadding.x * 2.0f;
 			if (captureMinWidth < 340.0f) captureMinWidth = 340.0f;
-			ImGui::SetNextWindowSizeConstraints(ImVec2(captureMinWidth, s_capturePromptMinHeight > 330.0f ? s_capturePromptMinHeight : 330.0f), ImVec2(FLT_MAX, FLT_MAX));
+			const float captureWindowHeight = s_capturePromptMinHeight > 330.0f ? s_capturePromptMinHeight : 330.0f;
+			ImGui::SetNextWindowSize(ImVec2(captureMinWidth, captureWindowHeight), ImGuiCond_Always);
+			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - captureMinWidth * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f - captureWindowHeight * 0.5f), ImGuiCond_FirstUseEver);
 			if (requestCaptureFocus) {
 				ImGui::SetNextWindowFocus();
 				requestCaptureFocus = false;
 			}
 		
 			const char* windowTitle = isAssigningModKey ? "Reassign mod key..." : "Assigning key bind...";
-			if (!ImGui::Begin(windowTitle, nullptr, ImGuiWindowFlags_NoCollapse)) {
+			if (!ImGui::Begin(windowTitle, nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
 				ImGui::End();
 				return;
 			}
@@ -3522,11 +3523,13 @@ namespace RadarKeys {
 					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn);
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_SCRIPT_FILE);
-					
-					if (capturedHasFuncOn) {
-						ImGui::SetCursorPosX(targetCursorPosX);
-						ImGui::SetNextItemWidth(elementWidth);
+					ImGui::SameLine();
+					if (!capturedHasFuncOn) {
+						ImGui::AlignTextToFramePadding();
+						ImGui::TextUnformatted(UI_LBL_FUNCTION);
+						if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_SCRIPT_FILE);
+					} else {
+						ImGui::SetNextItemWidth(-1);
 						ImGui::InputText("##captureFuncTap", capturedFuncTapBuffer, IM_ARRAYSIZE(capturedFuncTapBuffer));
 					}
 				}
