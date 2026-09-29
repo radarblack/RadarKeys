@@ -193,6 +193,8 @@ namespace RadarKeys {
 		constexpr float kComboStackThresholdWidth = 104.0f;
 		constexpr float kRowBottomGapPx = 10.0f;
 		constexpr float kGroupLineYShare = 0.5f;
+		constexpr float kHeaderBoxPadX = 5.0f;
+		constexpr float kHeaderBoxPadY = 3.0f;
 		static const char* UI_BTN_ENABLE_ALL_KEYS = "Enable All Hotkeys";
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
@@ -4557,6 +4559,10 @@ namespace RadarKeys {
 						std::string groupHeaderName = displayScriptName(rowGroupKey(row));
 						ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
 						ImGui::Text("%s", groupHeaderName.c_str());
+						const ImVec2 headerBoxMin = ImGui::GetItemRectMin();
+						const ImVec2 headerBoxMax = ImGui::GetItemRectMax();
+						ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(headerBoxMin.x - kHeaderBoxPadX, headerBoxMin.y - kHeaderBoxPadY), ImVec2(headerBoxMax.x + kHeaderBoxPadX, headerBoxMax.y + kHeaderBoxPadY), ImGui::GetColorU32(ImGuiCol_FrameBg, 0.45f));
+						ImGui::GetWindowDrawList()->AddRect(ImVec2(headerBoxMin.x - kHeaderBoxPadX, headerBoxMin.y - kHeaderBoxPadY), ImVec2(headerBoxMax.x + kHeaderBoxPadX, headerBoxMax.y + kHeaderBoxPadY), ImGui::GetColorU32(ImGuiCol_Text, 0.6f));
 						DrawModInfoTooltipIfHovered(row);
 						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
 					}
@@ -5000,7 +5006,11 @@ namespace RadarKeys {
 					}
 					if (nextRowChangesGroup) {
 						const float groupLineY = rowBottomY + kRowBottomGapPx * kGroupLineYShare;
-						ImGui::GetWindowDrawList()->AddLine(ImVec2(0.0f, groupLineY), ImVec2(ImGui::GetWindowWidth(), groupLineY), ImGui::GetColorU32(ImGuiCol_Separator));
+						const ImVec2 cursorScreen = ImGui::GetCursorScreenPos();
+						const float lineScreenY = cursorScreen.y + (groupLineY - ImGui::GetCursorPosY());
+						const float lineX0 = ImGui::GetWindowPos().x + ImGui::GetStyle().WindowPadding.x;
+						const float lineX1 = ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
+						ImGui::GetWindowDrawList()->AddLine(ImVec2(lineX0, lineScreenY), ImVec2(lineX1, lineScreenY), ImGui::GetColorU32(ImGuiCol_Separator));
 					}
 					ImGui::SetCursorPosY(rowBottomY + kRowBottomGapPx);
 					ImGui::PopID();
