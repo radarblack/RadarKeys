@@ -86,8 +86,9 @@ namespace RadarKeys {
 		static const char* UI_FMT_SCRIPT_FUNCTION_BRACKETS = "%s [%s]";
 		static const char* UI_LBL_BIND_TYPE = "Bind Type:";
 		static const char* UI_RADIO_SINGLE_KEY = "Single Key";
-		static const char* UI_RADIO_MULTI_KEY_COMBO = "Multi-Key Combo";
+		static const char* UI_RADIO_MULTI_KEY_COMBO = "Combo Key";
 		static const char* UI_RADIO_SCRIPT_LINES = "Script Lines";
+		static const char* UI_RADIO_SCRIPT_PATH = "Script Path";
 		static const char* UI_LBL_LINE_START = "Line Start:";
 		static const char* UI_LBL_LINE_END = "Line End:";
 		static const char* UI_LBL_KEY = "Key";
@@ -2987,8 +2988,11 @@ namespace RadarKeys {
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - 170, ImGui::GetIO().DisplaySize.y * 0.5f - 165), ImGuiCond_FirstUseEver);
 			float captureMinWidth = ImGui::CalcTextSize(UI_LBL_BIND_TYPE).x + ImGui::GetStyle().ItemSpacing.x;
 			captureMinWidth += (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SINGLE_KEY).x + ImGui::GetStyle().ItemSpacing.x)
-				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_MULTI_KEY_COMBO).x + ImGui::GetStyle().ItemSpacing.x)
-				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SCRIPT_LINES).x);
+				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_MULTI_KEY_COMBO).x);
+			float scriptRowMinWidth = (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SCRIPT_PATH).x + ImGui::GetStyle().ItemSpacing.x)
+				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SCRIPT_LINES).x)
+				+ ImGui::GetFrameHeight();
+			if (scriptRowMinWidth > captureMinWidth) captureMinWidth = scriptRowMinWidth;
 			captureMinWidth += ImGui::GetStyle().WindowPadding.x * 2.0f;
 			if (captureMinWidth < 340.0f) captureMinWidth = 340.0f;
 			ImGui::SetNextWindowSizeConstraints(ImVec2(captureMinWidth, s_capturePromptMinHeight > 330.0f ? s_capturePromptMinHeight : 330.0f), ImVec2(FLT_MAX, FLT_MAX));
@@ -3027,10 +3031,6 @@ namespace RadarKeys {
 				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo && !captureIsInject)) { captureIsCombo = false; captureIsInject = false; }
 				ImGui::SameLine();
 				if (ImGui::RadioButton(UI_RADIO_MULTI_KEY_COMBO, captureIsCombo)) { captureIsCombo = true; captureIsInject = false; }
-				if (!isAssigningModKey) {
-					ImGui::SameLine();
-					if (ImGui::RadioButton(UI_RADIO_SCRIPT_LINES, captureIsInject)) { captureIsInject = true; captureIsCombo = false; }
-				}
 				if (captureIsCombo != wasCombo) {
 					capturedVKey = 0;
 					ResetComboCaptureState();
@@ -3148,7 +3148,11 @@ namespace RadarKeys {
 			if (capturedVKey == 0) {
 				const bool showingHold = singleHoldActive && singleHoldKey != 0;
 				if (!showingHold) {
-					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), UI_TXT_PRESS_KEY);
+					const std::string pressPrompt = UI_TXT_PRESS_KEY;
+					const size_t pressSpace = pressPrompt.find(' ');
+					const std::string pressWord1 = pressPrompt.substr(0, pressSpace);
+					const std::string pressWord2 = pressPrompt.substr(pressSpace + 1);
+					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), pressWord1.c_str(), pressWord2.c_str());
 				} else {
 					std::string holdName = NameForVKey(singleHoldKey);
 					float lineHeight = ImGui::GetTextLineHeight();
@@ -3422,6 +3426,10 @@ namespace RadarKeys {
 				float elementWidth = 145.0f;
 				float targetCursorPosX = rightEdgeX - elementWidth - 8.0f;
 
+				if (ImGui::RadioButton(UI_RADIO_SCRIPT_PATH, !captureIsInject)) { captureIsInject = false; }
+				ImGui::SameLine();
+				if (ImGui::RadioButton(UI_RADIO_SCRIPT_LINES, captureIsInject)) { captureIsInject = true; captureIsCombo = false; }
+
 				if (captureIsInject) {
 					ImGui::Text(UI_LBL_SCRIPT_PATH);
 					ImGui::SetNextItemWidth(-1);
@@ -3493,12 +3501,10 @@ namespace RadarKeys {
 					}
 				} 
 				else {
-					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn); ImGui::SameLine();
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_SCRIPT_FILE);
-					
-					ImGui::SameLine(); ImGui::Text(UI_LBL_SCRIPT_PATH);
 					ImGui::SetNextItemWidth(-1);
 					ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
+					ImGui::Checkbox("##hasFuncTap", &capturedHasFuncOn);
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_SCRIPT_FILE);
 					
 					if (capturedHasFuncOn) {
 						ImGui::SetCursorPosX(targetCursorPosX);
