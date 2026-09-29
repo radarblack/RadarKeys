@@ -161,6 +161,8 @@ namespace RadarKeys {
 		constexpr float kKeyStateChipWidth = 13.0f;
 		constexpr float kKeyStateChipHeight = 13.0f;
 		constexpr float kKeyStateChipRounding = 6.5f;
+		constexpr float kKeyButtonRounding = 5.0f;
+		constexpr float kChipToKeyGapTrim = 0.5f;
 		static const ImVec4 kKeyStateRed = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
 		static const ImVec4 kKeyStateGreen = ImVec4(0.4f, 1.0f, 0.4f, 1.0f);
 		static const char* UI_TIP_CLICK_HOLD_REMOVE = "Click to %s.\nHold for 1.5 seconds to remove.";
@@ -4797,6 +4799,7 @@ namespace RadarKeys {
 					float rowContentHeight = (detailPredictedHeight > row.keyButtonH) ? detailPredictedHeight : row.keyButtonH;
 					float keyButtonYOffset = (rowContentHeight - row.keyButtonH) * 0.5f;
 					float stdButtonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
+					ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyButtonRounding);
 					float chipYOffset = keyButtonYOffset + (row.keyButtonH - kKeyStateChipHeight) * 0.5f;
 					if (row.conflicted) {
 						ImGui::SetCursorPos(ImVec2(keyColumnX, rowTopY));
@@ -4938,7 +4941,9 @@ namespace RadarKeys {
 						ImGui::PopStyleVar();
 					}
 					ImGui::SameLine();
+					ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetStyle().ItemSpacing.x * kChipToKeyGapTrim);
 					ImGui::SetCursorPosY(rowTopY + keyButtonYOffset);
+					ImGui::PopStyleVar();
 
 					if (row.isManual) {
 						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
