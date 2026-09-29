@@ -111,8 +111,8 @@ namespace RadarKeys {
 		static const char* UI_TT_TOGGLE_FMT = "Toggle: %s";
 		static const char* UI_TT_ON_HOLD_FMT = "On Hold (for %s seconds)";
 		static const char* UI_TT_JOIN = " | ";
-		static const char* UI_TT_STATE_ON = "on";
-		static const char* UI_TT_STATE_OFF = "off";
+		static const char* UI_TT_STATE_ON = "On";
+		static const char* UI_TT_STATE_OFF = "Off";
 		static const char* UI_OPT_REPEAT = "Repeat";
 		static const char* UI_TIP_REPEAT_ACCEL =
 			"Seconds before the next repeat fires.\n"
@@ -4102,14 +4102,14 @@ namespace RadarKeys {
 						}
 					}
 					char fmtBuf[160];
+					if (usesToggle) {
+						snprintf(fmtBuf, sizeof(fmtBuf), UI_TT_TOGGLE_FMT, toggleOn ? UI_TT_STATE_ON : UI_TT_STATE_OFF);
+						parts.push_back(fmtBuf);
+					}
 					if (usesPress) parts.push_back(UI_OPT_ON_PRESS);
 					if (usesRelease) parts.push_back(UI_OPT_ON_RELEASE);
 					if (usesRepeat) {
 						snprintf(fmtBuf, sizeof(fmtBuf), UI_TT_REPEAT_FMT, FormatTrimmedSeconds(repeatInterval).c_str());
-						parts.push_back(fmtBuf);
-					}
-					if (usesToggle) {
-						snprintf(fmtBuf, sizeof(fmtBuf), UI_TT_TOGGLE_FMT, toggleOn ? UI_TT_STATE_ON : UI_TT_STATE_OFF);
 						parts.push_back(fmtBuf);
 					}
 					if (usesHold) {
