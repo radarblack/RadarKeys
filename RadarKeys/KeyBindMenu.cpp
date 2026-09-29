@@ -2431,25 +2431,38 @@ namespace RadarKeys {
 			LogActivity("KeyBindMenu: Enabled all hotkeys (" + std::to_string(manualCount) + " manual, " + std::to_string(modKeyCount) + " mod key(s))");
 		}
 
+		std::string GroupScriptKeyOf(const std::string& name) {
+			std::string key = FileNameOnly(name);
+			static const std::string kScriptGroupSuffix = ".lua";
+			if (key.size() >= kScriptGroupSuffix.size()) {
+				std::string tail = key.substr(key.size() - kScriptGroupSuffix.size());
+				for (char& c : tail) {
+					if (c >= 'A' && c <= 'Z') c += (char)('a' - 'A');
+				}
+				if (tail == kScriptGroupSuffix) key.resize(key.size() - kScriptGroupSuffix.size());
+			}
+			return key;
+		}
 		bool GroupKeysAllDisabled(const std::string& groupName) {
+			const std::string normalizedGroup = GroupScriptKeyOf(groupName);
 			bool anyMember = false;
 			for (const KeyBind& bind : bindings) {
-				if (FileNameOnly(bind.scriptPathOn) != groupName) continue;
+				if (GroupScriptKeyOf(bind.scriptPathOn) != normalizedGroup) continue;
 				anyMember = true;
 				if (!bind.disabled) return false;
 			}
 			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
-				if (!info.hasDescription || info.scriptName != groupName) continue;
+				if (!info.hasDescription || GroupScriptKeyOf(info.scriptName) != normalizedGroup) continue;
 				anyMember = true;
 				if (!ModKeyBindings::IsDisabled(info.scriptName, info.functionName)) return false;
 			}
 			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
-				if (cinfo.scriptName != groupName) continue;
+				if (GroupScriptKeyOf(cinfo.scriptName) != normalizedGroup) continue;
 				anyMember = true;
 				if (!ModKeyBindings::IsDisabled(cinfo.scriptName, cinfo.functionName)) return false;
 			}
 			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
-				if (entry.scriptName != groupName) continue;
+				if (GroupScriptKeyOf(entry.scriptName) != normalizedGroup) continue;
 				anyMember = true;
 				if (!ModKeyBindings::IsDisabled(entry.scriptName, entry.functionName)) return false;
 			}
@@ -2457,28 +2470,29 @@ namespace RadarKeys {
 		}
 		void ToggleGroupKeysDisabled(const std::string& groupName) {
 			const bool targetDisabled = !GroupKeysAllDisabled(groupName);
+			const std::string normalizedGroup = GroupScriptKeyOf(groupName);
 			size_t manualCount = 0;
 			for (KeyBind& bind : bindings) {
-				if (FileNameOnly(bind.scriptPathOn) != groupName) continue;
+				if (GroupScriptKeyOf(bind.scriptPathOn) != normalizedGroup) continue;
 				if (bind.disabled == targetDisabled) continue;
 				bind.disabled = targetDisabled;
 				manualCount++;
 			}
 			size_t modKeyCount = 0;
 			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
-				if (!info.hasDescription || info.scriptName != groupName) continue;
+				if (!info.hasDescription || GroupScriptKeyOf(info.scriptName) != normalizedGroup) continue;
 				if (ModKeyBindings::IsDisabled(info.scriptName, info.functionName) == targetDisabled) continue;
 				ModKeyBindings::SetDisabledWithoutSave(info.scriptName, info.functionName, targetDisabled);
 				modKeyCount++;
 			}
 			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
-				if (cinfo.scriptName != groupName) continue;
+				if (GroupScriptKeyOf(cinfo.scriptName) != normalizedGroup) continue;
 				if (ModKeyBindings::IsDisabled(cinfo.scriptName, cinfo.functionName) == targetDisabled) continue;
 				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, targetDisabled);
 				modKeyCount++;
 			}
 			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
-				if (entry.scriptName != groupName) continue;
+				if (GroupScriptKeyOf(entry.scriptName) != normalizedGroup) continue;
 				if (ModKeyBindings::IsDisabled(entry.scriptName, entry.functionName) == targetDisabled) continue;
 				ModKeyBindings::SetDisabledWithoutSave(entry.scriptName, entry.functionName, targetDisabled);
 				modKeyCount++;
@@ -4438,19 +4452,9 @@ namespace RadarKeys {
 					rows.push_back(std::move(row));
 				}
 				auto rowGroupKey = [&](const UnifiedRow& row) -> std::string {
-					std::string key;
-					if (row.isManual) key = FileNameOnly(bindings[row.bindIndex].scriptPathOn);
-					else if (row.isComboScript) key = row.comboInfo.scriptName;
-					else key = row.info.scriptName;
-					static const std::string kScriptGroupSuffix = ".lua";
-					if (key.size() >= kScriptGroupSuffix.size()) {
-						std::string tail = key.substr(key.size() - kScriptGroupSuffix.size());
-						for (char& c : tail) {
-							if (c >= 'A' && c <= 'Z') c += (char)('a' - 'A');
-						}
-						if (tail == kScriptGroupSuffix) key.resize(key.size() - kScriptGroupSuffix.size());
-					}
-					return key;
+					if (row.isManual) return GroupScriptKeyOf(bindings[row.bindIndex].scriptPathOn);
+					if (row.isComboScript) return GroupScriptKeyOf(row.comboInfo.scriptName);
+					return GroupScriptKeyOf(row.info.scriptName);
 				};
 				auto RowOrderTuple = [&](const UnifiedRow& r) -> std::tuple<bool, int, size_t, int, int> {
 					bool sortIsCombo = false;
