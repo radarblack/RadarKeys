@@ -195,8 +195,6 @@ namespace RadarKeys {
 		constexpr float kRowTopPadPx = 2.0f;
 		constexpr float kGroupBreakExtraPx = 10.0f;
 		constexpr float kGroupLineYShare = 0.5f;
-		constexpr float kHeaderBoxPadX = 5.0f;
-		constexpr float kHeaderBoxPadY = 3.0f;
 		constexpr float kStackButtonGapFactor = 0.4f;
 		static const char* UI_BTN_ENABLE_ALL_KEYS = "Enable All Hotkeys";
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
@@ -4620,21 +4618,16 @@ namespace RadarKeys {
 					UnifiedRow& row = rows[rowIdx];
 					ImGui::PushID((int)rowIdx);
 					ImGui::SetCursorPosY(ImGui::GetCursorPosY() + kRowTopPadPx);
+					float buttonHeight = 20.0f;
 					const bool rowStartsGroup = (rowIdx == 0) || rowGroupKey(rows[rowIdx - 1]) != rowGroupKey(row);
 					if (rowStartsGroup) {
 						std::string groupHeaderName = displayScriptName(rowGroupKey(row));
 						const bool groupFullyDisabled = GroupKeysAllDisabled(rowGroupKey(row));
-						const ImVec2 headerTextSize = ImGui::CalcTextSize(groupHeaderName.c_str());
-						ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x + kHeaderBoxPadX);
-						ImGui::PushID("##groupHeaderBtn");
-						ImGui::InvisibleButton("##groupHeaderBtn", ImVec2(headerTextSize.x, ImGui::GetTextLineHeight()));
-						const bool groupHeaderClicked = ImGui::IsItemClicked();
-						const ImVec2 headerBoxMin = ImGui::GetItemRectMin();
-						const ImVec2 headerBoxMax = ImGui::GetItemRectMax();
-						ImGui::PopID();
-						ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(headerBoxMin.x - kHeaderBoxPadX, headerBoxMin.y - kHeaderBoxPadY), ImVec2(headerBoxMax.x + kHeaderBoxPadX, headerBoxMax.y + kHeaderBoxPadY), ImGui::GetColorU32(ImGuiCol_FrameBg, 0.45f));
-						ImGui::GetWindowDrawList()->AddRect(ImVec2(headerBoxMin.x - kHeaderBoxPadX, headerBoxMin.y - kHeaderBoxPadY), ImVec2(headerBoxMax.x + kHeaderBoxPadX, headerBoxMax.y + kHeaderBoxPadY), ImGui::GetColorU32(ImGuiCol_Text, 0.6f));
-						ImGui::GetWindowDrawList()->AddText(headerBoxMin, groupFullyDisabled ? ImGui::GetColorU32(ImVec4(1.0f, 0.35f, 0.35f, 1.0f)) : ImGui::GetColorU32(ImGuiCol_Text), groupHeaderName.c_str());
+						const float headerBtnWidth = ImGui::CalcTextSize(groupHeaderName.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+						ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x);
+						ImGui::PushStyleColor(ImGuiCol_Button, groupFullyDisabled ? ImVec4(0.5f, 0.32f, 0.08f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_Button]);
+						const bool groupHeaderClicked = ImGui::Button(groupHeaderName.c_str(), ImVec2(headerBtnWidth, buttonHeight));
+						ImGui::PopStyleColor();
 						DrawModInfoTooltipIfHovered(row);
 						if (groupHeaderClicked) {
 							ToggleGroupKeysDisabled(rowGroupKey(row));
@@ -4642,7 +4635,6 @@ namespace RadarKeys {
 						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
 					}
 					float rowTopY = ImGui::GetCursorPosY();
-					float buttonHeight = 20.0f;
 					const float keyColumnX = 250.0f;
 
 					std::string detailText;
