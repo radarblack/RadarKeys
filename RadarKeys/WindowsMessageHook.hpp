@@ -21,10 +21,6 @@ public:
     // explicitly if you need to remove the message hook for some reason.
     bool remove();
 
-    auto is_valid() const {
-        return m_original_proc != nullptr;
-    }
-
     auto get_original() const {
         return m_original_proc;
     }
