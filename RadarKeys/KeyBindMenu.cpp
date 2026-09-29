@@ -3914,7 +3914,7 @@ namespace RadarKeys {
 				std::vector<LuaKeyState::TrackedComboKeyInfo> trackedCombos = LuaKeyState::GetTrackedComboKeyInfo();
 				std::unordered_map<std::string, ModInfoRegistry::ModInfo> modInfoByScript;
 				for (const ModInfoRegistry::ModInfo& modInfo : ModInfoRegistry::GetTrackedModInfo()) {
-					modInfoByScript[modInfo.scriptName] = modInfo;
+					modInfoByScript[GroupScriptKeyOf(modInfo.scriptName)] = modInfo;
 				}
 				auto displayScriptName = [&modInfoByScript](const std::string& scriptName) -> const std::string& {
 					auto it = modInfoByScript.find(scriptName);
@@ -4288,7 +4288,7 @@ namespace RadarKeys {
 						hoveredScriptName = &r.info.scriptName;
 					}
 					if (hoveredScriptName) {
-						auto modIt = modInfoByScript.find(*hoveredScriptName);
+						auto modIt = modInfoByScript.find(GroupScriptKeyOf(*hoveredScriptName));
 						if (modIt != modInfoByScript.end()) {
 							const ModInfoRegistry::ModInfo& mi = modIt->second;
 							bool hasExtra = !mi.modDescription.empty() || !mi.modCreator.empty() || !mi.modVersion.empty() || !mi.modLink.empty();
@@ -5218,7 +5218,7 @@ namespace RadarKeys {
 				bool groupResetConfirmOpen = ImGui::BeginPopupModal(groupResetPopupName.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 				if (groupResetConfirmOpen) {
 					char groupResetTextBuf[256];
-					snprintf(groupResetTextBuf, sizeof(groupResetTextBuf), UI_TXT_GROUP_RESET_CONFIRM_FMT, groupResetConfirmGroup.c_str());
+					snprintf(groupResetTextBuf, sizeof(groupResetTextBuf), UI_TXT_GROUP_RESET_CONFIRM_FMT, displayScriptName(groupResetConfirmGroup).c_str());
 					ImGui::Text("%s", groupResetTextBuf);
 					ImGui::TextDisabled(UI_TXT_CANNOT_BE_UNDONE);
 					ImGui::Spacing();
