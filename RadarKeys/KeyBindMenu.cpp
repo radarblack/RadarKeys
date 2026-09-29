@@ -4718,7 +4718,6 @@ namespace RadarKeys {
 						const ImVec2 groupResetBtnMin = ImGui::GetItemRectMin();
 						const ImVec2 groupResetBtnMax = ImGui::GetItemRectMax();
 						ImGui::PopStyleColor();
-						DrawModInfoTooltipIfHovered(row);
 						if (ImGui::IsItemActive()) {
 							if (groupResetHoldGroup != rowGroupKey(row)) {
 								groupResetHoldGroup = rowGroupKey(row);
@@ -4736,8 +4735,11 @@ namespace RadarKeys {
 									groupResetConfirmGroup = rowGroupKey(row);
 								}
 							}
-						} else {
+						} else if (groupResetHoldGroup == rowGroupKey(row)) {
 							groupResetHoldGroup.clear();
+						}
+						if (!ImGui::IsItemActive()) {
+							DrawModInfoTooltipIfHovered(row);
 						}
 						if (groupHeaderClicked && !groupResetConfirmPending) {
 							ToggleGroupKeysDisabled(rowGroupKey(row));
