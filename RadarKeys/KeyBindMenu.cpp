@@ -101,8 +101,8 @@ namespace RadarKeys {
 		static const char* UI_CHK_TOGGLE = "Toggle";
 		static const char* UI_TIP_TOGGLE_SCRIPT_DECLARED = "This key is declared from the mod! Toggle triggers should be declared from the script.";
 		static const char* UI_CHK_LONG_PRESS = "Long Press";
-		static const char* UI_BTN_MINUS = " - ";
-		static const char* UI_BTN_PLUS = " + ";
+		static const char* UI_BTN_MINUS = "-";
+		static const char* UI_BTN_PLUS = "+";
 		static const char* UI_CHK_INSTANT = "Instant";
 		static const char* UI_OPT_ON_PRESS = "On Press";
 		static const char* UI_OPT_ON_RELEASE = "On Release";
@@ -157,6 +157,7 @@ namespace RadarKeys {
 		constexpr float kKeyStateChipRounding = 6.5f;
 		constexpr float kKeyButtonRounding = 5.0f;
 		constexpr float kChipToKeyGapTrim = 0.5f;
+		constexpr float kFooterButtonWidth = 145.0f * 0.65f;
 		static const ImVec4 kKeyStateRed = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
 		static const ImVec4 kKeyStateGreen = ImVec4(0.4f, 1.0f, 0.4f, 1.0f);
 		static const char* UI_TIP_CLICK_HOLD_REMOVE = "Click to %s.\nHold for 1.5 seconds to remove.";
@@ -3000,11 +3001,11 @@ namespace RadarKeys {
 				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SCRIPT_LINES).x)
 				+ ImGui::GetFrameHeight();
 			if (scriptRowMinWidth > captureMinWidth) captureMinWidth = scriptRowMinWidth;
-			float triggerBlockMinWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + (std::max)((std::max)(ImGui::CalcTextSize(UI_CHK_TOGGLE).x, ImGui::CalcTextSize(UI_CHK_LONG_PRESS).x), ImGui::CalcTextSize(UI_CHK_INSTANT).x);
+			float instantComboWidth = (std::max)((std::max)(ImGui::CalcTextSize(UI_OPT_ON_PRESS).x, ImGui::CalcTextSize(UI_OPT_ON_RELEASE).x), ImGui::CalcTextSize(UI_OPT_REPEAT).x) + ImGui::GetStyle().FramePadding.x * 2.0f;
+			float triggerBlockMinWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + instantComboWidth;
 			float optionsLayoutMinWidth = (ImGui::GetStyle().WindowPadding.x + 105.0f + ImGui::GetStyle().ItemSpacing.x) + triggerBlockMinWidth + ImGui::GetStyle().WindowPadding.x;
 			if (optionsLayoutMinWidth > captureMinWidth) captureMinWidth = optionsLayoutMinWidth;
 			captureMinWidth += ImGui::GetStyle().WindowPadding.x * 2.0f;
-			if (captureMinWidth < 340.0f) captureMinWidth = 340.0f;
 			const float captureWindowHeight = s_capturePromptMinHeight > 330.0f ? s_capturePromptMinHeight : 330.0f;
 			ImGui::SetNextWindowSize(ImVec2(captureMinWidth, captureWindowHeight), ImGuiCond_Always);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - captureMinWidth * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f - captureWindowHeight * 0.5f), ImGuiCond_FirstUseEver);
@@ -3306,7 +3307,6 @@ namespace RadarKeys {
 				float triggerRightX = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
 				float triggerColX = optionsColX;
 				float triggerInputStartX = triggerColX + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x;
-				float triggerInputWidth = triggerRightX - triggerInputStartX;
 				bool toggleLockedForScript = capturedToggleLocked && isAssigningModKey;
 				if (toggleLockedForScript) ImGui::BeginDisabled();
 				ImGui::SetCursorPosX(triggerColX);
@@ -3322,13 +3322,13 @@ namespace RadarKeys {
 				}
 				
 				if (capturedLongPressMode) {
-				    ImGui::SetCursorPosX(triggerInputStartX);
-				    ImGui::SetNextItemWidth(triggerInputWidth);
-				    ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
-				    if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
 				    const float stepperSize = ImGui::GetFrameHeight();
 				    const float stepperPairWidth = stepperSize * 2.0f + ImGui::GetStyle().ItemSpacing.x;
-				    ImGui::SetCursorPosX(triggerInputStartX + (std::max)(0.0f, (triggerInputWidth - stepperPairWidth) * 0.5f));
+				    ImGui::SetCursorPosX(triggerInputStartX);
+				    ImGui::SetNextItemWidth(stepperPairWidth);
+				    ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
+				    if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
+				    ImGui::SetCursorPosX(triggerInputStartX);
 				    if (ImGui::Button(UI_BTN_MINUS, ImVec2(stepperSize, stepperSize))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine();
 				    if (ImGui::Button(UI_BTN_PLUS, ImVec2(stepperSize, stepperSize))) capturedHoldSeconds += 0.5f;
 				}
@@ -3344,7 +3344,7 @@ namespace RadarKeys {
 				if (capturedInstantMode) {
 					static const char* instantTriggerLabels[] = { UI_OPT_ON_PRESS, UI_OPT_ON_RELEASE, UI_OPT_REPEAT };
 					ImGui::SetCursorPosX(triggerInputStartX);
-					ImGui::SetNextItemWidth(triggerRightX - triggerInputStartX);
+					ImGui::SetNextItemWidth(instantComboWidth);
 					if (ImGui::Combo("##capturedInstantTrigger", &capturedInstantTriggerType, instantTriggerLabels, IM_ARRAYSIZE(instantTriggerLabels))) {
 						capturedInstantUserSet = true;
 					}
@@ -3604,7 +3604,7 @@ namespace RadarKeys {
 				}
 			};
 			ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x);
-			const bool finalizeClicked = ImGui::Button(UI_BTN_FINALIZE, ImVec2(145, buttonHeight));
+			const bool finalizeClicked = ImGui::Button(UI_BTN_FINALIZE, ImVec2(kFooterButtonWidth, buttonHeight));
 			const ImVec2 finalizeRectMin = ImGui::GetItemRectMin();
 			const ImVec2 finalizeRectMax = ImGui::GetItemRectMax();
 			if (finalizeClicked) {
@@ -3816,16 +3816,15 @@ namespace RadarKeys {
 			if (!canFinalize) ImGui::EndDisabled(); ImGui::SameLine();
 			
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
-			float targetCancelX = ImGui::GetWindowWidth() - paddingX - 145.0f;
+			float targetCancelX = ImGui::GetWindowWidth() - paddingX - kFooterButtonWidth;
 			ImGui::SameLine(targetCancelX);
 			
-			const bool cancelClicked = ImGui::Button(UI_BTN_CANCEL, ImVec2(145, buttonHeight));
+			const bool cancelClicked = ImGui::Button(UI_BTN_CANCEL, ImVec2(kFooterButtonWidth, buttonHeight));
 			if (cancelClicked) {
 				CancelCaptureIfActive();
 			}
 			ImDrawList* footerDrawList = ImGui::GetWindowDrawList();
 			footerDrawList->AddCircleFilled(ImVec2(finalizeRectMin.x + 14.0f, (finalizeRectMin.y + finalizeRectMax.y) * 0.5f), 8.0f, IM_COL32(34, 160, 34, 255), 0);
-			footerDrawList->AddCircle(ImVec2(finalizeRectMin.x + 14.0f, (finalizeRectMin.y + finalizeRectMax.y) * 0.5f), 8.0f, IM_COL32(34, 160, 34, 255), 0, 2.0f);
 
 			if (isAssigningModKey) {
 				ImGui::TextDisabled(UI_TXT_TAKES_EFFECT_NEXT_FRAME);
