@@ -121,18 +121,12 @@ namespace RadarKeys {
 		static const char* UI_LBL_UNFIT = "[ UNFIT ]";
 		static const char* UI_TIP_COMBO_VALID = "The key combination is valid. Key assignment can finalize.";
 		static const char* UI_TIP_COMBO_CONFLICT = "Conflict! Key combination is already in use.\nThis includes bindings declared by mods and existing manual bindings.\nChange the combination before finalizing.";
-		static const char* UI_LBL_SCRIPT_MODE = "Script Mode:";
 		static const char* UI_RADIO_SINGLE = "Single";
 		static const char* UI_RADIO_DUAL = "Dual";
 		static const char* UI_TIP_TARGET_GLOBAL_FUNCS = "Target specific global functions inside the file";
-		static const char* UI_LBL_SCRIPT_PATH = "Script Path:";
 		static const char* UI_LBL_FUNCTION = "Function";
-		static const char* UI_LBL_ENABLE_FUNCTION = "Enable Function:";
-		static const char* UI_LBL_DISABLE_FUNCTION = "Disable Function:";
 		static const char* UI_TIP_TARGET_ENABLE_SCRIPT = "Target a specific function inside the Enable Script";
-		static const char* UI_LBL_ENABLE_SCRIPT_PATH = "Enable Script Path:";
 		static const char* UI_TIP_TARGET_DISABLE_SCRIPT = "Target a specific function inside the Disable Script";
-		static const char* UI_LBL_DISABLE_SCRIPT_PATH = "Disable Script Path:";
 		static const char* UI_TIP_TARGET_SCRIPT_FILE = "Target a specific function inside this script file";
 		static const char* UI_TXT_DETECTED_FROM_SCRIPT = "Detected from the script:";
 		static const char* UI_TXT_NO_KEYS_QUERIED = "(No Keys from any mods are queried by the core module.)";
@@ -3006,6 +3000,9 @@ namespace RadarKeys {
 				+ (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(UI_RADIO_SCRIPT_LINES).x)
 				+ ImGui::GetFrameHeight();
 			if (scriptRowMinWidth > captureMinWidth) captureMinWidth = scriptRowMinWidth;
+			float triggerBlockMinWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + (std::max)((std::max)(ImGui::CalcTextSize(UI_CHK_TOGGLE).x, ImGui::CalcTextSize(UI_CHK_LONG_PRESS).x), ImGui::CalcTextSize(UI_CHK_INSTANT).x);
+			float optionsLayoutMinWidth = (ImGui::GetStyle().WindowPadding.x + 105.0f + ImGui::GetStyle().ItemSpacing.x) + triggerBlockMinWidth + ImGui::GetStyle().WindowPadding.x;
+			if (optionsLayoutMinWidth > captureMinWidth) captureMinWidth = optionsLayoutMinWidth;
 			captureMinWidth += ImGui::GetStyle().WindowPadding.x * 2.0f;
 			if (captureMinWidth < 340.0f) captureMinWidth = 340.0f;
 			const float captureWindowHeight = s_capturePromptMinHeight > 330.0f ? s_capturePromptMinHeight : 330.0f;
@@ -3306,27 +3303,35 @@ namespace RadarKeys {
 			ImGui::BeginGroup();
 			if (!isAssigningMenuToggleKey) {
 
+				float triggerRightX = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
+				float maxTriggerLabelW = (std::max)((std::max)(ImGui::CalcTextSize(UI_CHK_TOGGLE).x, ImGui::CalcTextSize(UI_CHK_LONG_PRESS).x), ImGui::CalcTextSize(UI_CHK_INSTANT).x);
+				float triggerColX = (std::max)(optionsColX, triggerRightX - maxTriggerLabelW - ImGui::GetStyle().ItemInnerSpacing.x - ImGui::GetFrameHeight());
 				bool toggleLockedForScript = capturedToggleLocked && isAssigningModKey;
 				if (toggleLockedForScript) ImGui::BeginDisabled();
+				ImGui::SetCursorPosX(triggerColX);
 				ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
 				if (toggleLockedForScript && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 					ImGui::SetTooltip(UI_TIP_TOGGLE_SCRIPT_DECLARED);
 				}
 				if (toggleLockedForScript) ImGui::EndDisabled();
+				ImGui::SetCursorPosX(triggerColX);
 				if (ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode)) {
 					capturedInstantMode = !capturedLongPressMode;
 					capturedInstantUserSet = true;
 				}
 				
 				if (capturedLongPressMode) {
+				    ImGui::SetCursorPosX(triggerRightX - 75.0f);
 				    ImGui::SetNextItemWidth(75);
 				    ImGui::InputFloat("##capturedHoldInput", &capturedHoldSeconds, 0.0f, 0.0f, "%.1fs");
 				    if (capturedHoldSeconds < 0.0f) capturedHoldSeconds = 0.0f;
-				    if (ImGui::Button(UI_BTN_MINUS, ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine(40);
+				    ImGui::SetCursorPosX(triggerRightX - 78.0f);
+				    if (ImGui::Button(UI_BTN_MINUS, ImVec2(35, 20))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine();
 				    if (ImGui::Button(UI_BTN_PLUS, ImVec2(35, 20))) capturedHoldSeconds += 0.5f;
 				}
 
 				bool instantSelected = capturedInstantMode;
+				ImGui::SetCursorPosX(triggerColX);
 				if (ImGui::Checkbox(UI_CHK_INSTANT, &instantSelected)) {
 					capturedInstantMode = true;
 					capturedLongPressMode = false;
@@ -3335,12 +3340,14 @@ namespace RadarKeys {
 
 				if (capturedInstantMode) {
 					static const char* instantTriggerLabels[] = { UI_OPT_ON_PRESS, UI_OPT_ON_RELEASE, UI_OPT_REPEAT };
+					ImGui::SetCursorPosX(triggerRightX - 120.0f);
 					ImGui::SetNextItemWidth(120);
 					if (ImGui::Combo("##capturedInstantTrigger", &capturedInstantTriggerType, instantTriggerLabels, IM_ARRAYSIZE(instantTriggerLabels))) {
 						capturedInstantUserSet = true;
 					}
 
 					if (capturedInstantTriggerType == 2) {
+						ImGui::SetCursorPosX(triggerRightX - 55.0f);
 						ImGui::SetNextItemWidth(55);
 						if (ImGui::InputFloat("##capturedRepeatInterval", &capturedRepeatIntervalSeconds, 0.0f, 0.0f, "%.2fs")) {
 							float baseSeconds = isAssigningModKey ? (float)kModKeyRepeatBaseSeconds : (float)kRepeatIntervalSeconds;
@@ -3440,10 +3447,6 @@ namespace RadarKeys {
 		
 			if (!isAssigningMenuToggleKey && !isAssigningModKey) {
 				float paddingX = ImGui::GetStyle().WindowPadding.x;
-				float totalWidth = ImGui::GetWindowWidth();
-				float rightEdgeX = totalWidth - paddingX;
-				float elementWidth = 145.0f;
-				float targetCursorPosX = rightEdgeX - elementWidth - 8.0f;
 
 				if (ImGui::RadioButton(UI_RADIO_SCRIPT_PATH, !captureIsInject)) { captureIsInject = false; }
 				ImGui::SameLine();
@@ -3466,55 +3469,54 @@ namespace RadarKeys {
 					ImGui::Separator(); ImGui::Spacing();
 				}
 				else if (capturedToggleMode) {
-					ImGui::AlignTextToFramePadding();
-					ImGui::Text(UI_LBL_SCRIPT_MODE); ImGui::SameLine();
 					ImGui::RadioButton(UI_RADIO_SINGLE, &capturedToggleType, 0); ImGui::SameLine();
 					ImGui::RadioButton(UI_RADIO_DUAL, &capturedToggleType, 1);
 					ImGui::Separator(); ImGui::Spacing();
 
 					if (capturedToggleType == 0) {
-						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
-						if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_GLOBAL_FUNCS);
-						ImGui::SameLine(); ImGui::Text(UI_LBL_SCRIPT_PATH);
-						
 						ImGui::SetNextItemWidth(-1);
 						ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 						
-						if (capturedHasFuncOn) {
-							ImGui::Text(UI_LBL_ENABLE_FUNCTION); ImGui::SameLine(targetCursorPosX);
-							ImGui::SetNextItemWidth(elementWidth);
+						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn);
+						ImGui::SameLine();
+						if (!capturedHasFuncOn) {
+							ImGui::AlignTextToFramePadding();
+							ImGui::TextUnformatted(UI_LBL_FUNCTION);
+							if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_GLOBAL_FUNCS);
+						} else {
+							ImGui::SetNextItemWidth(-1);
 							ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
-		
-							ImGui::Text(UI_LBL_DISABLE_FUNCTION); ImGui::SameLine(targetCursorPosX);
-							ImGui::SetNextItemWidth(elementWidth);
+							ImGui::SetNextItemWidth(-1);
 							ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
 						}
 					} 
 					else {
-						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn); ImGui::SameLine();
-						if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_ENABLE_SCRIPT);
-						ImGui::SameLine(); ImGui::Text(UI_LBL_ENABLE_SCRIPT_PATH);
-
 						ImGui::SetNextItemWidth(-1);
 						ImGui::InputText("##captureScriptInputOn", capturedScriptPathOnBuffer, IM_ARRAYSIZE(capturedScriptPathOnBuffer));
 						
-						if (capturedHasFuncOn) {
-							ImGui::SetCursorPosX(targetCursorPosX);
-							ImGui::SetNextItemWidth(elementWidth);
+						ImGui::Checkbox("##hasFuncOn", &capturedHasFuncOn);
+						ImGui::SameLine();
+						if (!capturedHasFuncOn) {
+							ImGui::AlignTextToFramePadding();
+							ImGui::TextUnformatted(UI_LBL_FUNCTION);
+							if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_ENABLE_SCRIPT);
+						} else {
+							ImGui::SetNextItemWidth(-1);
 							ImGui::InputText("##captureFuncOn", capturedFuncOnBuffer, IM_ARRAYSIZE(capturedFuncOnBuffer));
 						}
 
 						ImGui::Spacing();
-						ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff); ImGui::SameLine();
-						if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_DISABLE_SCRIPT);
-						
-						ImGui::SameLine(); ImGui::Text(UI_LBL_DISABLE_SCRIPT_PATH);
 						ImGui::SetNextItemWidth(-1);
 						ImGui::InputText("##captureScriptInputOff", capturedScriptPathOffBuffer, IM_ARRAYSIZE(capturedScriptPathOffBuffer));
 						
-						if (capturedHasFuncOff) {
-							ImGui::SetCursorPosX(targetCursorPosX);
-							ImGui::SetNextItemWidth(elementWidth);
+						ImGui::Checkbox("##hasFuncOff", &capturedHasFuncOff);
+						ImGui::SameLine();
+						if (!capturedHasFuncOff) {
+							ImGui::AlignTextToFramePadding();
+							ImGui::TextUnformatted(UI_LBL_FUNCTION);
+							if (ImGui::IsItemHovered()) ImGui::SetTooltip(UI_TIP_TARGET_DISABLE_SCRIPT);
+						} else {
+							ImGui::SetNextItemWidth(-1);
 							ImGui::InputText("##captureFuncOff", capturedFuncOffBuffer, IM_ARRAYSIZE(capturedFuncOffBuffer));
 						}
 					}
