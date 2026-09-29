@@ -202,6 +202,7 @@ namespace RadarKeys {
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_SWEEP_STATUS = "RadarKeys is currently cleaning up. It will update after the process.";
+		static const char* UI_TIP_GROUP_TOGGLE = "Click to enable/disable this mod's keys.";
 		static const char* UI_POPUP_CLEAR_ALL_CONFIRM = "Clear All Hotkeys?";
 		static const char* UI_TXT_CLEAR_ALL_CONFIRM = "Reset all mod key overrides to their defaults and remove every manually-assigned binding?";
 		static const char* UI_BTN_ADD_NEW_BINDING = "Add New Binding...";
@@ -2432,6 +2433,62 @@ namespace RadarKeys {
 			LogActivity("KeyBindMenu: Enabled all hotkeys (" + std::to_string(manualCount) + " manual, " + std::to_string(modKeyCount) + " mod key(s))");
 		}
 
+		bool GroupKeysAllDisabled(const std::string& groupName) {
+			bool anyMember = false;
+			for (const KeyBind& bind : bindings) {
+				if (FileNameOnly(bind.scriptPathOn) != groupName) continue;
+				anyMember = true;
+				if (!bind.disabled) return false;
+			}
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (!info.hasDescription || info.scriptName != groupName) continue;
+				anyMember = true;
+				if (!ModKeyBindings::IsDisabled(info.scriptName, info.functionName)) return false;
+			}
+			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (cinfo.scriptName != groupName) continue;
+				anyMember = true;
+				if (!ModKeyBindings::IsDisabled(cinfo.scriptName, cinfo.functionName)) return false;
+			}
+			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
+				if (entry.scriptName != groupName) continue;
+				anyMember = true;
+				if (!ModKeyBindings::IsDisabled(entry.scriptName, entry.functionName)) return false;
+			}
+			return anyMember;
+		}
+		void ToggleGroupKeysDisabled(const std::string& groupName) {
+			const bool targetDisabled = !GroupKeysAllDisabled(groupName);
+			size_t manualCount = 0;
+			for (KeyBind& bind : bindings) {
+				if (FileNameOnly(bind.scriptPathOn) != groupName) continue;
+				if (bind.disabled == targetDisabled) continue;
+				bind.disabled = targetDisabled;
+				manualCount++;
+			}
+			size_t modKeyCount = 0;
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (!info.hasDescription || info.scriptName != groupName) continue;
+				if (ModKeyBindings::IsDisabled(info.scriptName, info.functionName) == targetDisabled) continue;
+				ModKeyBindings::SetDisabledWithoutSave(info.scriptName, info.functionName, targetDisabled);
+				modKeyCount++;
+			}
+			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (cinfo.scriptName != groupName) continue;
+				if (ModKeyBindings::IsDisabled(cinfo.scriptName, cinfo.functionName) == targetDisabled) continue;
+				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, targetDisabled);
+				modKeyCount++;
+			}
+			for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
+				if (entry.scriptName != groupName) continue;
+				if (ModKeyBindings::IsDisabled(entry.scriptName, entry.functionName) == targetDisabled) continue;
+				ModKeyBindings::SetDisabledWithoutSave(entry.scriptName, entry.functionName, targetDisabled);
+				modKeyCount++;
+			}
+			if (manualCount > 0 || modKeyCount > 0) SaveBindings();
+			MarkDisplayCacheDirty();
+			LogActivity(std::string(targetDisabled ? "KeyBindMenu: Disabled " : "KeyBindMenu: Enabled ") + std::to_string(manualCount + modKeyCount) + " hotkey(s) from " + groupName);
+		}
 		void ResetAndRemoveAllBindingsAndModKeys() {
 			size_t resetCount = 0;
 			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
@@ -4157,6 +4214,7 @@ namespace RadarKeys {
 					if (!ImGui::IsItemHovered()) {
 						return;
 					}
+					bool tooltipShown = false;
 					const std::string* hoveredScriptName = nullptr;
 					if (r.isComboScript) {
 						hoveredScriptName = &r.comboInfo.scriptName;
@@ -4171,6 +4229,7 @@ namespace RadarKeys {
 							bool hasExtra = !mi.modDescription.empty() || !mi.modCreator.empty() || !mi.modVersion.empty() || !mi.modLink.empty();
 							if (hasExtra) {
 								ImGui::BeginTooltip();
+								tooltipShown = true;
 								ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
 								if (!mi.modDescription.empty()) {
 									ImGui::TextWrapped("%s", mi.modDescription.c_str());
@@ -4184,10 +4243,14 @@ namespace RadarKeys {
 								if (!mi.modLink.empty()) {
 									ImGui::TextWrapped("Link: %s", mi.modLink.c_str());
 								}
+								ImGui::Text("%s", UI_TIP_GROUP_TOGGLE);
 								ImGui::PopTextWrapPos();
 								ImGui::EndTooltip();
 							}
 						}
+					}
+					if (!tooltipShown) {
+						ImGui::SetTooltip("%s", UI_TIP_GROUP_TOGGLE);
 					}
 				};
 				std::vector<UnifiedRow> rows;
@@ -4560,13 +4623,22 @@ namespace RadarKeys {
 					const bool rowStartsGroup = (rowIdx == 0) || rowGroupKey(rows[rowIdx - 1]) != rowGroupKey(row);
 					if (rowStartsGroup) {
 						std::string groupHeaderName = displayScriptName(rowGroupKey(row));
+						const bool groupFullyDisabled = GroupKeysAllDisabled(rowGroupKey(row));
+						const ImVec2 headerTextSize = ImGui::CalcTextSize(groupHeaderName.c_str());
 						ImGui::SetCursorPosX(ImGui::GetStyle().ItemSpacing.x + kHeaderBoxPadX);
-						ImGui::Text("%s", groupHeaderName.c_str());
+						ImGui::PushID("##groupHeaderBtn");
+						ImGui::InvisibleButton("##groupHeaderBtn", ImVec2(headerTextSize.x, ImGui::GetTextLineHeight()));
+						const bool groupHeaderClicked = ImGui::IsItemClicked();
 						const ImVec2 headerBoxMin = ImGui::GetItemRectMin();
 						const ImVec2 headerBoxMax = ImGui::GetItemRectMax();
+						ImGui::PopID();
 						ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(headerBoxMin.x - kHeaderBoxPadX, headerBoxMin.y - kHeaderBoxPadY), ImVec2(headerBoxMax.x + kHeaderBoxPadX, headerBoxMax.y + kHeaderBoxPadY), ImGui::GetColorU32(ImGuiCol_FrameBg, 0.45f));
 						ImGui::GetWindowDrawList()->AddRect(ImVec2(headerBoxMin.x - kHeaderBoxPadX, headerBoxMin.y - kHeaderBoxPadY), ImVec2(headerBoxMax.x + kHeaderBoxPadX, headerBoxMax.y + kHeaderBoxPadY), ImGui::GetColorU32(ImGuiCol_Text, 0.6f));
+						ImGui::GetWindowDrawList()->AddText(headerBoxMin, groupFullyDisabled ? ImGui::GetColorU32(ImVec4(1.0f, 0.35f, 0.35f, 1.0f)) : ImGui::GetColorU32(ImGuiCol_Text), groupHeaderName.c_str());
 						DrawModInfoTooltipIfHovered(row);
+						if (groupHeaderClicked) {
+							ToggleGroupKeysDisabled(rowGroupKey(row));
+						}
 						ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
 					}
 					float rowTopY = ImGui::GetCursorPosY();
