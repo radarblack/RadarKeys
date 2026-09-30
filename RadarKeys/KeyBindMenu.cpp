@@ -108,6 +108,7 @@ namespace RadarKeys {
 		static const char* UI_TT_TOGGLE_FMT = "Toggle: %s";
 		static const char* UI_TT_ON_HOLD_FMT = "On Hold (for %s seconds)";
 		static const char* UI_TT_JOIN = " | ";
+		static const char* UI_TIP_RELEASE_AFTER_HOLD = "This will not trigger if an existing Long Press uses the same key.";
 		static const char* UI_TT_STATE_ON = "On";
 		static const char* UI_TT_STATE_OFF = "Off";
 		static const char* UI_OPT_REPEAT = "Repeat";
@@ -3985,6 +3986,7 @@ namespace RadarKeys {
 					std::vector<LuaKeyState::TrackedComboKeyInfo> mergedCombos;
 					std::string storeNativeName;
 				std::string triggerLabel;
+				bool releaseSuppressedByHold = false;
 				std::string keyButtonLabel;
 				float keyButtonW = 104.0f;
 				float keyButtonH = 20.0f;
@@ -4003,7 +4005,7 @@ namespace RadarKeys {
 					if (!s.empty() && s.back() == '.') s.pop_back();
 					return s.empty() ? "0" : s;
 				};
-				auto BuildTriggerTypeLabel = [&](const UnifiedRow& row) -> std::string {
+				auto BuildTriggerTypeLabel = [&](UnifiedRow& row) -> std::string {
 					std::vector<std::string> parts;
 					bool usesPress = false;
 					bool usesRelease = false;
@@ -4133,6 +4135,7 @@ namespace RadarKeys {
 						if (i) joined += UI_TT_JOIN;
 						joined += parts[i];
 					}
+					row.releaseSuppressedByHold = usesRelease && usesHold;
 					return joined;
 				};
 				float buttonBaseHeight = 20.0f;
@@ -5019,6 +5022,7 @@ namespace RadarKeys {
 							captureIsCombo = true;
 							ResetComboCaptureState();
 							capturedVKey = 0;
+							capturedComboKeys = row.comboInfo.activeKeys;
 							capturedCtrl = capturedShift = capturedAlt = false;
 							capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
@@ -5074,7 +5078,7 @@ namespace RadarKeys {
 							modKeyCaptureScriptName = row.info.scriptName;
 							modKeyCaptureFunctionName = row.info.functionName;
 							captureIsCombo = false;
-							capturedVKey = 0;
+							capturedVKey = row.displayVKey;
 							capturedCtrl = capturedShift = capturedAlt = false;
 							capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
@@ -5191,6 +5195,9 @@ namespace RadarKeys {
 							ImGui::SameLine();
 							ImGui::SetCursorPosY(buttonLabelRowY);
 							ImGui::TextDisabled("%s", triggerLabel.c_str());
+							if (row.releaseSuppressedByHold && ImGui::IsItemHovered()) {
+								ImGui::SetTooltip("%s", UI_TIP_RELEASE_AFTER_HOLD);
+							}
 						}
 						ImGui::SameLine(notesColumnX);
 						ImGui::SetCursorPosY(buttonLabelRowY);
