@@ -37,8 +37,8 @@ namespace RadarKeys {
 		void SetHoldSecondsOverrides(const std::map<USHORT, double>& overrides);
 		void SetDisabledCombos(const std::vector<std::vector<USHORT>>& combos);
 		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName);
-		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
-		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState);
+		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState, int declaredTriggerType = -1, double declaredHoldSeconds = -1.0, double declaredRepeatSeconds = -1.0);
+		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState, int declaredTriggerType = -1, double declaredHoldSeconds = -1.0, double declaredRepeatSeconds = -1.0);
 		void SweepStaleComboDescriptions();
 		double GetStaleSweepSecondsRemaining();
 		double GetStaleSweepSecondsTotal();
@@ -61,6 +61,9 @@ namespace RadarKeys {
 			double lastHoldSeconds = 0.0;
 			bool usesRepeat = false;
 			bool usesOnRelease = false;
+			int declaredTriggerType = -1;
+			double declaredHoldSeconds = -1.0;
+			double declaredRepeatSeconds = -1.0;
 		};
 		std::vector<TrackedKeyInfo> GetTrackedKeyInfo();
 
@@ -77,6 +80,9 @@ namespace RadarKeys {
 			bool usesRepeat = false;
 			bool usesOnRelease = false;
 			double lastHoldSeconds = 0.0;
+			int declaredTriggerType = -1;
+			double declaredHoldSeconds = -1.0;
+			double declaredRepeatSeconds = -1.0;
 		};
 		std::vector<TrackedComboKeyInfo> GetTrackedComboKeyInfo();
 	}
