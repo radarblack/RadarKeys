@@ -199,7 +199,7 @@ namespace RadarKeys {
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_SWEEP_STATUS = "RadarKeys is currently cleaning up. It will update after the process.";
-		static const char* UI_TIP_GROUP_TOGGLE = "/nClick to enable/disable this mod's keys.";
+		static const char* UI_TIP_GROUP_TOGGLE = "\nClick to enable/disable this mod's keys.";
 		static const char* UI_POPUP_CLEAR_ALL_CONFIRM = "Clear All Hotkeys?";
 		static const char* UI_TXT_CLEAR_ALL_CONFIRM = "Reset all mod key overrides to their defaults and remove every manually-assigned binding?";
 		static const char* UI_POPUP_GROUP_RESET_CONFIRM = "Reset Mod Hotkeys?";
@@ -3005,7 +3005,7 @@ namespace RadarKeys {
 			float optionsLayoutMinWidth = (ImGui::GetStyle().WindowPadding.x + kKeyDisplayBoxWidth + ImGui::GetStyle().ItemSpacing.x) + triggerBlockMinWidth + ImGui::GetStyle().WindowPadding.x;
 			if (optionsLayoutMinWidth > captureMinWidth) captureMinWidth = optionsLayoutMinWidth;
 			captureMinWidth += ImGui::GetStyle().WindowPadding.x * 2.0f;
-			const float captureWindowHeight = s_capturePromptMinHeight > 330.0f ? s_capturePromptMinHeight : 330.0f;
+			const float captureWindowHeight = s_capturePromptMinHeight;
 			ImGui::SetNextWindowSize(ImVec2(captureMinWidth, captureWindowHeight), ImGuiCond_Always);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f - captureMinWidth * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f - captureWindowHeight * 0.5f), ImGuiCond_FirstUseEver);
 			if (requestCaptureFocus) {
@@ -3570,10 +3570,7 @@ namespace RadarKeys {
 			float buttonHeight = 30.0f;
 			float contentBottomY = ImGui::GetCursorPosY() + ImGui::GetStyle().ItemSpacing.y;
 			s_capturePromptMinHeight = contentBottomY + buttonHeight + paddingY * 2.0f;
-			float bottomAnchorY = ImGui::GetWindowHeight() - paddingY - buttonHeight;
-			if (bottomAnchorY < contentBottomY) bottomAnchorY = contentBottomY;
-			
-			ImGui::SetCursorPosY(bottomAnchorY);
+			ImGui::Separator();
 
 			if (!canFinalize) ImGui::BeginDisabled();
 			auto applyTriggerChoice = [&]() {
