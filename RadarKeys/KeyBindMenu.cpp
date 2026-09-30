@@ -3044,7 +3044,7 @@ namespace RadarKeys {
 				bool wasInject = captureIsInject;
 				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo)) { captureIsCombo = false; }
 				ImGui::SameLine();
-				if (ImGui::RadioButton(UI_RADIO_MULTI_KEY_COMBO, captureIsCombo)) { captureIsCombo = true; captureIsInject = false; }
+				if (ImGui::RadioButton(UI_RADIO_MULTI_KEY_COMBO, captureIsCombo)) { captureIsCombo = true; }
 				if (captureIsCombo != wasCombo) {
 					capturedVKey = 0;
 					ResetComboCaptureState();
@@ -3449,7 +3449,7 @@ namespace RadarKeys {
 
 				if (ImGui::RadioButton(UI_RADIO_SCRIPT_PATH, !captureIsInject)) { captureIsInject = false; }
 				ImGui::SameLine();
-				if (ImGui::RadioButton(UI_RADIO_SCRIPT_LINES, captureIsInject)) { captureIsInject = true; captureIsCombo = false; }
+				if (ImGui::RadioButton(UI_RADIO_SCRIPT_LINES, captureIsInject)) { captureIsInject = true; }
 
 				if (captureIsInject) {
 					ImGui::SetNextItemWidth(-1);
@@ -3689,6 +3689,8 @@ namespace RadarKeys {
 						int injectStart = capturedInjectLineStart;
 						int injectEnd = capturedInjectLineEnd;
 						if (injectEnd < injectStart) injectEnd = injectStart;
+						const USHORT effectiveVKey = captureIsCombo ? capturedComboKeys.front() : capturedVKey;
+						const std::string effectiveKeyName = captureIsCombo ? ComboKeysDisplayName(capturedComboKeys) : NameForVKey(capturedVKey);
 						std::string injectContent = BuildInjectContent(injectSourcePath, injectStart, injectEnd);
 						if (injectContent.empty()) {
 							LogActivity("KeyBindMenu: Script-line injection failed - could not read lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + FileNameOnly(injectSourcePath), false);
@@ -3697,11 +3699,16 @@ namespace RadarKeys {
 							if (editingBindingIndex != -1 && editingBindingIndex < (int)bindings.size()) {
 								USHORT oldVKey = bindings[editingBindingIndex].vKey;
 								KeyBind editedBind = bindings[editingBindingIndex];
-								editedBind.vKey = capturedVKey;
+								editedBind.vKey = effectiveVKey;
 								editedBind.needCtrl = capturedCtrl;
 								editedBind.needShift = capturedShift;
 								editedBind.needAlt = capturedAlt;
-								editedBind.keyName = NameForVKey(capturedVKey);
+								editedBind.keyName = effectiveKeyName;
+								if (captureIsCombo) {
+									editedBind.comboKeys = capturedComboKeys;
+								} else {
+									editedBind.comboKeys.clear();
+								}
 								editedBind.isToggle = capturedToggleMode;
 								editedBind.holdSeconds = capturedLongPressMode ? capturedHoldSeconds : 0.0f;
 								editedBind.isInstant = capturedInstantMode;
@@ -3717,17 +3724,20 @@ namespace RadarKeys {
 								editedBind.injectLineEnd = injectEnd;
 								bindings[editingBindingIndex] = editedBind;
 								RemoveDispatcherIfUnused(oldVKey);
-								EnsureDispatcherRegistered(capturedVKey);
+								EnsureDispatcherRegistered(effectiveVKey);
 								SaveBindings();
 								MarkDisplayCacheDirty();
 								LogActivity("KeyBindMenu: Edited script-line binding -> " + CombinedDisplayName(editedBind));
 							} else {
 								KeyBind newInjectBind{};
-								newInjectBind.vKey = capturedVKey;
+								newInjectBind.vKey = effectiveVKey;
 								newInjectBind.needCtrl = capturedCtrl;
 								newInjectBind.needShift = capturedShift;
 								newInjectBind.needAlt = capturedAlt;
-								newInjectBind.keyName = NameForVKey(capturedVKey);
+								if (captureIsCombo) {
+									newInjectBind.comboKeys = capturedComboKeys;
+								}
+								newInjectBind.keyName = effectiveKeyName;
 								newInjectBind.scriptPathOn = injectSourcePath;
 								newInjectBind.isInject = true;
 								newInjectBind.injectLineStart = injectStart;
@@ -3738,7 +3748,7 @@ namespace RadarKeys {
 								newInjectBind.instantTriggerType = capturedInstantTriggerType;
 								newInjectBind.repeatAccelMult = capturedRepeatAccelMult;
 								bindings.push_back(newInjectBind);
-								EnsureDispatcherRegistered(capturedVKey);
+								EnsureDispatcherRegistered(effectiveVKey);
 								SaveBindings();
 								MarkDisplayCacheDirty();
 								DebuggerMenu::LogBindEvent("Bound " + newInjectBind.keyName + " -> script lines " + std::to_string(injectStart) + "-" + std::to_string(injectEnd) + " of " + injectSourcePath);
