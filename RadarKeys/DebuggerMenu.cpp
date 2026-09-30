@@ -14,7 +14,6 @@
 namespace RadarKeys {
 	namespace DebuggerMenu {
 		static const char* LOG_DEBUGGERMENU_ONDOSCRIPTRESULT_MALFORMED_ARGS_SIZE_FM = "DebuggerMenu::OnDoScriptResult: malformed args (size {})";
-		static const char* UI_DEBUGGER_LOG_SCOPE_HINT = "These control both the live view below and what gets written to radarkeys_log.txt - tick a box to record its category, untick to silence it.";
 		static const char* LOG_SCR_LUA_SUCCESS = "[LUA] success";
 		static const char* LOG_DEBUGGERMENU_ONDOSCRIPTRESULT_SCRIPT_FAILED_BUT_NO = "DebuggerMenu::OnDoScriptResult: script failed but no error message provided (size {})";
 
@@ -139,7 +138,6 @@ namespace RadarKeys {
 			ImGui::Checkbox("Log button presses", &logButtonPress);
 			ImGui::Checkbox("Log script run attempts (success/fail, dll-side vs lua-side)", &logScriptResult);
 			ImGui::Checkbox("Log script debug messages (RadarKeys.DebugLog)", &logLuaDebug);
-			ImGui::TextDisabled(UI_DEBUGGER_LOG_SCOPE_HINT);
 
 			ImGui::Separator();
 			if (ImGui::Button("Clear Log")) {
