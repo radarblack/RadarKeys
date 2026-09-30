@@ -37,6 +37,9 @@ namespace RadarKeys {
 			bool usesRepeat = false;
 			bool usesOnRelease = false;
 			double lastHoldSeconds = 0.0;
+			int declaredTriggerType = -1;
+			double declaredHoldSeconds = -1.0;
+			double declaredRepeatSeconds = -1.0;
 			std::string scriptName;
 			std::string functionName;
 		};
@@ -757,6 +760,9 @@ namespace RadarKeys {
 			bool usesRepeat = false;
 			bool usesOnRelease = false;
 			double lastHoldSeconds = 0.0;
+			int declaredTriggerType = -1;
+			double declaredHoldSeconds = -1.0;
+			double declaredRepeatSeconds = -1.0;
 			std::vector<USHORT> nativeKeys;
 			std::string scriptName;
 			std::string functionName;
@@ -771,7 +777,7 @@ namespace RadarKeys {
 			}
 			return out;
 		}
-		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState) {
+		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState, int declaredTriggerType, double declaredHoldSeconds, double declaredRepeatSeconds) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) {
 				return;
@@ -813,6 +819,9 @@ namespace RadarKeys {
 			d.usesRepeat = obsRepeat;
 			d.usesOnRelease = obsOnRelease;
 			d.lastHoldSeconds = obsHoldSeconds;
+			d.declaredTriggerType = declaredTriggerType;
+			d.declaredHoldSeconds = declaredHoldSeconds;
+			d.declaredRepeatSeconds = declaredRepeatSeconds;
 			d.lastTouched = clock::now();
 		}
 
@@ -856,6 +865,9 @@ namespace RadarKeys {
 				info.usesRepeat = d.usesRepeat;
 				info.usesOnRelease = d.usesOnRelease;
 				info.lastHoldSeconds = d.lastHoldSeconds;
+				info.declaredTriggerType = d.declaredTriggerType;
+				info.declaredHoldSeconds = d.declaredHoldSeconds;
+				info.declaredRepeatSeconds = d.declaredRepeatSeconds;
 				result.push_back(std::move(info));
 			}
 			return result;
@@ -874,7 +886,7 @@ namespace RadarKeys {
 			s.currentIncrementMult = 1.0;
 		}
 
-		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState) {
+		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState, int declaredTriggerType, double declaredHoldSeconds, double declaredRepeatSeconds) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return;
@@ -907,6 +919,9 @@ namespace RadarKeys {
 					d.lastHoldSeconds = obsHoldSeconds;
 					d.usesRepeat = obsRepeat;
 					d.usesOnRelease = obsOnRelease;
+					d.declaredTriggerType = declaredTriggerType;
+					d.declaredHoldSeconds = declaredHoldSeconds;
+					d.declaredRepeatSeconds = declaredRepeatSeconds;
 					return;
 				}
 			}
@@ -922,6 +937,9 @@ namespace RadarKeys {
 			d.lastHoldSeconds = obsHoldSeconds;
 			d.usesRepeat = obsRepeat;
 			d.usesOnRelease = obsOnRelease;
+			d.declaredTriggerType = declaredTriggerType;
+			d.declaredHoldSeconds = declaredHoldSeconds;
+			d.declaredRepeatSeconds = declaredRepeatSeconds;
 			s.descriptions.push_back(std::move(d));
 		}
 
@@ -1039,6 +1057,9 @@ namespace RadarKeys {
 					info.lastHoldSeconds = d.lastHoldSeconds;
 					info.usesRepeat = d.usesRepeat;
 					info.usesOnRelease = d.usesOnRelease;
+					info.declaredTriggerType = d.declaredTriggerType;
+					info.declaredHoldSeconds = d.declaredHoldSeconds;
+					info.declaredRepeatSeconds = d.declaredRepeatSeconds;
 					result.push_back(std::move(info));
 				}
 			}
