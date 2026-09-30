@@ -780,10 +780,10 @@ namespace RadarKeys {
 			return result;
 		}
 
-		std::string CombinedDisplayName(const KeyBind& bind) {
+		std::string CombinedDisplayName(const KeyBind& bind, bool includeHoldSuffix = true) {
 			if (bind.IsCombo()) {
 				std::string result = ComboKeysDisplayName(bind.comboKeys);
-				if (bind.holdSeconds > 0.0f) {
+				if (bind.holdSeconds > 0.0f && includeHoldSuffix) {
 					char buf[32];
 					snprintf(buf, sizeof(buf), " (hold %.1fs)", bind.holdSeconds);
 					result += buf;
@@ -798,7 +798,7 @@ namespace RadarKeys {
 				}
 			}
 			std::string result = std::string(bind.needCtrl ? "Ctrl+" : "") + (bind.needShift ? "Shift+" : "") + (bind.needAlt ? "Alt+" : "") + liveName;
-			if (bind.holdSeconds > 0.0f) {
+			if (bind.holdSeconds > 0.0f && includeHoldSuffix) {
 				char buf[32];
 				snprintf(buf, sizeof(buf), " (hold %.1fs)", bind.holdSeconds);
 				result += buf;
@@ -3846,7 +3846,7 @@ namespace RadarKeys {
 
 			for (const auto& bind : bindings) {
 				BindingDisplayCache entry;
-				entry.itemLabel = CombinedDisplayName(bind);
+				entry.itemLabel = CombinedDisplayName(bind, false);
 
 				if (bind.isToggle) {
 				    std::string fileOn = std::filesystem::path(bind.scriptPathOn).filename().string();
