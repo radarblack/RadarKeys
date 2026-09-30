@@ -3572,7 +3572,7 @@ namespace RadarKeys {
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float buttonHeight = 30.0f;
 			float contentBottomY = ImGui::GetCursorPosY() + ImGui::GetStyle().ItemSpacing.y;
-			s_capturePromptMinHeight = contentBottomY + buttonHeight + paddingY + kFooterBottomPadPx;
+			s_capturePromptMinHeight = contentBottomY + buttonHeight + kFooterBottomPadPx;
 			ImGui::Separator();
 
 			if (!canFinalize) ImGui::BeginDisabled();
@@ -3955,12 +3955,6 @@ namespace RadarKeys {
 
 			ImGui::Text(UI_HDR_KEY_BINDINGS);
 			const float kListMinHeight = 150.0f;
-			float paddingX = ImGui::GetStyle().WindowPadding.x;
-			float paddingY = ImGui::GetStyle().WindowPadding.y;
-			float cursorYBeforeList = ImGui::GetCursorPosY();
-			float listRemainingHeight = (ImGui::GetWindowHeight() - kFooterBottomPadPx - kFooterButtonHeight - kListFooterGapPx) - cursorYBeforeList;
-			if (listRemainingHeight < kListMinHeight) listRemainingHeight = kListMinHeight;
-			s_mainWindowMinHeight = cursorYBeforeList + kListMinHeight + kListFooterGapPx + kFooterButtonHeight + kFooterBottomPadPx;
 
 			{
 				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
@@ -4707,10 +4701,6 @@ namespace RadarKeys {
 					}
 				}
 
-				if (!rows.empty()) {
-					ImGui::TextDisabled(UI_TXT_DESCRIBED_KEYS_HINT);
-				}
-
 				static std::unordered_map<int, std::chrono::steady_clock::time_point> disableHoldStart;
 				static int pendingRemoveConfirmIndex = -1;
 				static bool removeConfirmPopupRequested = false;
@@ -4724,6 +4714,13 @@ namespace RadarKeys {
 				static bool groupResetConfirmPending = false;
 				static bool groupResetPopupRequested = false;
 				static std::string groupResetConfirmGroup;
+				if (!rows.empty()) {
+					ImGui::TextDisabled(UI_TXT_DESCRIBED_KEYS_HINT);
+				}
+				float cursorYBeforeList = ImGui::GetCursorPosY();
+				float listRemainingHeight = (ImGui::GetWindowHeight() - kFooterBottomPadPx - kFooterButtonHeight - kListFooterGapPx) - cursorYBeforeList;
+				if (listRemainingHeight < kListMinHeight) listRemainingHeight = kListMinHeight;
+				s_mainWindowMinHeight = cursorYBeforeList + kListMinHeight + kListFooterGapPx + kFooterButtonHeight + kFooterBottomPadPx;
 				ImGui::BeginChild("KeyBindingsList", ImVec2(0, listRemainingHeight), true);
 				if (rows.empty()) {
 					ImGui::TextDisabled(UI_TXT_NO_KEYS_ASSIGNED);
