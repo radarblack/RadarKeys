@@ -4012,6 +4012,7 @@ namespace RadarKeys {
 					bool usesRepeat = false;
 					bool usesToggle = false;
 					bool usesHold = false;
+					bool anyKeyHold = false;
 					bool toggleOn = false;
 					double holdSeconds = 0.0;
 					double repeatInterval = 0.0;
@@ -4055,6 +4056,21 @@ namespace RadarKeys {
 						} else {
 							usesPress = true;
 						}
+						} else if ((row.isComboScript ? row.comboInfo.declaredTriggerType : row.info.declaredTriggerType) >= 0) {
+							int declaredTriggerTypeValue = row.isComboScript ? row.comboInfo.declaredTriggerType : row.info.declaredTriggerType;
+							double declaredHoldValue = row.isComboScript ? row.comboInfo.declaredHoldSeconds : row.info.declaredHoldSeconds;
+							double declaredRepeatValue = row.isComboScript ? row.comboInfo.declaredRepeatSeconds : row.info.declaredRepeatSeconds;
+							if (declaredTriggerTypeValue == 0 && declaredHoldValue > 0.0) {
+								usesHold = true;
+								holdSeconds = declaredHoldValue;
+							} else if (declaredTriggerTypeValue == 2) {
+								usesRepeat = true;
+								if (declaredRepeatValue > 0.0) repeatInterval = declaredRepeatValue;
+							} else if (declaredTriggerTypeValue == 1) {
+								usesRelease = true;
+							} else {
+								usesPress = true;
+							}
 						}
 						bool describedUsesAny = usesPress || usesRelease || usesRepeat || usesToggle || usesHold;
 						if (!describedUsesAny && !row.isComboScript) {
@@ -4084,6 +4100,14 @@ namespace RadarKeys {
 								break;
 							}
 						}
+						const bool ownOnlyParts = ModKeyBindings::HasTriggerConfig(scriptName, functionName)
+							|| (row.isComboScript ? row.comboInfo.declaredTriggerType : row.info.declaredTriggerType) >= 0;
+						const bool ownPress = usesPress;
+						const bool ownRelease = usesRelease;
+						const bool ownRepeat = usesRepeat;
+						const bool ownHold = usesHold;
+						const double ownHoldSeconds = holdSeconds;
+						const double ownRepeatInterval = repeatInterval;
 						auto absorbKey = [&](const LuaKeyState::TrackedKeyInfo& m) {
 							usesPress |= m.usesOnPress;
 							usesRelease |= m.usesOnRelease;
@@ -4114,6 +4138,15 @@ namespace RadarKeys {
 							for (const LuaKeyState::TrackedComboKeyInfo& c : row.mergedCombos) absorbCombo(c);
 							if (usesRepeat) repeatInterval = LuaKeyState::GetRepeatIntervalSeconds(row.displayVKey);
 						}
+						const bool anyKeyHold = usesHold;
+						if (ownOnlyParts) {
+							usesPress = ownPress;
+							usesRelease = ownRelease;
+							usesRepeat = ownRepeat;
+							usesHold = ownHold;
+							holdSeconds = ownHoldSeconds;
+							if (ownRepeat) repeatInterval = ownRepeatInterval;
+						}
 					}
 					char fmtBuf[160];
 					if (usesToggle) {
@@ -4135,7 +4168,7 @@ namespace RadarKeys {
 						if (i) joined += UI_TT_JOIN;
 						joined += parts[i];
 					}
-					row.releaseSuppressedByHold = usesRelease && usesHold;
+					row.releaseSuppressedByHold = usesRelease && anyKeyHold;
 					return joined;
 				};
 				float buttonBaseHeight = 20.0f;
