@@ -117,6 +117,10 @@ namespace RadarKeys {
 			"- ? Lower: Faster";
 		static const char* UI_TIP_COMBO_VALID = "The key combination is valid. Key assignment can finalize.";
 		static const char* UI_TIP_COMBO_CONFLICT = "Conflict! Key combination is already in use.\nThis includes bindings declared by mods and existing manual bindings.\nChange the combination before finalizing.";
+		static const char* UI_TIP_FINALIZE_NOTHING_CAPTURED = "Nothing is captured yet.\nCapture a key or a key combo before finalizing.";
+		static const char* UI_TIP_FINALIZE_ZERO_HOLD = "Long Press is on but the hold duration is 0.0s.\nRaise it above zero before finalizing.";
+		static const char* UI_TIP_FINALIZE_SCRIPT_PATH = "The script path is missing or the Script Lines range is invalid.\nFix it before finalizing.";
+		static const char* UI_TIP_FINALIZE_SCRIPT_FUNCTION = "A ticked Function field is empty.\nFill it in or untick it before finalizing.";
 		static const char* UI_RADIO_SINGLE = "Single";
 		static const char* UI_RADIO_DUAL = "Dual";
 		static const char* UI_TIP_TARGET_GLOBAL_FUNCS = "Target specific global functions inside the file";
@@ -129,7 +133,6 @@ namespace RadarKeys {
 		static const char* UI_FMT_S = "%s";
 		static const char* UI_BTN_FINALIZE = "Finalize";
 		static const char* UI_BTN_CANCEL = "Cancel";
-		static const char* UI_TXT_TAKES_EFFECT_NEXT_FRAME = "This will immediately take effect once the frame updates after assigning.";
 		static const char* UI_WINDOW_TITLE = "RadarKeys - Key Bindings";
 		static const char* UI_BTN_DEBUGGER = "Debugger";
 		static const char* UI_LOG_DEBUGGER_OPENED = "Debugger Overlay opened";
@@ -144,8 +147,6 @@ namespace RadarKeys {
 			"While this menu (or the Debugger overlay) is open, checking a device here hides it from the game right\n"
 			"away so Venom Snake doesn't move, aim or fire - unchecking it restores that device right away too.\n"
 			"Suppression only ever applies while this window is visibly open. Closing it always restores all input to the game.";
-		static const char* UI_HDR_KEY_BINDINGS = "Key Bindings";
-		static const char* UI_TXT_DESCRIBED_KEYS_HINT = "Described information will be displayed when the script names are hovered by the mouse.";
 		static const char* UI_TXT_NO_KEYS_ASSIGNED = "(No Keys are assigned yet.)";
 		static const char* UI_TXT_NOT_YET_DESCRIBED = "-> (Key is not yet described through RadarKeys module.)";
 		constexpr float kKeyStateChipWidth = 13.0f;
@@ -3823,12 +3824,16 @@ namespace RadarKeys {
 			const ImU32 kFooterDotConflictCol = IM_COL32(160, 34, 34, 255);
 			footerDrawList->AddCircleFilled(kFooterDotCenter, kFooterDotRadiusPx, canFinalize ? kFooterDotReadyCol : kFooterDotConflictCol, 0);
 			const float kFooterDotHoverPadPx = 2.0f;
-			if (ImGui::IsMouseHoveringRect(ImVec2(kFooterDotCenter.x - kFooterDotRadiusPx - kFooterDotHoverPadPx, kFooterDotCenter.y - kFooterDotRadiusPx - kFooterDotHoverPadPx), ImVec2(kFooterDotCenter.x + kFooterDotRadiusPx + kFooterDotHoverPadPx, kFooterDotCenter.y + kFooterDotRadiusPx + kFooterDotHoverPadPx))) {
-				ImGui::SetTooltip(canFinalize ? UI_TIP_COMBO_VALID : UI_TIP_COMBO_CONFLICT);
+			const char* finalizeBlockerHint = UI_TIP_COMBO_VALID;
+			if (!canFinalize) {
+				if (!captureReady) finalizeBlockerHint = UI_TIP_FINALIZE_NOTHING_CAPTURED;
+				else if (!holdValid) finalizeBlockerHint = UI_TIP_FINALIZE_ZERO_HOLD;
+				else if (!assignmentIsValid) finalizeBlockerHint = UI_TIP_COMBO_CONFLICT;
+				else if (!pathsValid) finalizeBlockerHint = UI_TIP_FINALIZE_SCRIPT_PATH;
+				else finalizeBlockerHint = UI_TIP_FINALIZE_SCRIPT_FUNCTION;
 			}
-
-			if (isAssigningModKey) {
-				ImGui::TextDisabled(UI_TXT_TAKES_EFFECT_NEXT_FRAME);
+			if (ImGui::IsMouseHoveringRect(ImVec2(kFooterDotCenter.x - kFooterDotRadiusPx - kFooterDotHoverPadPx, kFooterDotCenter.y - kFooterDotRadiusPx - kFooterDotHoverPadPx), ImVec2(kFooterDotCenter.x + kFooterDotRadiusPx + kFooterDotHoverPadPx, kFooterDotCenter.y + kFooterDotRadiusPx + kFooterDotHoverPadPx))) {
+				ImGui::SetTooltip("%s", finalizeBlockerHint);
 			}
 			ImGui::End();
 		}
@@ -3953,7 +3958,6 @@ namespace RadarKeys {
 			}
 			ImGui::Separator();
 
-			ImGui::Text(UI_HDR_KEY_BINDINGS);
 			const float kListMinHeight = 150.0f;
 
 			{
@@ -4714,9 +4718,6 @@ namespace RadarKeys {
 				static bool groupResetConfirmPending = false;
 				static bool groupResetPopupRequested = false;
 				static std::string groupResetConfirmGroup;
-				if (!rows.empty()) {
-					ImGui::TextDisabled(UI_TXT_DESCRIBED_KEYS_HINT);
-				}
 				float cursorYBeforeList = ImGui::GetCursorPosY();
 				float listRemainingHeight = (ImGui::GetWindowHeight() - kFooterBottomPadPx - kFooterButtonHeight - kListFooterGapPx) - cursorYBeforeList;
 				if (listRemainingHeight < kListMinHeight) listRemainingHeight = kListMinHeight;
