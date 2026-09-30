@@ -3041,17 +3041,13 @@ namespace RadarKeys {
 
 			if (!isAssigningMenuToggleKey) {
 				bool wasCombo = captureIsCombo;
-				bool wasInject = captureIsInject;
 				if (ImGui::RadioButton(UI_RADIO_SINGLE_KEY, !captureIsCombo)) { captureIsCombo = false; }
 				ImGui::SameLine();
 				if (ImGui::RadioButton(UI_RADIO_MULTI_KEY_COMBO, captureIsCombo)) { captureIsCombo = true; }
 				if (captureIsCombo != wasCombo) {
 					capturedVKey = 0;
+					capturedCtrl = capturedShift = capturedAlt = false;
 					ResetComboCaptureState();
-				}
-				if (captureIsInject != wasInject) {
-					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
-					capturedToggleLocked = false;
 				}
 				ImGui::Separator();
 			}
@@ -3195,15 +3191,8 @@ namespace RadarKeys {
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (kKeyDisplayBoxWidth - kResetButtonWidth) * 0.5f);
 			if (ImGui::Button(UI_BTN_RESET, ImVec2(kResetButtonWidth, 22))) {
 				capturedVKey = 0;
-				capturedCtrl = capturedShift = capturedAlt = capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
-				capturedToggleLocked = false;
-				capturedHoldSeconds = 0.0f;
-				capturedToggleType = 0;
-				capturedInstantMode = false;
-				capturedInstantTriggerType = 0;
-				capturedRepeatAccelMult = 1.0f;
-				capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
-				capturedInstantUserSet = false;
+				capturedCtrl = capturedShift = capturedAlt = false;
+				ResetComboCaptureState();
 				LogActivity(LOG_KEYBIND_HAS_BEEN_RESET);
 			}
 			ImGui::PopStyleVar();
@@ -3286,15 +3275,6 @@ namespace RadarKeys {
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (kKeyDisplayBoxWidth - kResetButtonWidth) * 0.5f);
 				if (ImGui::Button(UI_BTN_RESET, ImVec2(kResetButtonWidth, 22))) {
 					ResetComboCaptureState();
-					capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
-					capturedToggleLocked = false;
-					capturedHoldSeconds = 0.0f;
-					capturedToggleType = 0;
-					capturedInstantMode = false;
-					capturedInstantTriggerType = 0;
-					capturedRepeatAccelMult = 1.0f;
-					capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
-					capturedInstantUserSet = false;
 					LogActivity(LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET);
 				}
 				ImGui::PopStyleVar();
