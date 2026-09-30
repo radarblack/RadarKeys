@@ -50,6 +50,7 @@ namespace RadarKeys {
 			int physicalUpEdgePending = 0;
 			bool heldStartSet = false;
 			bool onHoldStartSet = false;
+			bool holdFiredThisPress = false;
 			bool repeatStartSet = false;
 			bool pendingUsesOnPress = false;
 			bool pendingUsesHoldTime = false;
@@ -72,6 +73,7 @@ namespace RadarKeys {
 		struct ComboPollState {
 			bool active = false;
 			bool holdStartSet = false;
+			bool holdFiredThisPress = false;
 			bool repeatStartSet = false;
 			bool pendingUsesOnPress = false;
 			bool pendingUsesOnRelease = false;
@@ -174,6 +176,7 @@ namespace RadarKeys {
 				s.heldStartSet = true;
 				s.onHoldStart = now;
 				s.onHoldStartSet = true;
+				s.holdFiredThisPress = false;
 				s.repeatStart = now;
 				s.repeatStartSet = true;
 				s.currentIncrementMult = 1.0;
@@ -205,6 +208,7 @@ namespace RadarKeys {
 				s.heldStartSet = true;
 				s.onHoldStart = now;
 				s.onHoldStartSet = true;
+				s.holdFiredThisPress = false;
 				s.repeatStart = now;
 				s.repeatStartSet = true;
 			}
@@ -317,6 +321,11 @@ namespace RadarKeys {
 				s.upEdgePending = 0;
 				return false;
 			}
+			if (s.holdFiredThisPress) {
+				s.holdFiredThisPress = false;
+				s.upEdgePending = 0;
+				return false;
+			}
 			if (s.upEdgePending > 0) {
 				s.upEdgePending--;
 				return true;
@@ -360,6 +369,7 @@ namespace RadarKeys {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.onHoldStart).count();
 				if (elapsed >= holdTime) {
 					s.onHoldStartSet = false;
+					s.holdFiredThisPress = true;
 					return true;
 				}
 			}
@@ -388,6 +398,7 @@ namespace RadarKeys {
 				double elapsed = std::chrono::duration<double>(clock::now() - s.onHoldStart).count();
 				if (elapsed >= holdTime) {
 					s.onHoldStartSet = false;
+					s.holdFiredThisPress = true;
 					return true;
 				}
 			}
@@ -544,6 +555,7 @@ namespace RadarKeys {
 			bool allHeld = RawComboAllHeld(active);
 			if (allHeld && !state.active) {
 				state.active = true;
+				state.holdFiredThisPress = false;
 				state.holdStartSet = true;
 				state.repeatStartSet = true;
 				state.pressTime = clock::now();
@@ -572,6 +584,7 @@ namespace RadarKeys {
 			bool allHeld = RawComboAllHeld(active);
 			if (allHeld && !state.active) {
 				state.active = true;
+				state.holdFiredThisPress = false;
 				state.pressTime = clock::now();
 				state.repeatStart = state.pressTime;
 				state.holdStartSet = true;
@@ -583,7 +596,9 @@ namespace RadarKeys {
 				state.holdStartSet = false;
 				state.repeatStartSet = false;
 				state.currentIncrementMult = 1.0;
-				return true;
+				bool swallowRelease = state.holdFiredThisPress;
+				state.holdFiredThisPress = false;
+				return !swallowRelease;
 			}
 			return false;
 		}
@@ -608,6 +623,7 @@ namespace RadarKeys {
 			}
 			if (!state.active) {
 				state.active = true;
+				state.holdFiredThisPress = false;
 				state.pressTime = clock::now();
 				state.holdStartSet = true;
 			}
@@ -634,11 +650,13 @@ namespace RadarKeys {
 			}
 			if (!state.active) {
 				state.active = true;
+				state.holdFiredThisPress = false;
 				state.pressTime = clock::now();
 				state.holdStartSet = true;
 			}
 			if (state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime) {
 				state.holdStartSet = false;
+				state.holdFiredThisPress = true;
 				return true;
 			}
 			return false;
@@ -662,6 +680,7 @@ namespace RadarKeys {
 			}
 			if (!state.active) {
 				state.active = true;
+				state.holdFiredThisPress = false;
 				state.pressTime = clock::now();
 				state.repeatStart = state.pressTime;
 				state.holdStartSet = true;
@@ -1037,12 +1056,14 @@ namespace RadarKeys {
 				s.physicalUpEdgePending = 0;
 				s.heldStartSet = false;
 				s.onHoldStartSet = false;
+				s.holdFiredThisPress = false;
 				s.repeatStartSet = false;
 				s.currentIncrementMult = 1.0;
 			}
 			for (auto& entry : comboStates) {
 				entry.second.active = false;
 				entry.second.holdStartSet = false;
+				entry.second.holdFiredThisPress = false;
 				entry.second.repeatStartSet = false;
 				entry.second.currentIncrementMult = 1.0;
 			}
