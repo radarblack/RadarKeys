@@ -3895,9 +3895,9 @@ namespace RadarKeys {
 			if (s_requiredContentWidth + 48.0f > finalMinWidthFloor) {
 				finalMinWidthFloor = s_requiredContentWidth + 48.0f;
 			}
-			constexpr float kWindowMinHeight = 360.0f;
-			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, kWindowMinHeight), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, kWindowMinHeight), ImVec2(FLT_MAX, FLT_MAX));
+			static float s_mainWindowMinHeight = 360.0f;
+			ImGui::SetNextWindowSize(ImVec2(finalMinWidthFloor, s_mainWindowMinHeight), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSizeConstraints(ImVec2(finalMinWidthFloor, s_mainWindowMinHeight), ImVec2(FLT_MAX, FLT_MAX));
 
 			bool wasOpenBeforeBegin = p_open ? *p_open : true;
 			bool windowIsOpen = ImGui::Begin(UI_WINDOW_TITLE, p_open);
@@ -3957,8 +3957,9 @@ namespace RadarKeys {
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float cursorYBeforeList = ImGui::GetCursorPosY();
-			float listRemainingHeight = ImGui::GetWindowHeight() - cursorYBeforeList - ImGui::GetStyle().ItemSpacing.y - kFooterButtonHeight - paddingY - kFooterBottomPadPx;
+			float listRemainingHeight = (ImGui::GetWindowHeight() - kFooterButtonHeight - kFooterBottomPadPx) - ImGui::GetStyle().ItemSpacing.y - cursorYBeforeList;
 			if (listRemainingHeight < kListMinHeight) listRemainingHeight = kListMinHeight;
+			s_mainWindowMinHeight = cursorYBeforeList + ImGui::GetStyle().ItemSpacing.y + kListMinHeight + kFooterButtonHeight + paddingY + kFooterBottomPadPx;
 
 			{
 				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
@@ -5398,6 +5399,7 @@ namespace RadarKeys {
 			bool enableAllMode = allKeysDisabled && !clearAllDisabled;
 
 			if (clearAllDisabled) ImGui::BeginDisabled();
+			ImGui::SetCursorPosY(ImGui::GetWindowHeight() - kFooterButtonHeight - kFooterBottomPadPx);
 			bool clearAllClicked = ImGui::Button(enableAllMode ? UI_BTN_ENABLE_ALL_KEYS : UI_BTN_CLEAR_ALL_HOTKEYS, ImVec2(145, kFooterButtonHeight));
 			ImVec2 clearAllBtnMin = ImGui::GetItemRectMin();
 			ImVec2 clearAllBtnMax = ImGui::GetItemRectMax();
