@@ -73,12 +73,12 @@ namespace RadarKeys {
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT = "KeyBindMenu: Updated script-lines binding: {} -> lines {}-{} of {}";
 		static const char* LOG_RADARKEYS_KEYBINDMENU_INITIALIZING = "KeyBindMenu: initializing";
 		static const char* LOG_KEY_ASSIGNMENT_PROMPT_CANCELLED = "KeyBindMenu: Key Assignment Prompt cancelled";
-		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_KEY = "KeyBindMenu: Multi-key combo capture cancelled - a key was released before the hold completed";
-		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_MORE = "KeyBindMenu: Multi-key combo capture cancelled - more than 3 keys held";
+		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_KEY = "KeyBindMenu: Combo Key capture cancelled - a key was released before the hold completed";
+		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_MORE = "KeyBindMenu: Combo Key capture cancelled - more than 3 keys held";
 		static const char* LOG_SINGLE_KEY_CAPTURE_CANCELLED_KEY_RELEASED = "KeyBindMenu: Single-key capture cancelled - key was released before the hold completed";
 		static const char* LOG_KEYBINDMENU_CAPTURED_SINGLE_KEY_VKEY_FMT = "KeyBindMenu: captured single key vKey={} name=\"{}\" ctrl={} shift={} alt={}";
 		static const char* LOG_KEYBIND_HAS_BEEN_RESET = "KeyBindMenu: Keybind has been reset";
-		static const char* LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET = "KeyBindMenu: Multi-key combo has been reset";
+		static const char* LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET = "KeyBindMenu: Combo Key has been reset";
 		static const char* LOG_MENU_KEY_REASSIGNMENT_PROMPT_OPENED = "KeyBindMenu: Menu Key Reassignment Prompt opened";
 		static const char* LOG_KEY_ASSIGNMENT_BINDING_PROMPT_OPENED = "KeyBindMenu: Key Assignment Binding Prompt opened";
 
@@ -1438,7 +1438,7 @@ namespace RadarKeys {
 						FireBinding(*toRun);
 						firedImmediately = true;
 					} else if (toRun && suppressedByCombo) {
-						LogActivity(NameForVKey(vKey) + " press suppressed - part of an active Multi-Key Combo");
+						LogActivity(NameForVKey(vKey) + " press suppressed - part of an active Combo Key");
 					}
 
 					PendingPress pending;
@@ -2729,7 +2729,7 @@ namespace RadarKeys {
 					if (currentlyHeld.size() >= 2 && currentlyHeld.size() <= 3) {
 						comboHoldKeys = currentlyHeld;
 						comboHoldStartTime = std::chrono::steady_clock::now();
-						LogActivity("KeyBindMenu: Multi-key combo capture adjusted: now holding " + ComboKeysDisplayName(currentlyHeld));
+						LogActivity("KeyBindMenu: Combo Key capture adjusted: now holding " + ComboKeysDisplayName(currentlyHeld));
 					} else {
 						comboHoldActive = false;
 						comboHoldKeys.clear();
@@ -2759,7 +2759,7 @@ namespace RadarKeys {
 					capturedInstantMode = true;
 					capturedInstantTriggerType = 0;
 				}
-				LogActivity("KeyBindMenu: Multi-key combo captured: " + ComboKeysDisplayName(capturedComboKeys));
+				LogActivity("KeyBindMenu: Combo Key captured: " + ComboKeysDisplayName(capturedComboKeys));
 			}
 		}
 
@@ -2930,7 +2930,7 @@ namespace RadarKeys {
 				if (row.hasToggleState) {
 					result.anyToggle = true;
 				}
-				std::string triggerLabel = "Multi-key combo";
+				std::string triggerLabel = "Combo Key";
 				bool hasStoredTrigger = ModKeyBindings::HasTriggerConfig(scriptName, functionName);
 				if (hasStoredTrigger) {
 					ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
@@ -2976,7 +2976,7 @@ namespace RadarKeys {
 				std::vector<USHORT> overrideMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(scriptName, functionName));
 				if (overrideMembers.size() >= 2) {
 					result.found = true;
-					std::string triggerLabel = "Multi-key combo";
+					std::string triggerLabel = "Combo Key";
 					ModKeyBindings::TriggerConfig storedTrigger = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
 					if (storedTrigger.triggerType == 0 && storedTrigger.holdSeconds > 0.0f) {
 						result.anyLongPress = true;
