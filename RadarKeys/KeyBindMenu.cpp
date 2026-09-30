@@ -159,7 +159,8 @@ namespace RadarKeys {
 		constexpr float kDefaultHoldSeconds = 1.0f;
 		constexpr float kRepeatIntervalInputWidth = 55.0f;
 		constexpr float kFooterButtonHeight = 24.0f;
-		constexpr float kFooterBottomPadPx = 2.0f;
+		constexpr float kFooterBottomPadPx = 8.0f;
+		constexpr float kListFooterGapPx = 8.0f;
 		static const ImVec4 kKeyStateRed = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
 		static const ImVec4 kKeyStateGreen = ImVec4(0.4f, 1.0f, 0.4f, 1.0f);
 		static const char* UI_TIP_CLICK_HOLD_REMOVE = "Click to %s.\nHold for 1.5 seconds to remove.";
@@ -3957,9 +3958,9 @@ namespace RadarKeys {
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float cursorYBeforeList = ImGui::GetCursorPosY();
-			float listRemainingHeight = (ImGui::GetWindowHeight() - kFooterButtonHeight - kFooterBottomPadPx) - ImGui::GetStyle().ItemSpacing.y - cursorYBeforeList;
+			float listRemainingHeight = (ImGui::GetWindowHeight() - kFooterBottomPadPx - kFooterButtonHeight - kListFooterGapPx) - cursorYBeforeList;
 			if (listRemainingHeight < kListMinHeight) listRemainingHeight = kListMinHeight;
-			s_mainWindowMinHeight = cursorYBeforeList + ImGui::GetStyle().ItemSpacing.y + kListMinHeight + kFooterButtonHeight + paddingY + kFooterBottomPadPx;
+			s_mainWindowMinHeight = cursorYBeforeList + kListMinHeight + kListFooterGapPx + kFooterButtonHeight + kFooterBottomPadPx;
 
 			{
 				std::vector<LuaKeyState::TrackedKeyInfo> trackedKeys = LuaKeyState::GetTrackedKeyInfo();
