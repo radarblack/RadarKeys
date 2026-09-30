@@ -98,6 +98,7 @@ namespace RadarKeys {
 		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
 		static const char* UI_CHK_TOGGLE = "Toggle";
 		static const char* UI_TIP_TOGGLE_SCRIPT_DECLARED = "This key is declared from the mod! Toggle triggers should be declared from the script.";
+		static const char* UI_TIP_TRIGGER_SIBLING_OWNED = "Owned by another function on this key. Reassign that function key or change its trigger to free this.";
 		static const char* UI_CHK_LONG_PRESS = "Long Press";
 		static const char* UI_BTN_MINUS = "-";
 		static const char* UI_BTN_PLUS = "+";
@@ -983,54 +984,57 @@ namespace RadarKeys {
 			return mask;
 		}
 
-		bool IsModSingleAssignmentAvailable(USHORT vKey, const std::string& scriptName, const std::string& functionName) {
+		bool IsModSingleAssignmentAvailable(USHORT vKey, const std::string& scriptName, const std::string& functionName, unsigned pendingMask) {
 			if (IsReservedVKey(vKey)) return false;
 			for (const auto& bind : bindings) {
 				if (!bind.isInject || !bind.scriptDescribed || bind.vKey != vKey) continue;
 				if (bind.injectScriptName == scriptName && bind.injectFunctionName == functionName) continue;
-				return false;
+				if ((ManualTriggerMask(bind) & pendingMask) != 0) return false;
 			}
-			unsigned modMask = GetModSingleTriggerMask(scriptName, functionName);
-			if (modMask == Trigger_None) return true;
+			if (pendingMask == Trigger_None) return true;
 
 			for (const auto& bind : bindings) {
 				if (bind.IsCombo() || bind.vKey != vKey) continue;
-				if ((ManualTriggerMask(bind) & modMask) != 0) return false;
+				if (bind.isInject && bind.scriptDescribed && bind.injectScriptName == scriptName && bind.injectFunctionName == functionName) continue;
+				if ((ManualTriggerMask(bind) & pendingMask) != 0) return false;
 			}
 
 			for (const auto& other : LuaKeyState::GetTrackedKeyInfo()) {
 				if (!other.hasDescription || other.vKey != vKey) continue;
 				if (other.scriptName == scriptName && other.functionName == functionName) continue;
-				if ((modMask & ModTriggerMask(other)) != 0) return false;
+				if ((pendingMask & ModTriggerMask(other)) != 0) return false;
 			}
 			return true;
 		}
 
-		bool IsModComboAssignmentAvailable(const std::vector<USHORT>& comboKeys, const std::string& scriptName, const std::string& functionName) {
+		bool IsModComboAssignmentAvailable(const std::vector<USHORT>& comboKeys, const std::string& scriptName, const std::string& functionName, unsigned pendingMask) {
 			for (USHORT k : comboKeys) {
 				if (IsReservedVKey(k)) return false;
 			}
 			for (const auto& bind : bindings) {
 				if (!bind.isInject || !bind.scriptDescribed) continue;
 				if (bind.injectScriptName == scriptName && bind.injectFunctionName == functionName) continue;
+				bool memberOfCapture = false;
 				for (USHORT k : comboKeys) {
-					if (bind.vKey == k) return false;
+					if (bind.vKey == k) memberOfCapture = true;
 				}
+				if (!memberOfCapture) continue;
+				if ((ManualTriggerMask(bind) & pendingMask) != 0) return false;
 			}
-			unsigned modMask = GetModComboTriggerMask(scriptName, functionName);
-			if (modMask == Trigger_None) return true;
+			if (pendingMask == Trigger_None) return true;
 
 			for (int i = 0; i < (int)bindings.size(); ++i) {
 				const KeyBind& bind = bindings[i];
 				if (!bind.IsCombo() || !VectorsEqualUnordered(bind.comboKeys, comboKeys)) continue;
-				if ((ManualTriggerMask(bind) & modMask) != 0) return false;
+				if (bind.isInject && bind.scriptDescribed && bind.injectScriptName == scriptName && bind.injectFunctionName == functionName) continue;
+				if ((ManualTriggerMask(bind) & pendingMask) != 0) return false;
 			}
 
 			for (const auto& other : LuaKeyState::GetTrackedComboKeyInfo()) {
 				if (!VectorsEqualUnordered(other.activeKeys, comboKeys)) continue;
 				if (other.scriptName == scriptName && other.functionName == functionName) continue;
 				unsigned otherMask = ModComboTriggerMask(other);
-				if ((modMask & otherMask) != 0) return false;
+				if ((pendingMask & otherMask) != 0) return false;
 			}
 			return true;
 		}
@@ -2665,6 +2669,18 @@ namespace RadarKeys {
 			singleHoldActive = false;
 		}
 
+		unsigned ModPendingTriggerMask() {
+			if (capturedInstantMode) {
+				switch (capturedInstantTriggerType) {
+					case 1: return Trigger_OnRelease;
+					case 2: return Trigger_Repeat;
+					default: return Trigger_OnPress;
+				}
+			}
+			if (capturedLongPressMode) return Trigger_LongPress;
+			return Trigger_OnPress;
+		}
+
 		void CancelCaptureIfActive() {
 			if (!showCapturePrompt) {
 				return;
@@ -2819,6 +2835,93 @@ namespace RadarKeys {
 			int instantType = 0;
 			std::vector<std::string> breakdownLines;
 		};
+
+		ModKeyReadOnlyInfo ComputeOwnModKeyInfo(const std::string& scriptName, const std::string& functionName) {
+			ModKeyReadOnlyInfo result;
+			result.found = true;
+			if (ModKeyBindings::HasTriggerConfig(scriptName, functionName)) {
+				ModKeyBindings::TriggerConfig stored = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
+				result.anyToggle = stored.toggleMode;
+				if (stored.triggerType == 0 && stored.holdSeconds > 0.0f) {
+					result.anyLongPress = true;
+					result.longPressSeconds = (double)stored.holdSeconds;
+				} else {
+					result.anyInstant = true;
+					result.instantType = (stored.triggerType == 1) ? 1 : ((stored.triggerType == 2) ? 2 : 0);
+				}
+				return result;
+			}
+			for (const auto& tk : LuaKeyState::GetTrackedKeyInfo()) {
+				if (tk.scriptName != scriptName || tk.functionName != functionName) continue;
+				result.anyToggle = tk.hasToggleState;
+				if (tk.declaredTriggerType >= 0) {
+					if (tk.declaredTriggerType == 0 && tk.declaredHoldSeconds > 0.0) {
+						result.anyLongPress = true;
+						result.longPressSeconds = tk.declaredHoldSeconds;
+					} else {
+						result.anyInstant = true;
+						result.instantType = (tk.declaredTriggerType == 1) ? 1 : ((tk.declaredTriggerType == 2) ? 2 : 0);
+					}
+					return result;
+				}
+				if (tk.usesHoldTime) {
+					result.anyLongPress = true;
+					result.longPressSeconds = tk.lastHoldSeconds;
+					return result;
+				}
+				if (tk.usesRepeat || tk.usesOnRelease || tk.usesOnPress) {
+					result.anyInstant = true;
+					result.instantType = tk.usesRepeat ? 2 : (tk.usesOnRelease ? 1 : 0);
+					return result;
+				}
+				return result;
+			}
+			return result;
+		}
+
+		ModKeyReadOnlyInfo ComputeOwnComboModKeyInfo(const std::string& scriptName, const std::string& functionName, const std::vector<USHORT>& comboKeys) {
+			ModKeyReadOnlyInfo result;
+			result.found = true;
+			if (ModKeyBindings::HasTriggerConfig(scriptName, functionName)) {
+				ModKeyBindings::TriggerConfig stored = ModKeyBindings::GetTriggerConfig(scriptName, functionName);
+				result.anyToggle = stored.toggleMode;
+				if (stored.triggerType == 0 && stored.holdSeconds > 0.0f) {
+					result.anyLongPress = true;
+					result.longPressSeconds = (double)stored.holdSeconds;
+				} else {
+					result.anyInstant = true;
+					result.instantType = (stored.triggerType == 1) ? 1 : ((stored.triggerType == 2) ? 2 : 0);
+				}
+				return result;
+			}
+			for (const auto& tc : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (tc.scriptName != scriptName || tc.functionName != functionName) continue;
+				if (!VectorsEqualUnordered(tc.activeKeys, comboKeys)) continue;
+				result.anyToggle = tc.hasToggleState;
+				if (tc.declaredTriggerType >= 0) {
+					if (tc.declaredTriggerType == 0 && tc.declaredHoldSeconds > 0.0) {
+						result.anyLongPress = true;
+						result.longPressSeconds = tc.declaredHoldSeconds;
+					} else {
+						result.anyInstant = true;
+						result.instantType = (tc.declaredTriggerType == 1) ? 1 : ((tc.declaredTriggerType == 2) ? 2 : 0);
+					}
+					return result;
+				}
+				if (tc.usesHoldTime) {
+					result.anyLongPress = true;
+					result.longPressSeconds = tc.lastHoldSeconds;
+					return result;
+				}
+				if (tc.usesRepeat || tc.usesOnRelease || tc.usesOnPress) {
+					result.anyInstant = true;
+					result.instantType = tc.usesRepeat ? 2 : (tc.usesOnRelease ? 1 : 0);
+					return result;
+				}
+				return result;
+			}
+			return result;
+		}
 
 		ModKeyReadOnlyInfo ComputeModKeyReadOnlyInfo(const std::string& scriptName, const std::string& functionName) {
 			ModKeyReadOnlyInfo result;
@@ -3314,24 +3417,98 @@ namespace RadarKeys {
 			ImGui::SetCursorPos(ImVec2(optionsColX, captureColTopY));
 
 			ImGui::BeginGroup();
+			bool siblingClaimsInstant = false;
+			int siblingInstantType = 0;
+			bool siblingClaimsLongPress = false;
+			double siblingLongPressSeconds = 0.0;
+			bool siblingClaimsToggle = false;
+			if (isAssigningModKey) {
+				auto claimFromType = [&](int triggerType, double holdSeconds) {
+					if (triggerType == 0 && holdSeconds > 0.0) {
+						siblingClaimsLongPress = true;
+						siblingLongPressSeconds = holdSeconds;
+					} else {
+						siblingClaimsInstant = true;
+						siblingInstantType = (triggerType == 1) ? 1 : ((triggerType == 2) ? 2 : 0);
+					}
+				};
+				if (captureIsCombo) {
+					for (const auto& tc : LuaKeyState::GetTrackedComboKeyInfo()) {
+						if (tc.scriptName == modKeyCaptureScriptName && tc.functionName == modKeyCaptureFunctionName) continue;
+						if (!VectorsEqualUnordered(tc.activeKeys, capturedComboKeys)) continue;
+						if (ModKeyBindings::HasTriggerConfig(tc.scriptName, tc.functionName)) {
+							ModKeyBindings::TriggerConfig cfg = ModKeyBindings::GetTriggerConfig(tc.scriptName, tc.functionName);
+							siblingClaimsToggle = siblingClaimsToggle || cfg.toggleMode;
+							claimFromType(cfg.triggerType, (double)cfg.holdSeconds);
+						} else if (tc.declaredTriggerType >= 0) {
+							claimFromType(tc.declaredTriggerType, tc.declaredHoldSeconds);
+							siblingClaimsToggle = siblingClaimsToggle || tc.hasToggleState;
+						} else if (tc.usesHoldTime) {
+							claimFromType(0, tc.lastHoldSeconds);
+						} else if (tc.usesRepeat) {
+							claimFromType(2, 0.0);
+						} else if (tc.usesOnRelease) {
+							claimFromType(1, 0.0);
+						} else if (tc.usesOnPress) {
+							claimFromType(3, 0.0);
+						}
+					}
+				} else {
+					for (const auto& tk : LuaKeyState::GetTrackedKeyInfo()) {
+						if (tk.scriptName == modKeyCaptureScriptName && tk.functionName == modKeyCaptureFunctionName) continue;
+						if (tk.vKey != capturedVKey) continue;
+						if (ModKeyBindings::HasTriggerConfig(tk.scriptName, tk.functionName)) {
+							ModKeyBindings::TriggerConfig cfg = ModKeyBindings::GetTriggerConfig(tk.scriptName, tk.functionName);
+							siblingClaimsToggle = siblingClaimsToggle || cfg.toggleMode;
+							claimFromType(cfg.triggerType, (double)cfg.holdSeconds);
+						} else if (tk.declaredTriggerType >= 0) {
+							claimFromType(tk.declaredTriggerType, tk.declaredHoldSeconds);
+							siblingClaimsToggle = siblingClaimsToggle || tk.hasToggleState;
+						} else if (tk.usesHoldTime) {
+							claimFromType(0, tk.lastHoldSeconds);
+						} else if (tk.usesRepeat) {
+							claimFromType(2, 0.0);
+						} else if (tk.usesOnRelease) {
+							claimFromType(1, 0.0);
+						} else if (tk.usesOnPress) {
+							claimFromType(3, 0.0);
+						}
+					}
+				}
+			}
+			unsigned modPendingMask = Trigger_None;
+			if (isAssigningModKey) modPendingMask = ModPendingTriggerMask();
 			if (!isAssigningMenuToggleKey) {
 
 				float triggerColX = optionsColX;
 				float triggerInputStartX = triggerColX + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x;
-				bool toggleLockedForScript = capturedToggleLocked && isAssigningModKey;
+				bool toggleLockedForScript = (capturedToggleLocked || siblingClaimsToggle) && isAssigningModKey;
+				bool lpLockedForSibling = isAssigningModKey && siblingClaimsLongPress && !capturedLongPressMode;
+				bool instantLockedForSibling = isAssigningModKey && siblingClaimsInstant && !capturedInstantMode;
 				if (toggleLockedForScript) ImGui::BeginDisabled();
 				ImGui::SetCursorPosX(triggerColX);
-				ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
+				if (toggleLockedForScript) {
+					bool toggleDisplayValue = capturedToggleMode || siblingClaimsToggle;
+					ImGui::Checkbox(UI_CHK_TOGGLE, &toggleDisplayValue);
+				} else {
+					ImGui::Checkbox(UI_CHK_TOGGLE, &capturedToggleMode);
+				}
 				if (toggleLockedForScript && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::SetTooltip(UI_TIP_TOGGLE_SCRIPT_DECLARED);
+					ImGui::SetTooltip(capturedToggleLocked ? UI_TIP_TOGGLE_SCRIPT_DECLARED : UI_TIP_TRIGGER_SIBLING_OWNED);
 				}
 				if (toggleLockedForScript) ImGui::EndDisabled();
+				if (lpLockedForSibling) ImGui::BeginDisabled();
 				ImGui::SetCursorPosX(triggerColX);
-				if (ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode)) {
+				if (lpLockedForSibling) {
+					bool lpDisplayChecked = true;
+					ImGui::Checkbox(UI_CHK_LONG_PRESS, &lpDisplayChecked);
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip(UI_TIP_TRIGGER_SIBLING_OWNED);
+				} else if (ImGui::Checkbox(UI_CHK_LONG_PRESS, &capturedLongPressMode)) {
 					capturedInstantMode = !capturedLongPressMode;
 					capturedInstantUserSet = true;
 					if (capturedLongPressMode && capturedHoldSeconds <= 0.0f) capturedHoldSeconds = kDefaultHoldSeconds;
 				}
+				if (lpLockedForSibling) ImGui::EndDisabled();
 				
 				if (capturedLongPressMode) {
 				    const float stepperSize = ImGui::GetFrameHeight();
@@ -3345,10 +3522,27 @@ namespace RadarKeys {
 				    if (ImGui::Button(UI_BTN_MINUS, ImVec2(stepperSize, stepperSize))) { if ((capturedHoldSeconds -= 0.5f) < 0.0f) capturedHoldSeconds = 0.0f; } ImGui::SameLine();
 				    if (ImGui::Button(UI_BTN_PLUS, ImVec2(stepperSize, stepperSize))) capturedHoldSeconds += 0.5f;
 				}
+				else if (lpLockedForSibling) {
+				    const float stepperSize = ImGui::GetFrameHeight();
+				    const float stepperPairWidth = stepperSize * 2.0f + ImGui::GetStyle().ItemSpacing.x;
+				    ImGui::SetCursorPosX(triggerInputStartX);
+				    ImGui::SetNextItemWidth(stepperPairWidth);
+				    float siblingHoldDisplay = (float)siblingLongPressSeconds;
+				    const std::string holdInputFormat = CenteredFloatInputFormat(siblingHoldDisplay, "%.1fs", stepperPairWidth);
+				    ImGui::BeginDisabled();
+				    ImGui::InputFloat("##capturedHoldInputSibling", &siblingHoldDisplay, 0.0f, 0.0f, holdInputFormat.c_str());
+				    ImGui::EndDisabled();
+				}
 
 				bool instantSelected = capturedInstantMode;
 				ImGui::SetCursorPosX(triggerColX);
-				if (ImGui::Checkbox(UI_CHK_INSTANT, &instantSelected)) {
+				if (instantLockedForSibling) {
+					ImGui::BeginDisabled();
+					bool instantDisplayChecked = true;
+					ImGui::Checkbox(UI_CHK_INSTANT, &instantDisplayChecked);
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip(UI_TIP_TRIGGER_SIBLING_OWNED);
+					ImGui::EndDisabled();
+				} else if (ImGui::Checkbox(UI_CHK_INSTANT, &instantSelected)) {
 					capturedInstantMode = true;
 					capturedLongPressMode = false;
 					capturedInstantUserSet = true;
@@ -3379,6 +3573,16 @@ namespace RadarKeys {
 						}
 					}
 				}
+				else if (instantLockedForSibling) {
+					static const char* siblingTriggerLabels[] = { UI_OPT_ON_PRESS, UI_OPT_ON_RELEASE, UI_OPT_REPEAT };
+					int siblingInstantDisplay = siblingInstantType;
+					ImGui::SetCursorPosX(triggerInputStartX);
+					ImGui::SetNextItemWidth(instantComboWidth);
+					ImGui::BeginDisabled();
+					ImGui::Combo("##capturedInstantTriggerSibling", &siblingInstantDisplay, siblingTriggerLabels, IM_ARRAYSIZE(siblingTriggerLabels));
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip(UI_TIP_TRIGGER_SIBLING_OWNED);
+					ImGui::EndDisabled();
+				}
 
 			}
 			
@@ -3387,7 +3591,7 @@ namespace RadarKeys {
 				if (!capturedComboKeys.empty()) {
 					if (isAssigningModKey) {
 						comboAvailable = IsModComboAssignmentAvailable(
-							capturedComboKeys, modKeyCaptureScriptName, modKeyCaptureFunctionName);
+							capturedComboKeys, modKeyCaptureScriptName, modKeyCaptureFunctionName, modPendingMask);
 					} else {
 						comboAvailable = IsMultiKeyComboAvailable(
 							capturedComboKeys,
@@ -3399,7 +3603,7 @@ namespace RadarKeys {
 			else if (capturedVKey != 0) {
 				if (isAssigningModKey) {
 					comboAvailable = IsModSingleAssignmentAvailable(
-						capturedVKey, modKeyCaptureScriptName, modKeyCaptureFunctionName);
+						capturedVKey, modKeyCaptureScriptName, modKeyCaptureFunctionName, modPendingMask);
 				}
 				else if (isAssigningMenuToggleKey) {
 					comboAvailable = !(capturedVKey == VK_F2 || capturedVKey == VK_F3 || capturedVKey == VK_ESCAPE);
@@ -5105,12 +5309,13 @@ namespace RadarKeys {
 							isAssigningMenuToggleKey = false;
 							isAssigningModKey = true;
 							ModKeyReadOnlyInfo seededInfo = captureIsCombo
-								? ComputeComboModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName)
-								: ComputeModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
+								? ComputeOwnComboModKeyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName, capturedComboKeys)
+								: ComputeOwnModKeyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
 							capturedLongPressMode = seededInfo.anyLongPress;
 							capturedHoldSeconds = (float)seededInfo.longPressSeconds;
-							capturedInstantMode = seededInfo.anyInstant || !seededInfo.anyLongPress;
+							capturedInstantMode = seededInfo.anyInstant;
 							capturedInstantTriggerType = seededInfo.instantType;
+							if (!capturedInstantMode && !capturedLongPressMode) capturedInstantMode = true;
 							capturedRepeatIntervalSeconds = row.isComboScript ? (float)LuaKeyState::GetComboRepeatIntervalSeconds(row.comboInfo.activeKeys) : (float)LuaKeyState::GetRepeatIntervalSeconds(row.displayVKey);
 							if (capturedRepeatIntervalSeconds <= 0.0f) capturedRepeatIntervalSeconds = (float)kModKeyRepeatBaseSeconds;
 							capturedRepeatAccelMult = (float)(kModKeyRepeatBaseSeconds / (double)capturedRepeatIntervalSeconds);
@@ -5161,12 +5366,13 @@ namespace RadarKeys {
 							isAssigningMenuToggleKey = false;
 							isAssigningModKey = true;
 							ModKeyReadOnlyInfo seededInfo = captureIsCombo
-								? ComputeComboModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName)
-								: ComputeModKeyReadOnlyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
+								? ComputeOwnComboModKeyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName, capturedComboKeys)
+								: ComputeOwnModKeyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName);
 							capturedLongPressMode = seededInfo.anyLongPress;
 							capturedHoldSeconds = (float)seededInfo.longPressSeconds;
-							capturedInstantMode = seededInfo.anyInstant || !seededInfo.anyLongPress;
+							capturedInstantMode = seededInfo.anyInstant;
 							capturedInstantTriggerType = seededInfo.instantType;
+							if (!capturedInstantMode && !capturedLongPressMode) capturedInstantMode = true;
 							capturedRepeatIntervalSeconds = row.isComboScript ? (float)LuaKeyState::GetComboRepeatIntervalSeconds(row.comboInfo.activeKeys) : (float)LuaKeyState::GetRepeatIntervalSeconds(row.displayVKey);
 							if (capturedRepeatIntervalSeconds <= 0.0f) capturedRepeatIntervalSeconds = (float)kModKeyRepeatBaseSeconds;
 							capturedRepeatAccelMult = (float)(kModKeyRepeatBaseSeconds / (double)capturedRepeatIntervalSeconds);
