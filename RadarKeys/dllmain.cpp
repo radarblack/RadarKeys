@@ -250,6 +250,18 @@ namespace RadarKeys {
 		const char* scriptName = LuaToString(L, 2);
 		const char* functionName = LuaToString(L, 3);
 		const char* toggleState = LuaToString(L, 4);
+		const char* declaredTypeRaw = LuaToString(L, 5);
+		const char* declaredHoldRaw = LuaToString(L, 6);
+		const char* declaredRepeatRaw = LuaToString(L, 7);
+		int declaredTriggerType = -1;
+		double declaredHoldSeconds = -1.0;
+		double declaredRepeatSeconds = -1.0;
+		if (declaredTypeRaw && *declaredTypeRaw) {
+			int parsedTriggerType = (int)std::strtod(declaredTypeRaw, nullptr);
+			if (parsedTriggerType >= 0 && parsedTriggerType <= 3) declaredTriggerType = parsedTriggerType;
+		}
+		if (declaredHoldRaw && *declaredHoldRaw) declaredHoldSeconds = std::strtod(declaredHoldRaw, nullptr);
+		if (declaredRepeatRaw && *declaredRepeatRaw) declaredRepeatSeconds = std::strtod(declaredRepeatRaw, nullptr);
 
 		if (!scriptName || !*scriptName || !functionName || !*functionName) {
 			spdlog::warn(LOG_RADARKEYS_DESCRIBEKEY_REJECTED_IDENTITY_ARGS);
@@ -265,8 +277,9 @@ namespace RadarKeys {
 				vKeys,
 				scriptName ? scriptName : "",
 				functionName ? functionName : "",
-				toggleState ? toggleState : ""
-			);
+				toggleState ? toggleState : "",
+			declaredTriggerType, declaredHoldSeconds, declaredRepeatSeconds
+		);
 			RecordDescribeNative(scriptName, functionName, rawKey);
 			return 0;
 		}
@@ -279,7 +292,8 @@ namespace RadarKeys {
 			(USHORT)vKey,
 			scriptName ? scriptName : "",
 			functionName ? functionName : "",
-			toggleState ? toggleState : ""
+			toggleState ? toggleState : "",
+		declaredTriggerType, declaredHoldSeconds, declaredRepeatSeconds
 		);
 		RecordDescribeNative(scriptName, functionName, rawKey);
 		return 0;
