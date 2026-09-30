@@ -203,7 +203,7 @@ namespace RadarKeys {
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_SWEEP_STATUS = "RadarKeys is currently cleaning up. It will update after the process.";
-		static const char* UI_TIP_GROUP_TOGGLE = "Click to enable/disable this mod's keys.";
+		static const char* UI_TIP_GROUP_TOGGLE = "\nClick to enable/disable this mod's keys.";
 		static const char* UI_POPUP_CLEAR_ALL_CONFIRM = "Clear All Hotkeys?";
 		static const char* UI_TXT_CLEAR_ALL_CONFIRM = "Reset all mod key overrides to their defaults and remove every manually-assigned binding?";
 		static const char* UI_POPUP_GROUP_RESET_CONFIRM = "Reset Mod Hotkeys?";
