@@ -923,6 +923,10 @@ namespace RadarKeys {
 			if (info.usesOnRelease) mask |= Trigger_OnRelease;
 			if (info.usesHoldTime) mask |= Trigger_LongPress;
 			if (info.usesRepeat) mask |= Trigger_Repeat;
+			if (info.declaredTriggerType == 0) mask |= (info.declaredHoldSeconds > 0.0) ? Trigger_LongPress : Trigger_OnPress;
+			else if (info.declaredTriggerType == 1) mask |= Trigger_OnRelease;
+			else if (info.declaredTriggerType == 2) mask |= Trigger_Repeat;
+			else if (info.declaredTriggerType == 3) mask |= Trigger_OnPress;
 			return mask;
 		}
 
@@ -932,6 +936,10 @@ namespace RadarKeys {
 			if (info.usesOnRelease) mask |= Trigger_OnRelease;
 			if (info.usesHoldTime) mask |= Trigger_LongPress;
 			if (info.usesRepeat) mask |= Trigger_Repeat;
+			if (info.declaredTriggerType == 0) mask |= (info.declaredHoldSeconds > 0.0) ? Trigger_LongPress : Trigger_OnPress;
+			else if (info.declaredTriggerType == 1) mask |= Trigger_OnRelease;
+			else if (info.declaredTriggerType == 2) mask |= Trigger_Repeat;
+			else if (info.declaredTriggerType == 3) mask |= Trigger_OnPress;
 			return mask;
 		}
 
@@ -995,7 +1003,6 @@ namespace RadarKeys {
 				if (other.scriptName == scriptName && other.functionName == functionName) continue;
 				if ((modMask & ModTriggerMask(other)) != 0) return false;
 			}
-			if (ManualSingleOverlapsCombo(vKey, modMask, -1, scriptName, functionName)) return false;
 			return true;
 		}
 
@@ -1025,7 +1032,6 @@ namespace RadarKeys {
 				unsigned otherMask = ModComboTriggerMask(other);
 				if ((modMask & otherMask) != 0) return false;
 			}
-			if (ManualComboOverlapsSingle(comboKeys, modMask, -1, scriptName, functionName)) return false;
 			return true;
 		}
 
@@ -2862,6 +2868,23 @@ namespace RadarKeys {
 						if (bestInstantPriority < 0) bestInstantPriority = 0;
 						triggerLabel = "On Press";
 					}
+				} else if (row.declaredTriggerType >= 0) {
+					if (row.declaredTriggerType == 0 && row.declaredHoldSeconds > 0.0) {
+						char holdBuf[32];
+						snprintf(holdBuf, sizeof(holdBuf), "%.1fs", row.declaredHoldSeconds);
+						triggerLabel = std::string("Long Press (") + holdBuf + ")";
+						result.anyLongPress = true;
+						result.longPressSeconds = row.declaredHoldSeconds;
+					} else if (row.declaredTriggerType == 2) {
+						if (bestInstantPriority < 2) bestInstantPriority = 2;
+						triggerLabel = "Repeat";
+					} else if (row.declaredTriggerType == 1) {
+						if (bestInstantPriority < 1) bestInstantPriority = 1;
+						triggerLabel = "On Release";
+					} else {
+						if (bestInstantPriority < 0) bestInstantPriority = 0;
+						triggerLabel = "On Press";
+					}
 				} else if (rowBind != nullptr) {
 					if (rowBind->holdSeconds > 0.0f) {
 						result.anyLongPress = true;
@@ -2947,17 +2970,21 @@ namespace RadarKeys {
 						bestInstantPriority = (std::max)(bestInstantPriority, 1);
 						triggerLabel += " / On Release";
 					}
+				} else if (row.declaredTriggerType == 0 && row.declaredHoldSeconds > 0.0) {
+					result.anyLongPress = true;
+					result.longPressSeconds = row.declaredHoldSeconds;
+					triggerLabel += " / Long Press";
 				} else if (row.usesHoldTime) {
 					result.anyLongPress = true;
 					result.longPressSeconds = (double)row.lastHoldSeconds;
 					triggerLabel += " / Long Press";
 				}
 				if (!hasStoredTrigger) {
-					if (row.usesRepeat) {
+					if (row.usesRepeat || row.declaredTriggerType == 2) {
 						bestInstantPriority = (std::max)(bestInstantPriority, 2);
 						triggerLabel += " / Repeat";
 					}
-					if (row.usesOnRelease) {
+					if (row.usesOnRelease || row.declaredTriggerType == 1) {
 						bestInstantPriority = (std::max)(bestInstantPriority, 1);
 						triggerLabel += " / On Release";
 					}
@@ -4012,7 +4039,6 @@ namespace RadarKeys {
 					bool usesRepeat = false;
 					bool usesToggle = false;
 					bool usesHold = false;
-					bool anyKeyHold = false;
 					bool toggleOn = false;
 					double holdSeconds = 0.0;
 					double repeatInterval = 0.0;
@@ -4138,7 +4164,6 @@ namespace RadarKeys {
 							for (const LuaKeyState::TrackedComboKeyInfo& c : row.mergedCombos) absorbCombo(c);
 							if (usesRepeat) repeatInterval = LuaKeyState::GetRepeatIntervalSeconds(row.displayVKey);
 						}
-						const bool anyKeyHold = usesHold;
 						if (ownOnlyParts) {
 							usesPress = ownPress;
 							usesRelease = ownRelease;
@@ -4168,7 +4193,7 @@ namespace RadarKeys {
 						if (i) joined += UI_TT_JOIN;
 						joined += parts[i];
 					}
-					row.releaseSuppressedByHold = usesRelease && anyKeyHold;
+					row.releaseSuppressedByHold = usesRelease;
 					return joined;
 				};
 				float buttonBaseHeight = 20.0f;
@@ -4630,8 +4655,20 @@ namespace RadarKeys {
 				});
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 				float notesColumnX = 0.0f;
+				std::unordered_set<USHORT> holdUsageVKeys;
+				for (const LuaKeyState::TrackedKeyInfo& tk : trackedKeys) {
+					if (tk.usesHoldTime || (tk.declaredTriggerType == 0 && tk.declaredHoldSeconds > 0.0)) holdUsageVKeys.insert(tk.vKey);
+				}
+				for (const LuaKeyState::TrackedComboKeyInfo& tc : trackedCombos) {
+					if (tc.usesHoldTime || (tc.declaredTriggerType == 0 && tc.declaredHoldSeconds > 0.0)) {
+						for (USHORT holdKey : tc.activeKeys) holdUsageVKeys.insert(holdKey);
+					}
+				}
 				for (UnifiedRow& row : rows) {
 					row.triggerLabel = BuildTriggerTypeLabel(row);
+					if (row.releaseSuppressedByHold && holdUsageVKeys.count(row.displayVKey) == 0) {
+						row.releaseSuppressedByHold = false;
+					}
 					if (row.isManual) {
 						const KeyBind& manualBind = bindings[row.bindIndex];
 						if (manualBind.IsCombo()) {
