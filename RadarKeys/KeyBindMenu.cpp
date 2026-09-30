@@ -2948,6 +2948,7 @@ namespace RadarKeys {
 					}
 				} else if (row.usesHoldTime) {
 					result.anyLongPress = true;
+					result.longPressSeconds = (double)row.lastHoldSeconds;
 					triggerLabel += " / Long Press";
 				}
 				if (!hasStoredTrigger) {
