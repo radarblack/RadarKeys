@@ -158,6 +158,8 @@ namespace RadarKeys {
 		constexpr float kResetButtonWidth = kKeyDisplayBoxWidth * 0.8f;
 		constexpr float kDefaultHoldSeconds = 1.0f;
 		constexpr float kRepeatIntervalInputWidth = 55.0f;
+		constexpr float kFooterButtonHeight = 24.0f;
+		constexpr float kFooterBottomPadPx = 2.0f;
 		static const ImVec4 kKeyStateRed = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
 		static const ImVec4 kKeyStateGreen = ImVec4(0.4f, 1.0f, 0.4f, 1.0f);
 		static const char* UI_TIP_CLICK_HOLD_REMOVE = "Click to %s.\nHold for 1.5 seconds to remove.";
@@ -199,7 +201,7 @@ namespace RadarKeys {
 		static const char* UI_TIP_CLICK_HOLD_ENABLE_ALL = "Click to enable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_CLICK_HOLD_CLEAR_ALL = "Click to disable everything in the list.\nHold for 1.5 seconds to reset mod keys to default and remove manual bindings.";
 		static const char* UI_TIP_SWEEP_STATUS = "RadarKeys is currently cleaning up. It will update after the process.";
-		static const char* UI_TIP_GROUP_TOGGLE = "\nClick to enable/disable this mod's keys.";
+		static const char* UI_TIP_GROUP_TOGGLE = "Click to enable/disable this mod's keys.";
 		static const char* UI_POPUP_CLEAR_ALL_CONFIRM = "Clear All Hotkeys?";
 		static const char* UI_TXT_CLEAR_ALL_CONFIRM = "Reset all mod key overrides to their defaults and remove every manually-assigned binding?";
 		static const char* UI_POPUP_GROUP_RESET_CONFIRM = "Reset Mod Hotkeys?";
@@ -3569,7 +3571,7 @@ namespace RadarKeys {
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float buttonHeight = 30.0f;
 			float contentBottomY = ImGui::GetCursorPosY() + ImGui::GetStyle().ItemSpacing.y;
-			s_capturePromptMinHeight = contentBottomY + buttonHeight + paddingY * 2.0f;
+			s_capturePromptMinHeight = contentBottomY + buttonHeight + paddingY + kFooterBottomPadPx;
 			ImGui::Separator();
 
 			if (!canFinalize) ImGui::BeginDisabled();
@@ -3911,7 +3913,9 @@ namespace RadarKeys {
 			ImGui::SameLine();
 			
 			std::string buttonLabel = UI_LBL_MENU_HOTKEY_PREFIX + NameForVKey(menuToggleVKey) + UI_LBL_MENU_HOTKEY_SUFFIX;
-			if (ImGui::Button(buttonLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) { 
+			const float menuHotkeyButtonWidth = ImGui::CalcTextSize(buttonLabel.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+			ImGui::SameLine(ImGui::GetContentRegionMax().x - menuHotkeyButtonWidth);
+			if (ImGui::Button(buttonLabel.c_str(), ImVec2(menuHotkeyButtonWidth, 0))) { 
 				isAssigningMenuToggleKey = true; isAssigningModKey = false; showCapturePrompt = true;
 				requestCaptureFocus = true;
 				LogActivity(LOG_MENU_KEY_REASSIGNMENT_PROMPT_OPENED);
@@ -3952,9 +3956,8 @@ namespace RadarKeys {
 			const float kListMinHeight = 150.0f;
 			float paddingX = ImGui::GetStyle().WindowPadding.x;
 			float paddingY = ImGui::GetStyle().WindowPadding.y;
-			float footerHeight = 45.0f;
 			float cursorYBeforeList = ImGui::GetCursorPosY();
-			float listRemainingHeight = ImGui::GetWindowHeight() - cursorYBeforeList - ImGui::GetTextLineHeightWithSpacing() - footerHeight - paddingY;
+			float listRemainingHeight = ImGui::GetWindowHeight() - cursorYBeforeList - ImGui::GetStyle().ItemSpacing.y - kFooterButtonHeight - paddingY - kFooterBottomPadPx;
 			if (listRemainingHeight < kListMinHeight) listRemainingHeight = kListMinHeight;
 
 			{
@@ -5364,9 +5367,6 @@ namespace RadarKeys {
 				}
 				ImGui::PopStyleColor();
 			}
-			float bottomControlPanelY = ImGui::GetWindowHeight() - paddingY - 35.0f; 
-			ImGui::SetCursorPosY(bottomControlPanelY);
-			
 			static std::chrono::steady_clock::time_point clearAllHoldStart;
 			static bool clearAllHoldActive = false;
 			static bool clearAllConfirmPending = false;
@@ -5398,7 +5398,7 @@ namespace RadarKeys {
 			bool enableAllMode = allKeysDisabled && !clearAllDisabled;
 
 			if (clearAllDisabled) ImGui::BeginDisabled();
-			bool clearAllClicked = ImGui::Button(enableAllMode ? UI_BTN_ENABLE_ALL_KEYS : UI_BTN_CLEAR_ALL_HOTKEYS, ImVec2(145, 24));
+			bool clearAllClicked = ImGui::Button(enableAllMode ? UI_BTN_ENABLE_ALL_KEYS : UI_BTN_CLEAR_ALL_HOTKEYS, ImVec2(145, kFooterButtonHeight));
 			ImVec2 clearAllBtnMin = ImGui::GetItemRectMin();
 			ImVec2 clearAllBtnMax = ImGui::GetItemRectMax();
 			if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
@@ -5471,7 +5471,7 @@ namespace RadarKeys {
 			ImGui::PopStyleColor();
 			
 			ImGui::SameLine(ImGui::GetContentRegionMax().x - 165.0f);
-			if (ImGui::Button(UI_BTN_ADD_NEW_BINDING, ImVec2(165, 24))) {
+			if (ImGui::Button(UI_BTN_ADD_NEW_BINDING, ImVec2(165, kFooterButtonHeight))) {
 				editingBindingIndex = -1;
 				captureIsCombo = false;
 				captureIsInject = false;
