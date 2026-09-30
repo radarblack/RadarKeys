@@ -249,6 +249,8 @@ namespace RadarKeys {
 			context->Release();
 
 			ImGui::StyleColorsDark();
+			constexpr float kUiFrameRounding = 5.0f;
+			ImGui::GetStyle().FrameRounding = kUiFrameRounding;
 
 			if (firstFrame) {
 				firstFrame = false;
