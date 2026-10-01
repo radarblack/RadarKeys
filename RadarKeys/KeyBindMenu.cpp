@@ -36,6 +36,10 @@
 namespace RadarKeys {
 	std::atomic<bool> showCapturePrompt{ false };
 	namespace KeyBindMenu {
+		// Threading contract: `bindings` is owned by the render thread. It is
+		// mutated and fired only from KeyBindMenu::Update() (render Present
+		// hook path); other threads must go through atomics, mutexes or the
+		// LuaBridge queues instead of touching this vector.
 		std::vector<KeyBind> bindings;
 		bool EnsureBindsDirectory();
 		bool ManualSingleOverlapsCombo(USHORT vKey, unsigned singleMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = "");
@@ -1385,9 +1389,14 @@ namespace RadarKeys {
 				lastGamepadConnected = nowGamepadConnected;
 			}
 
-			LuaKeyState::SweepStaleDescriptions();
-			LuaKeyState::SweepStaleComboDescriptions();
-			ModInfoRegistry::SweepStale();
+			static std::chrono::steady_clock::time_point lastStateSweep{};
+			const auto sinceSweep = std::chrono::steady_clock::now() - lastStateSweep;
+			if (std::chrono::duration_cast<std::chrono::milliseconds>(sinceSweep).count() >= 1000) {
+				lastStateSweep = std::chrono::steady_clock::now();
+				LuaKeyState::SweepStaleDescriptions();
+				LuaKeyState::SweepStaleComboDescriptions();
+				ModInfoRegistry::SweepStale();
+			}
 
 			static std::vector<USHORT> cachedSuppressedVKeys;
 			static std::vector<USHORT> cachedDisabledVKeys;
