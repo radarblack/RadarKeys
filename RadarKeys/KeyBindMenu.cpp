@@ -36,10 +36,6 @@
 namespace RadarKeys {
 	std::atomic<bool> showCapturePrompt{ false };
 	namespace KeyBindMenu {
-		// Threading contract: `bindings` is owned by the render thread. It is
-		// mutated and fired only from KeyBindMenu::Update() (render Present
-		// hook path); other threads must go through atomics, mutexes or the
-		// LuaBridge queues instead of touching this vector.
 		std::vector<KeyBind> bindings;
 		bool EnsureBindsDirectory();
 		bool ManualSingleOverlapsCombo(USHORT vKey, unsigned singleMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = "");
