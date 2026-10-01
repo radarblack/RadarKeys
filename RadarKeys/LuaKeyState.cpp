@@ -29,6 +29,16 @@ namespace RadarKeys {
 		constexpr double kDescriptionStaleSeconds = 5.0;
 		constexpr double kStaleSweepActiveThreshold = 0.25;
 
+		// C1: display snapshot caches. Mutators bump the version; the getters
+		// rebuild only on a version change and re-stamp live press state on
+		// every call so consumers never see stale pressed flags.
+		unsigned long long g_keyInfoVersion = 0;
+		unsigned long long g_keyInfoCacheBuilt = ~0ull;
+		std::vector<TrackedKeyInfo> g_keyInfoCache;
+		unsigned long long g_comboInfoVersion = 0;
+		unsigned long long g_comboInfoCacheBuilt = ~0ull;
+		std::vector<TrackedComboKeyInfo> g_comboInfoCache;
+
 		struct KeyDescription {
 			bool hasToggleState = false;
 			bool toggleEnabled = false;
@@ -880,15 +890,6 @@ namespace RadarKeys {
 			if (erasedAny) ++g_comboInfoVersion;
 		}
 
-		// C1: display snapshot caches. Mutators bump the version; the getters
-		// rebuild only on a version change and re-stamp live press state on
-		// every call so consumers never see stale pressed flags.
-		unsigned long long g_keyInfoVersion = 0;
-		unsigned long long g_keyInfoCacheBuilt = ~0ull;
-		std::vector<TrackedKeyInfo> g_keyInfoCache;
-		unsigned long long g_comboInfoVersion = 0;
-		unsigned long long g_comboInfoCacheBuilt = ~0ull;
-		std::vector<TrackedComboKeyInfo> g_comboInfoCache;
 		std::vector<TrackedComboKeyInfo> BuildTrackedComboKeyInfoLocked() {
 			std::vector<TrackedComboKeyInfo> result;
 			for (const auto& entry : comboDescriptions) {
