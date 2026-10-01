@@ -24,6 +24,7 @@ namespace RadarKeys {
 			float repeatAccelMult = 1.0f;
 			bool toggleMode = false;
 			std::string nativeKeyName;
+			std::string altKbm;
 		};
 
 		static std::map<std::string, std::map<std::string, SlotOverride>> overrides;
@@ -109,6 +110,7 @@ namespace RadarKeys {
 					entry.repeatAccelMult = funcEntry.second.repeatAccelMult;
 					entry.toggleMode = funcEntry.second.toggleMode;
 					entry.nativeKeyName = funcEntry.second.nativeKeyName;
+					entry.altKbm = funcEntry.second.altKbm;
 					result.push_back(entry);
 					seen[scriptEntry.first][funcEntry.first] = true;
 				}
@@ -145,6 +147,9 @@ namespace RadarKeys {
 				}
 				if (!e.nativeKeyName.empty()) {
 					overrides[e.scriptName][e.functionName].nativeKeyName = e.nativeKeyName;
+				}
+				if (!e.altKbm.empty()) {
+					overrides[e.scriptName][e.functionName].altKbm = e.altKbm;
 				}
 				if (e.triggerType != 0 || e.holdSeconds > 0.0f || e.repeatAccelMult != 1.0f || e.toggleMode) {
 					overrides[e.scriptName][e.functionName].triggerType = e.triggerType;
@@ -300,7 +305,7 @@ namespace RadarKeys {
 						funcIt->second.holdSeconds = 0.0f;
 						funcIt->second.repeatAccelMult = 1.0f;
 						funcIt->second.toggleMode = false;
-						if (funcIt->second.nativeKeyName.empty()) {
+						if (funcIt->second.nativeKeyName.empty() && funcIt->second.altKbm.empty()) {
 							scriptIt->second.erase(funcIt);
 							if (scriptIt->second.empty()) overrides.erase(scriptIt);
 						}
@@ -345,7 +350,7 @@ namespace RadarKeys {
 					if (funcIt != scriptIt->second.end()) {
 						if (slot == BindSlot::Pad) funcIt->second.pad.clear();
 						else funcIt->second.kbm.clear();
-						if (funcIt->second.kbm.empty() && funcIt->second.pad.empty() && funcIt->second.triggerType == 0 && funcIt->second.holdSeconds == 0.0f && funcIt->second.repeatAccelMult == 1.0f && !funcIt->second.toggleMode && funcIt->second.nativeKeyName.empty()) {
+						if (funcIt->second.kbm.empty() && funcIt->second.pad.empty() && funcIt->second.triggerType == 0 && funcIt->second.holdSeconds == 0.0f && funcIt->second.repeatAccelMult == 1.0f && !funcIt->second.toggleMode && funcIt->second.nativeKeyName.empty() && funcIt->second.altKbm.empty()) {
 							scriptIt->second.erase(funcIt);
 							if (scriptIt->second.empty()) overrides.erase(scriptIt);
 						}
@@ -360,6 +365,50 @@ namespace RadarKeys {
 
 		void SetSlotOverride(const std::string& scriptName, const std::string& functionName, BindSlot slot, const std::string& keyName) {
 			SetSlotOverrideWithoutSave(scriptName, functionName, slot, keyName);
+			KeyBindMenu::SaveBindings();
+		}
+
+		std::string GetAltKbmOverride(const std::string& scriptName, const std::string& functionName) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			if (!loaded) {
+				Load();
+			}
+			auto scriptIt = overrides.find(scriptName);
+			if (scriptIt == overrides.end()) {
+				return "";
+			}
+			auto funcIt = scriptIt->second.find(functionName);
+			if (funcIt == scriptIt->second.end()) {
+				return "";
+			}
+			return funcIt->second.altKbm;
+		}
+
+		void SetAltKbmWithoutSave(const std::string& scriptName, const std::string& functionName, const std::string& keyName) {
+			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			if (!loaded) {
+				Load();
+			}
+			if (keyName.empty()) {
+				auto scriptIt = overrides.find(scriptName);
+				if (scriptIt != overrides.end()) {
+					auto funcIt = scriptIt->second.find(functionName);
+					if (funcIt != scriptIt->second.end()) {
+						funcIt->second.altKbm.clear();
+						if (funcIt->second.kbm.empty() && funcIt->second.pad.empty() && funcIt->second.triggerType == 0 && funcIt->second.holdSeconds == 0.0f && funcIt->second.repeatAccelMult == 1.0f && !funcIt->second.toggleMode && funcIt->second.nativeKeyName.empty()) {
+							scriptIt->second.erase(funcIt);
+							if (scriptIt->second.empty()) overrides.erase(scriptIt);
+						}
+					}
+				}
+			} else {
+				overrides[scriptName][functionName].altKbm = keyName;
+			}
+			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
+		}
+
+		void SetAltKbm(const std::string& scriptName, const std::string& functionName, const std::string& keyName) {
+			SetAltKbmWithoutSave(scriptName, functionName, keyName);
 			KeyBindMenu::SaveBindings();
 		}
 
