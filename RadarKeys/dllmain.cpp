@@ -19,6 +19,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <cctype>
+#include <cstring>
 #include <cmath>
 #include <sstream>
 
@@ -229,6 +230,22 @@ namespace RadarKeys {
 		return 4;
 	}
 
+	static int l_GetModAltKeyBinding(lua_State* L) {
+		const char* scriptName = LuaToString(L, 1);
+		const char* functionName = LuaToString(L, 2);
+		if (!scriptName || !functionName) {
+			LuaPushNil(L);
+			return 1;
+		}
+		std::string alt = ModKeyBindings::GetAltKbmOverride(scriptName, functionName);
+		if (alt.empty()) {
+			LuaPushNil(L);
+			return 1;
+		}
+		LuaPushString(L, alt.c_str());
+		return 1;
+	}
+
 	static int l_DebugLog(lua_State* L) {
 		const char* message = LuaToString(L, 1);
 		if (message) {
@@ -239,9 +256,26 @@ namespace RadarKeys {
 
 	static void RecordDescribeNative(const char* scriptName, const char* functionName, const char* keyName) {
 		if (!scriptName || !*scriptName || !functionName || !*functionName || !keyName || !*keyName) return;
-		if (!ModKeyBindings::GetOverride(scriptName, functionName).empty()) return;
-		if (!ModKeyBindings::GetNativeKey(scriptName, functionName).empty()) return;
-		ModKeyBindings::SetNativeKeyWithoutSave(scriptName, functionName, keyName);
+		const bool isComboName = std::strchr(keyName, '+') != nullptr;
+		std::string currentOverride = ModKeyBindings::GetOverride(scriptName, functionName);
+		if (!isComboName && currentOverride.empty() && ModKeyBindings::GetNativeKey(scriptName, functionName).empty()) {
+			ModKeyBindings::SetNativeKeyWithoutSave(scriptName, functionName, keyName);
+			KeyBindMenu::RequestBindingsSave();
+		}
+		// t190: a second keyboard key described for one identity seeds the identity's
+		// alternate keyboard key (first writer wins). Cross-slot pairs (V + PS R3)
+		// already work through the per-slot store, and pad describes never seed it.
+		if (isComboName) return;
+		int keyVKey = KeyBindMenu::VKeyForName(keyName);
+		if (keyVKey <= 0) return;
+		std::string authorityName = !currentOverride.empty() ? currentOverride : ModKeyBindings::GetNativeKey(scriptName, functionName);
+		int authorityVKey = authorityName.empty() ? -1 : KeyBindMenu::VKeyForName(authorityName);
+		if (authorityVKey <= 0) return;
+		if (KeyBindMenu::SlotOfVKey((USHORT)keyVKey) != KeyBindMenu::SlotOfVKey((USHORT)authorityVKey)) return;
+		if (KeyBindMenu::SlotOfVKey((USHORT)keyVKey) == ModKeyBindings::BindSlot::Pad) return;
+		if ((USHORT)keyVKey == (USHORT)authorityVKey) return;
+		if (!ModKeyBindings::GetAltKbmOverride(scriptName, functionName).empty()) return;
+		ModKeyBindings::SetAltKbmWithoutSave(scriptName, functionName, keyName);
 		KeyBindMenu::RequestBindingsSave();
 	}
 
@@ -413,6 +447,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "DescribeMod", RadarKeys::l_DescribeMod },
 		{ "DescribeKeyLines", RadarKeys::l_DescribeKeyLines },
 		{ "GetModKeyBinding", RadarKeys::l_GetModKeyBinding },
+		{ "GetModAltKeyBinding", RadarKeys::l_GetModAltKeyBinding },
 		{ "GetTriggerType", RadarKeys::l_GetTriggerType },
 		{ "GetRepeatBaseSeconds", RadarKeys::l_GetRepeatBaseSeconds },
 		{ NULL, NULL }
