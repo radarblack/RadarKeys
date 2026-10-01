@@ -128,6 +128,7 @@ namespace RadarKeys {
 		}
 
 		void LoadFromEntries(const std::vector<OverrideEntry>& entries) {
+			bool migrated = false;
 			{
 				std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			overrides.clear();
@@ -156,16 +157,15 @@ namespace RadarKeys {
 				}
 			}
 
-			bool migrated = false;
 			if (overrides.empty()) {
 				migrated = TryMigrateLegacyFile();
 			}
 
 			loaded = true;
 			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
-			}
 			spdlog::debug(LOG_MODKEYBINDINGS_LOADFROMENTRIES_LOADED_OVERRIDES_FMT_,
 				overrides.size(), migrated ? " (migrated from legacy file)" : "");
+			}
 			if (migrated) {
 				KeyBindMenu::SaveBindings();
 			}
