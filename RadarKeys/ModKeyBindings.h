@@ -47,6 +47,7 @@ namespace RadarKeys {
 		TriggerConfig GetTriggerConfig(const std::string& scriptName, const std::string& functionName);
 		void SetTriggerConfigWithoutSave(const std::string& scriptName, const std::string& functionName, int triggerType, float holdSeconds, float repeatAccelMult, bool toggleMode);
 		bool HasTriggerConfig(const std::string& scriptName, const std::string& functionName);
+		unsigned long long GetConfigGeneration();
 
 		std::vector<OverrideEntry> GetAllOverrides();
 		void LoadFromEntries(const std::vector<OverrideEntry>& entries);
