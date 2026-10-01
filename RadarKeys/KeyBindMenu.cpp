@@ -36,6 +36,10 @@
 namespace RadarKeys {
 	std::atomic<bool> showCapturePrompt{ false };
 	namespace KeyBindMenu {
+		// Threading contract: `bindings` is owned by the render thread. It is
+		// mutated and fired only from KeyBindMenu::Update() (render Present
+		// hook path); other threads must go through atomics, mutexes or the
+		// LuaBridge queues instead of touching this vector.
 		std::vector<KeyBind> bindings;
 		bool EnsureBindsDirectory();
 		bool ManualSingleOverlapsCombo(USHORT vKey, unsigned singleMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = "");
@@ -5427,8 +5431,8 @@ namespace RadarKeys {
 							requestCaptureFocus = true;
 							showCapturePrompt = true;
 						};
-						auto openReassignPrompt = [&row]() { openReassignPromptFor(row.displayVKey, false); };
-						auto openAltReassignPrompt = [&row](USHORT altVKey) { openReassignPromptFor(altVKey, true); };
+						auto openReassignPrompt = [&row, &openReassignPromptFor]() { openReassignPromptFor(row.displayVKey, false); };
+						auto openAltReassignPrompt = [&row, &openReassignPromptFor](USHORT altVKey) { openReassignPromptFor(altVKey, true); };
 
 						ImVec4 keyNameColor;
 						if (row.keyAnyToggle) {
