@@ -8,6 +8,7 @@
 #include <map>
 #include <mutex>
 #include <set>
+#include <unordered_map>
 #include <sstream>
 
 namespace RadarKeys {
@@ -238,6 +239,7 @@ namespace RadarKeys {
 			}
 			RawInput::UnRegisterAction(vKey, s.actionHandle);
 			s = KeyPollState{};
+			++g_keyInfoVersion;
 			spdlog::debug(LOG_LUAKEYSTATE_RETIREIFUNDESCRIBED_RELEASED_VKEY_FMT, vKey);
 		}
 
@@ -777,12 +779,39 @@ namespace RadarKeys {
 			}
 			return out;
 		}
+		// C2: recompute redirects only when the config generation moves. The
+		// per-identity last-seen generation lives here (guarded by the state
+		// mutex); shape prefixes keep single and combo identities apart.
+		std::unordered_map<std::string, unsigned long long> g_redirectGen;
+
+		void EnsureRedirectFresh(USHORT vKey, const std::string& scriptName, const std::string& functionName) {
+			unsigned long long gen = ModKeyBindings::GetConfigGeneration();
+			std::string identity = "S\x1f" + scriptName + "\x1f" + functionName;
+			auto it = g_redirectGen.find(identity);
+			if (it != g_redirectGen.end() && it->second == gen) {
+				return;
+			}
+			UpdateRedirectForIdentity(vKey, scriptName, functionName);
+			g_redirectGen[identity] = gen;
+		}
+
+		void EnsureComboRedirectFresh(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName) {
+			unsigned long long gen = ModKeyBindings::GetConfigGeneration();
+			std::string identity = "C\x1f" + scriptName + "\x1f" + functionName;
+			auto it = g_redirectGen.find(identity);
+			if (it != g_redirectGen.end() && it->second == gen) {
+				return;
+			}
+			UpdateRedirectForComboIdentity(vKeys, scriptName, functionName);
+			g_redirectGen[identity] = gen;
+		}
+
 		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState, int declaredTriggerType, double declaredHoldSeconds, double declaredRepeatSeconds) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) {
 				return;
 			}
-			UpdateRedirectForComboIdentity(vKeys, scriptName, functionName);
+			EnsureComboRedirectFresh(vKeys, scriptName, functionName);
 			std::vector<USHORT> activeKeys = ResolveActiveCombo(vKeys);
 			std::string stateKey = ComboStateKey(activeKeys);
 			ComboPollState& state = comboStates[stateKey];
@@ -823,11 +852,13 @@ namespace RadarKeys {
 			d.declaredHoldSeconds = declaredHoldSeconds;
 			d.declaredRepeatSeconds = declaredRepeatSeconds;
 			d.lastTouched = clock::now();
+			++g_comboInfoVersion;
 		}
 
 		void SweepStaleComboDescriptions() {
 			KeyStateLock lock(g_keyStateMutex);
 			const clock::time_point now = clock::now();
+			bool erasedAny = false;
 			for (auto it = comboDescriptions.begin(); it != comboDescriptions.end(); ) {
 				const double ageSeconds = std::chrono::duration<double>(now - it->second.lastTouched).count();
 				if (ageSeconds > kDescriptionStaleSeconds) {
@@ -840,15 +871,25 @@ namespace RadarKeys {
 					eraseState->second.pendingUsesOnRelease = false;
 				}
 				comboRedirectTarget.erase(ComboStateKey(it->second.nativeKeys));
+				erasedAny = true;
 				it = comboDescriptions.erase(it);
 				} else {
 					++it;
 				}
 			}
+			if (erasedAny) ++g_comboInfoVersion;
 		}
 
-		std::vector<TrackedComboKeyInfo> GetTrackedComboKeyInfo() {
-			KeyStateLock lock(g_keyStateMutex);
+		// C1: display snapshot caches. Mutators bump the version; the getters
+		// rebuild only on a version change and re-stamp live press state on
+		// every call so consumers never see stale pressed flags.
+		unsigned long long g_keyInfoVersion = 0;
+		unsigned long long g_keyInfoCacheBuilt = ~0ull;
+		std::vector<TrackedKeyInfo> g_keyInfoCache;
+		unsigned long long g_comboInfoVersion = 0;
+		unsigned long long g_comboInfoCacheBuilt = ~0ull;
+		std::vector<TrackedComboKeyInfo> g_comboInfoCache;
+		std::vector<TrackedComboKeyInfo> BuildTrackedComboKeyInfoLocked() {
 			std::vector<TrackedComboKeyInfo> result;
 			for (const auto& entry : comboDescriptions) {
 				const ComboKeyDescription& d = entry.second;
@@ -873,6 +914,19 @@ namespace RadarKeys {
 			return result;
 		}
 
+		std::vector<TrackedComboKeyInfo> GetTrackedComboKeyInfo() {
+			KeyStateLock lock(g_keyStateMutex);
+			if (g_comboInfoCacheBuilt != g_comboInfoVersion) {
+				g_comboInfoCache = BuildTrackedComboKeyInfoLocked();
+				g_comboInfoCacheBuilt = g_comboInfoVersion;
+			}
+			std::vector<TrackedComboKeyInfo> result = g_comboInfoCache;
+			for (TrackedComboKeyInfo& info : result) {
+				info.isPressed = ValidCombo(info.activeKeys) && RawComboAllHeld(info.activeKeys);
+			}
+			return result;
+		}
+
 		void ResetRepeat(USHORT vKey) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
@@ -891,7 +945,7 @@ namespace RadarKeys {
 			if (!ValidVKey(vKey)) {
 				return;
 			}
-			UpdateRedirectForIdentity(vKey, scriptName, functionName);
+			EnsureRedirectFresh(vKey, scriptName, functionName);
 			vKey = ResolveActive(vKey);
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
@@ -922,6 +976,7 @@ namespace RadarKeys {
 					d.declaredTriggerType = declaredTriggerType;
 					d.declaredHoldSeconds = declaredHoldSeconds;
 					d.declaredRepeatSeconds = declaredRepeatSeconds;
+					++g_keyInfoVersion;
 					return;
 				}
 			}
@@ -941,23 +996,27 @@ namespace RadarKeys {
 			d.declaredHoldSeconds = declaredHoldSeconds;
 			d.declaredRepeatSeconds = declaredRepeatSeconds;
 			s.descriptions.push_back(std::move(d));
+			++g_keyInfoVersion;
 		}
 
 		void SweepStaleDescriptions() {
 			KeyStateLock lock(g_keyStateMutex);
 			const clock::time_point now = clock::now();
+			bool erasedAny = false;
 			for (int vKeyInt = 0; vKeyInt < RawInput::kMaxVKey; ++vKeyInt) {
 				std::vector<KeyDescription>& descs = states[vKeyInt].descriptions;
 				if (!descs.empty()) {
-					descs.erase(
-						std::remove_if(descs.begin(), descs.end(), [&](const KeyDescription& d) {
-							return std::chrono::duration<double>(now - d.lastTouched).count() > kDescriptionStaleSeconds;
-						}),
-						descs.end()
-					);
+					auto it = std::remove_if(descs.begin(), descs.end(), [&](const KeyDescription& d) {
+						return std::chrono::duration<double>(now - d.lastTouched).count() > kDescriptionStaleSeconds;
+					});
+					if (it != descs.end()) {
+						descs.erase(it, descs.end());
+						erasedAny = true;
+					}
 				}
 				RetireIfUndescribed(static_cast<USHORT>(vKeyInt));
 			}
+			if (erasedAny) ++g_keyInfoVersion;
 		}
 
 		double GetStaleSweepSecondsRemaining() {
@@ -1002,6 +1061,7 @@ namespace RadarKeys {
 				KeyDescription movedDesc = *it;
 				movedDesc.lastTouched = clock::now();
 				newState.descriptions.push_back(std::move(movedDesc));
+				++g_keyInfoVersion;
 				oldState.descriptions.erase(it);
 			oldState.downEdgePending = 0;
 			oldState.upEdgePending = 0;
@@ -1011,8 +1071,7 @@ namespace RadarKeys {
 			}
 		}
 
-		std::vector<TrackedKeyInfo> GetTrackedKeyInfo() {
-			KeyStateLock lock(g_keyStateMutex);
+		std::vector<TrackedKeyInfo> BuildTrackedKeyInfoLocked() {
 			std::vector<TrackedKeyInfo> result;
 			for (int vKeyInt = 0; vKeyInt < RawInput::kMaxVKey; ++vKeyInt) {
 				const KeyPollState& s = states[vKeyInt];
@@ -1066,6 +1125,19 @@ namespace RadarKeys {
 			return result;
 		}
 
+		std::vector<TrackedKeyInfo> GetTrackedKeyInfo() {
+			KeyStateLock lock(g_keyStateMutex);
+			if (g_keyInfoCacheBuilt != g_keyInfoVersion) {
+				g_keyInfoCache = BuildTrackedKeyInfoLocked();
+				g_keyInfoCacheBuilt = g_keyInfoVersion;
+			}
+			std::vector<TrackedKeyInfo> result = g_keyInfoCache;
+			for (TrackedKeyInfo& info : result) {
+				info.isPressed = RawInput::IsKeyHeldReal(info.vKey);
+			}
+			return result;
+		}
+
 		void OnFocusLost() {
 			KeyStateLock lock(g_keyStateMutex);
 			for (int i = 0; i < RawInput::kMaxVKey; ++i) {
@@ -1103,6 +1175,7 @@ namespace RadarKeys {
 		void ClearComboRedirect(const std::vector<USHORT>& nativeVKeys) {
 			KeyStateLock lock(g_keyStateMutex);
 			comboRedirectTarget.erase(ComboStateKey(nativeVKeys));
+			++g_comboInfoVersion;
 		}
 	}
 }
