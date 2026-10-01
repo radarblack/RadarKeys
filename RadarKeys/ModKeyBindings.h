@@ -20,6 +20,7 @@ namespace RadarKeys {
 			float repeatAccelMult = 1.0f;
 			bool toggleMode = false;
 			std::string nativeKeyName;
+			std::string altKbm;
 		};
 
 		void Load();
@@ -28,6 +29,9 @@ namespace RadarKeys {
 
 		std::string GetOverride(const std::string& scriptName, const std::string& functionName);
 		std::string GetSlotOverride(const std::string& scriptName, const std::string& functionName, BindSlot slot);
+		std::string GetAltKbmOverride(const std::string& scriptName, const std::string& functionName);
+		void SetAltKbmWithoutSave(const std::string& scriptName, const std::string& functionName, const std::string& keyName);
+		void SetAltKbm(const std::string& scriptName, const std::string& functionName, const std::string& keyName);
 		void SetOverride(const std::string& scriptName, const std::string& functionName, const std::string& keyName);
 		void SetOverrideWithoutSave(const std::string& scriptName, const std::string& functionName, const std::string& keyName);
 		void SetSlotOverride(const std::string& scriptName, const std::string& functionName, BindSlot slot, const std::string& keyName);
