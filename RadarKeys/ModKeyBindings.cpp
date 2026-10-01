@@ -4,6 +4,7 @@
 #include "Util.h"
 #include "spdlog/spdlog.h"
 
+#include <atomic>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -29,6 +30,7 @@ namespace RadarKeys {
 		static std::map<std::string, std::map<std::string, bool>> disabledMap;
 		static bool loaded = false;
 		static std::recursive_mutex g_overridesMutex;
+		static std::atomic<unsigned long long> g_configGeneration{ 0 };
 
 		static bool TryMigrateLegacyFile() {
 			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
@@ -85,6 +87,10 @@ namespace RadarKeys {
 			loaded = true;
 		}
 
+		unsigned long long GetConfigGeneration() {
+			return g_configGeneration.load(std::memory_order_relaxed);
+		}
+
 		std::vector<OverrideEntry> GetAllOverrides() {
 			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			std::vector<OverrideEntry> result;
@@ -122,7 +128,8 @@ namespace RadarKeys {
 		}
 
 		void LoadFromEntries(const std::vector<OverrideEntry>& entries) {
-			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			{
+				std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			overrides.clear();
 			disabledMap.clear();
 			for (const auto& e : entries) {
@@ -155,9 +162,10 @@ namespace RadarKeys {
 			}
 
 			loaded = true;
+			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
+			}
 			spdlog::debug(LOG_MODKEYBINDINGS_LOADFROMENTRIES_LOADED_OVERRIDES_FMT_,
 				overrides.size(), migrated ? " (migrated from legacy file)" : "");
-
 			if (migrated) {
 				KeyBindMenu::SaveBindings();
 			}
@@ -204,6 +212,7 @@ namespace RadarKeys {
 			overrides[scriptName][functionName].holdSeconds = holdSeconds;
 			overrides[scriptName][functionName].repeatAccelMult = repeatAccelMult;
 			overrides[scriptName][functionName].toggleMode = toggleMode;
+			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
 		}
 
 		bool HasTriggerConfig(const std::string& scriptName, const std::string& functionName) {
@@ -239,6 +248,7 @@ namespace RadarKeys {
 			if (native.empty()) {
 				native = keyName;
 			}
+			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
 		}
 
 		std::string GetOverride(const std::string& scriptName, const std::string& functionName) {
@@ -274,7 +284,8 @@ namespace RadarKeys {
 		}
 
 		void SetOverride(const std::string& scriptName, const std::string& functionName, const std::string& keyName) {
-			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			{
+				std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			if (!loaded) {
 				Load();
 			}
@@ -299,6 +310,8 @@ namespace RadarKeys {
 				overrides[scriptName][functionName].kbm = keyName;
 				overrides[scriptName][functionName].pad = keyName;
 			}
+			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
+			}
 			KeyBindMenu::SaveBindings();
 		}
 
@@ -317,6 +330,7 @@ namespace RadarKeys {
 				overrides[scriptName][functionName].kbm = keyName;
 				overrides[scriptName][functionName].pad = keyName;
 			}
+			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
 		}
 
 		void SetSlotOverrideWithoutSave(const std::string& scriptName, const std::string& functionName, BindSlot slot, const std::string& keyName) {
@@ -341,6 +355,7 @@ namespace RadarKeys {
 				if (slot == BindSlot::Pad) overrides[scriptName][functionName].pad = keyName;
 				else overrides[scriptName][functionName].kbm = keyName;
 			}
+			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
 		}
 
 		void SetSlotOverride(const std::string& scriptName, const std::string& functionName, BindSlot slot, const std::string& keyName) {
@@ -354,6 +369,7 @@ namespace RadarKeys {
 				Load();
 			}
 			disabledMap[scriptName][functionName] = disabled;
+			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
 		}
 
 		bool IsDisabled(const std::string& scriptName, const std::string& functionName) {
@@ -373,11 +389,14 @@ namespace RadarKeys {
 		}
 
 		void SetDisabled(const std::string& scriptName, const std::string& functionName, bool disabled) {
-			std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
+			{
+				std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
 			if (!loaded) {
 				Load();
 			}
 			disabledMap[scriptName][functionName] = disabled;
+			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
+			}
 			KeyBindMenu::SaveBindings();
 		}
 	}
