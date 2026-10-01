@@ -28,13 +28,14 @@ namespace RadarKeys {
 	}
 
 	inline const std::string& GetGameDirectory() {
-		static std::string cached;
-		if (cached.empty()) {
+		// C++11 magic static: thread-safe one-time init no matter which thread
+		// gets here first (B2).
+		static const std::string cached = [] {
 			wchar_t exePathBuf[32768]{};
 			DWORD exePathLen = GetModuleFileNameW(nullptr, exePathBuf, (DWORD)(sizeof(exePathBuf) / sizeof(exePathBuf[0])));
 			std::filesystem::path exePath(exePathLen ? std::wstring(exePathBuf, exePathLen) : std::wstring());
-			cached = exePath.parent_path().u8string();
-		}
+			return exePath.parent_path().u8string();
+		}();
 		return cached;
 	}
 }
