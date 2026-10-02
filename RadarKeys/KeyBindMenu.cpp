@@ -4647,12 +4647,9 @@ namespace RadarKeys {
 							if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
 								visual.stacked = true;
 							visual.showPlusBadge = true;
-								std::vector<USHORT> stackedKeys = CanonicalizeComboKeys(comboLineEntry.first);
-								for (USHORT stackedKey : stackedKeys) {
-									std::vector<std::string> wrappedKey = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
-									for (const std::string& keyLine : wrappedKey) {
-										keyLabelLines.push_back(keyLine);
-									}
+								std::vector<std::string> wrappedComboName = WrapTextToWidth(comboLine, standardInner);
+								for (const std::string& comboNameLine : wrappedComboName) {
+									keyLabelLines.push_back(comboNameLine);
 								}
 							} else {
 								keyLabelLines.push_back(comboLine);
@@ -4697,12 +4694,10 @@ namespace RadarKeys {
 						std::string comboLine = ComboKeysDisplayName(comboLineEntry.first);
 						if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
 							std::string stackedEntry;
-							for (USHORT stackedKey : CanonicalizeComboKeys(comboLineEntry.first)) {
-								std::vector<std::string> keyParts = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
-								for (size_t pi = 0; pi < keyParts.size(); pi++) {
-									if (pi) stackedEntry += "\n";
-									stackedEntry += keyParts[pi];
-								}
+							std::vector<std::string> wrappedComboLines = WrapTextToWidth(comboLine, standardInner);
+							for (size_t wrappedComboPi = 0; wrappedComboPi < wrappedComboLines.size(); wrappedComboPi++) {
+								if (wrappedComboPi) stackedEntry += "\n";
+								stackedEntry += wrappedComboLines[wrappedComboPi];
 							}
 							visual.lines.push_back(stackedEntry);
 							visual.lineVKeys.push_back((USHORT)0);
