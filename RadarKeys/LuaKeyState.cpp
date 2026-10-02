@@ -886,8 +886,14 @@ namespace RadarKeys {
 			if (erasedAny) ++g_comboInfoVersion;
 		}
 
-		void RetireCombosForIdentity(const std::string& scriptName, const std::string& functionName, const std::vector<USHORT>& keepActiveKeys) {
+		void RetireCombosForIdentity(const std::string& scriptName, const std::string& functionName, const std::vector<std::vector<USHORT>>& keepActiveKeySets) {
 			KeyStateLock lock(g_keyStateMutex);
+			std::vector<std::vector<USHORT>> sortedKeepSets;
+			for (const auto& keepSet : keepActiveKeySets) {
+				std::vector<USHORT> sortedKeepSet = keepSet;
+				std::sort(sortedKeepSet.begin(), sortedKeepSet.end());
+				sortedKeepSets.push_back(sortedKeepSet);
+			}
 			bool erasedAny = false;
 			for (auto it = comboDescriptions.begin(); it != comboDescriptions.end(); ) {
 				if (it->second.scriptName != scriptName || it->second.functionName != functionName) {
@@ -895,10 +901,12 @@ namespace RadarKeys {
 					continue;
 				}
 				std::vector<USHORT> sortedActive = ResolveActiveCombo(it->second.nativeKeys);
-				std::vector<USHORT> sortedKeep = keepActiveKeys;
 				std::sort(sortedActive.begin(), sortedActive.end());
-				std::sort(sortedKeep.begin(), sortedKeep.end());
-				if (!keepActiveKeys.empty() && sortedActive == sortedKeep) {
+				bool kept = false;
+				for (const auto& keepSet : sortedKeepSets) {
+					if (sortedActive == keepSet) { kept = true; break; }
+				}
+				if (kept) {
 					++it;
 					continue;
 				}
