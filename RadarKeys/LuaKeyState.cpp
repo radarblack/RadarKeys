@@ -28,10 +28,6 @@ namespace RadarKeys {
 		constexpr int kMaxQueuedEdges = 8;
 		constexpr double kDescriptionStaleSeconds = 5.0;
 		constexpr double kStaleSweepActiveThreshold = 0.25;
-
-		// C1: display snapshot caches. Mutators bump the version; the getters
-		// rebuild only on a version change and re-stamp live press state on
-		// every call so consumers never see stale pressed flags.
 		unsigned long long g_keyInfoVersion = 0;
 		unsigned long long g_keyInfoCacheBuilt = ~0ull;
 		std::vector<TrackedKeyInfo> g_keyInfoCache;
@@ -889,6 +885,38 @@ namespace RadarKeys {
 			}
 			if (erasedAny) ++g_comboInfoVersion;
 		}
+
+		void RetireCombosForIdentity(const std::string& scriptName, const std::string& functionName, const std::vector<USHORT>& keepActiveKeys) {
+			KeyStateLock lock(g_keyStateMutex);
+			bool erasedAny = false;
+			for (auto it = comboDescriptions.begin(); it != comboDescriptions.end(); ) {
+				if (it->second.scriptName != scriptName || it->second.functionName != functionName) {
+					++it;
+					continue;
+				}
+				std::vector<USHORT> sortedActive = ResolveActiveCombo(it->second.nativeKeys);
+				std::vector<USHORT> sortedKeep = keepActiveKeys;
+				std::sort(sortedActive.begin(), sortedActive.end());
+				std::sort(sortedKeep.begin(), sortedKeep.end());
+				if (!keepActiveKeys.empty() && sortedActive == sortedKeep) {
+					++it;
+					continue;
+				}
+				std::string eraseActiveKey = ComboStateKey(ResolveActiveCombo(it->second.nativeKeys));
+				auto eraseState = comboStates.find(eraseActiveKey);
+				if (eraseState != comboStates.end()) {
+					eraseState->second.pendingUsesOnPress = false;
+					eraseState->second.pendingUsesHoldTime = false;
+					eraseState->second.pendingUsesRepeat = false;
+					eraseState->second.pendingUsesOnRelease = false;
+				}
+				comboRedirectTarget.erase(ComboStateKey(it->second.nativeKeys));
+				erasedAny = true;
+				it = comboDescriptions.erase(it);
+			}
+			if (erasedAny) ++g_comboInfoVersion;
+		}
+
 
 		std::vector<TrackedComboKeyInfo> BuildTrackedComboKeyInfoLocked() {
 			std::vector<TrackedComboKeyInfo> result;
