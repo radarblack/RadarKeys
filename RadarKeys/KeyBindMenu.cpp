@@ -4697,7 +4697,7 @@ namespace RadarKeys {
 						std::string comboLine = ComboKeysDisplayName(comboLineEntry.first);
 						if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
 							std::string stackedEntry;
-							for (USHORT stackedKey : CanonicalizeComboKeys(mergedCombo.activeKeys)) {
+							for (USHORT stackedKey : CanonicalizeComboKeys(comboLineEntry.first)) {
 								std::vector<std::string> keyParts = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
 								for (size_t pi = 0; pi < keyParts.size(); pi++) {
 									if (pi) stackedEntry += "\n";
