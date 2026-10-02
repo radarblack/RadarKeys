@@ -1970,7 +1970,12 @@ namespace RadarKeys {
 				if (entry.keyName == entry.padKeyName && entry.triggerType == 0 && entry.holdSeconds == 0.0f && entry.repeatAccelMult == 1.0f) {
 					outFile << "MODKEY|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << (entry.disabled ? "1" : "0") << "\n";
 				} else {
-					outFile << "MODKEY2|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << entry.padKeyName << "|" << (entry.disabled ? "1" : "0") << "|" << entry.triggerType << "|" << entry.holdSeconds << "|" << entry.repeatAccelMult << "|" << (entry.toggleMode ? "1" : "0") << "|" << entry.nativeKeyName << "|" << entry.altKbm << "\n";
+					std::string altJoined;
+					for (size_t ai = 0; ai < entry.altKbms.size(); ai++) {
+						if (ai) altJoined += ",";
+						altJoined += entry.altKbms[ai];
+					}
+					outFile << "MODKEY2|" << entry.scriptName << "|" << entry.functionName << "|" << entry.keyName << "|" << entry.padKeyName << "|" << (entry.disabled ? "1" : "0") << "|" << entry.triggerType << "|" << entry.holdSeconds << "|" << entry.repeatAccelMult << "|" << (entry.toggleMode ? "1" : "0") << "|" << entry.nativeKeyName << "|" << altJoined << "\n";
 				}
 			}
 			outFile.close();
@@ -2061,7 +2066,15 @@ namespace RadarKeys {
 					if (parts.size() >= 11) {
 						entry.nativeKeyName = trim(parts[10]);
 						if (parts.size() >= 12) {
-							entry.altKbm = trim(parts[11]);
+							std::string altField = trim(parts[11]);
+							size_t start = 0;
+							while (start <= altField.size()) {
+								size_t comma = altField.find(',', start);
+								std::string token = trim(altField.substr(start, (comma == std::string::npos ? altField.size() : comma) - start));
+								if (!token.empty()) entry.altKbms.push_back(token);
+								if (comma == std::string::npos) break;
+								start = comma + 1;
+							}
 						}
 					}
 					if (!entry.scriptName.empty() && !entry.functionName.empty() && (!entry.keyName.empty() || !entry.padKeyName.empty() || entry.disabled || entry.triggerType != 0 || entry.holdSeconds > 0.0f || entry.toggleMode)) {
@@ -2662,6 +2675,7 @@ namespace RadarKeys {
 		static std::string modKeyCaptureFunctionName;
 		static bool modKeyCaptureEditingAlt = false;
 		static USHORT modKeyCapturePrimaryVKey = 0;
+		static USHORT modKeyCaptureEditingAltVKey = 0;
 		static bool captureIsCombo = false;
 		static bool captureIsInject = false;
 		static int capturedInjectLineStart = 1;
@@ -2706,6 +2720,7 @@ namespace RadarKeys {
 			capturedToggleMode = capturedLongPressMode = capturedHasFuncOn = capturedHasFuncOff = false;
 			capturedToggleLocked = false;
 			modKeyCaptureEditingAlt = false;
+			modKeyCaptureEditingAltVKey = 0;
 			capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
 			capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
 			capturedInstantUserSet = false;
@@ -3619,6 +3634,12 @@ namespace RadarKeys {
 				if (isAssigningModKey) {
 					comboAvailable = IsModSingleAssignmentAvailable(
 						capturedVKey, modKeyCaptureScriptName, modKeyCaptureFunctionName, modPendingMask);
+					if (modKeyCaptureEditingAlt && capturedVKey != modKeyCaptureEditingAltVKey) {
+						std::vector<std::string> gateAlts = ModKeyBindings::GetAltKbmOverrides(modKeyCaptureScriptName, modKeyCaptureFunctionName);
+						for (const std::string& gateAlt : gateAlts) {
+							if (VKeyForName(gateAlt) == (int)capturedVKey) { comboAvailable = false; break; }
+						}
+					}
 					if (modKeyCaptureEditingAlt && capturedVKey == modKeyCapturePrimaryVKey) comboAvailable = false;
 				}
 				else if (isAssigningMenuToggleKey) {
@@ -3843,8 +3864,8 @@ namespace RadarKeys {
 						captureIsCombo = false;
 					}
 					else if (modKeyCaptureEditingAlt) {
-						int oldAltVKey = VKeyForName(ModKeyBindings::GetAltKbmOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName));
-						ModKeyBindings::SetAltKbm(modKeyCaptureScriptName, modKeyCaptureFunctionName, NameForVKey(capturedVKey));
+						int oldAltVKey = modKeyCaptureEditingAltVKey;
+						ModKeyBindings::ReplaceAltKbm(modKeyCaptureScriptName, modKeyCaptureFunctionName, modKeyCaptureEditingAltVKey > 0 ? NameForVKey(modKeyCaptureEditingAltVKey) : std::string(), NameForVKey(capturedVKey));
 						DebuggerMenu::LogBindEvent("Mod alt key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
 						LogActivity("KeyBindMenu: Mod alt key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
 						if (oldAltVKey > 0 && (USHORT)oldAltVKey != capturedVKey) {
@@ -3892,6 +3913,7 @@ namespace RadarKeys {
 					capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
 					capturedInstantUserSet = false;
 					modKeyCaptureEditingAlt = false;
+					modKeyCaptureEditingAltVKey = 0;
 					showCapturePrompt = isAssigningModKey = false;
 				}
 				else if (isAssigningMenuToggleKey) {
@@ -4476,13 +4498,17 @@ namespace RadarKeys {
 					std::string currentOverrideName = ModKeyBindings::GetOverride(row.info.scriptName, row.info.functionName);
 					std::vector<USHORT> currentOverrideComboMembers = ParseComboKeyNames(currentOverrideName);
 					std::vector<std::string> groupNames;
-					std::string altAuthorityName = ModKeyBindings::GetAltKbmOverride(row.info.scriptName, row.info.functionName);
-					int altAuthorityVKey = altAuthorityName.empty() ? -1 : VKeyForName(altAuthorityName);
+					std::vector<std::string> altAuthorityNames = ModKeyBindings::GetAltKbmOverrides(row.info.scriptName, row.info.functionName);
+					std::vector<int> altAuthorityVKeys;
+					for (const std::string& altName : altAuthorityNames) {
+						int altVKey = altName.empty() ? -1 : VKeyForName(altName);
+						if (altVKey > 0) altAuthorityVKeys.push_back(altVKey);
+					}
 					std::vector<USHORT> groupVKeys;
 					for (const LuaKeyState::TrackedKeyInfo& member : row.groupMembers) {
 						// t190: the alt line must render as its own key - resolve it to itself, not to
 						// the slot's stored key (that collapse let the dedupe eat the stacked button)
-						USHORT memberDisplayVKey = (altAuthorityVKey > 0 && member.vKey == (USHORT)altAuthorityVKey) ? member.vKey : ResolveDisplayVKey(member);
+						USHORT memberDisplayVKey = (std::find(altAuthorityVKeys.begin(), altAuthorityVKeys.end(), (int)member.vKey) != altAuthorityVKeys.end()) ? member.vKey : ResolveDisplayVKey(member);
 						bool memberIsGhost = false;
 						if (!currentOverrideComboMembers.empty()) {
 							memberIsGhost = SlotOfVKey(memberDisplayVKey) == SlotOfVKey(currentOverrideComboMembers.front());
@@ -4494,7 +4520,7 @@ namespace RadarKeys {
 								&& SlotOfVKey(memberDisplayVKey) == SlotOfVKey((USHORT)authorityVKey)
 								&& (USHORT)authorityVKey != memberDisplayVKey;
 						}
-						if (altAuthorityVKey > 0 && memberDisplayVKey == (USHORT)altAuthorityVKey) memberIsGhost = false;
+						if (std::find(altAuthorityVKeys.begin(), altAuthorityVKeys.end(), (int)memberDisplayVKey) != altAuthorityVKeys.end()) memberIsGhost = false;
 						if (memberIsGhost) {
 							continue;
 						}
@@ -5342,6 +5368,7 @@ namespace RadarKeys {
 							capturedVKey = 0;
 							capturedComboKeys = row.comboInfo.activeKeys;
 							modKeyCaptureEditingAlt = false;
+							modKeyCaptureEditingAltVKey = 0;
 							capturedCtrl = capturedShift = capturedAlt = false;
 							capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
@@ -5424,6 +5451,7 @@ namespace RadarKeys {
 							capturedInstantUserSet = false;
 							modKeyCaptureEditingAlt = altMode;
 							modKeyCapturePrimaryVKey = row.displayVKey;
+							modKeyCaptureEditingAltVKey = altMode ? seedVKey : (USHORT)0;
 							requestCaptureFocus = true;
 							showCapturePrompt = true;
 						};
