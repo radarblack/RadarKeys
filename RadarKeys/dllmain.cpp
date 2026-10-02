@@ -16,6 +16,8 @@
 #include <thread>
 #include <optional>
 #include <string>
+#include <vector>
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <cctype>
@@ -237,12 +239,15 @@ namespace RadarKeys {
 			LuaPushNil(L);
 			return 1;
 		}
-		std::string alt = ModKeyBindings::GetAltKbmOverride(scriptName, functionName);
-		if (alt.empty()) {
+		const char* indexRaw = LuaToString(L, 3);
+		int altIndex = (indexRaw && *indexRaw) ? (int)std::strtod(indexRaw, nullptr) : 1;
+		if (altIndex < 1) altIndex = 1;
+		std::vector<std::string> alts = ModKeyBindings::GetAltKbmOverrides(scriptName, functionName);
+		if (altIndex > (int)alts.size()) {
 			LuaPushNil(L);
 			return 1;
 		}
-		LuaPushString(L, alt.c_str());
+		LuaPushString(L, alts[altIndex - 1].c_str());
 		return 1;
 	}
 
@@ -274,7 +279,8 @@ namespace RadarKeys {
 		if (KeyBindMenu::SlotOfVKey((USHORT)keyVKey) != KeyBindMenu::SlotOfVKey((USHORT)authorityVKey)) return;
 		if (KeyBindMenu::SlotOfVKey((USHORT)keyVKey) == ModKeyBindings::BindSlot::Pad) return;
 		if ((USHORT)keyVKey == (USHORT)authorityVKey) return;
-		if (!ModKeyBindings::GetAltKbmOverride(scriptName, functionName).empty()) return;
+		std::vector<std::string> alts = ModKeyBindings::GetAltKbmOverrides(scriptName, functionName);
+		if (std::find(alts.begin(), alts.end(), keyName) != alts.end()) return;
 		ModKeyBindings::SetAltKbmWithoutSave(scriptName, functionName, keyName);
 		KeyBindMenu::RequestBindingsSave();
 	}
