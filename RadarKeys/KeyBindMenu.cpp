@@ -3140,6 +3140,14 @@ namespace RadarKeys {
 				result.instantType = bestInstantPriority;
 			}
 			if (result.breakdownLines.empty()) {
+				for (const std::string& altName : ModKeyBindings::GetAltKbmOverrides(scriptName, functionName)) {
+					if (ParseComboKeyNames(altName).empty()) continue;
+					result.found = true;
+					result.breakdownLines.push_back(std::string("Combo Key") + " -> " + scriptName + " [" + functionName + "]");
+					break;
+				}
+			}
+			if (result.breakdownLines.empty()) {
 				std::vector<USHORT> overrideMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(scriptName, functionName));
 				if (overrideMembers.size() >= 2) {
 					result.found = true;
@@ -3159,6 +3167,14 @@ namespace RadarKeys {
 						triggerLabel += " / On Release";
 					}
 					result.breakdownLines.push_back(triggerLabel + " -> " + scriptName + " [" + functionName + "]");
+				}
+			}
+			{
+				std::vector<std::string> plainLines = ComputeModKeyReadOnlyInfo(scriptName, functionName).breakdownLines;
+				for (const std::string& plainLine : plainLines) {
+					if (std::find(result.breakdownLines.begin(), result.breakdownLines.end(), plainLine) == result.breakdownLines.end()) {
+						result.breakdownLines.push_back(plainLine);
+					}
 				}
 			}
 			return result;
@@ -4647,9 +4663,12 @@ namespace RadarKeys {
 							if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
 								visual.stacked = true;
 							visual.showPlusBadge = true;
-								std::vector<std::string> wrappedComboName = WrapTextToWidth(comboLine, standardInner);
-								for (const std::string& comboNameLine : wrappedComboName) {
-									keyLabelLines.push_back(comboNameLine);
+								std::vector<USHORT> stackedKeys = CanonicalizeComboKeys(comboLineEntry.first);
+								for (USHORT stackedKey : stackedKeys) {
+									std::vector<std::string> wrappedKey = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
+									for (const std::string& keyLine : wrappedKey) {
+										keyLabelLines.push_back(keyLine);
+									}
 								}
 							} else {
 								keyLabelLines.push_back(comboLine);
@@ -4694,10 +4713,12 @@ namespace RadarKeys {
 						std::string comboLine = ComboKeysDisplayName(comboLineEntry.first);
 						if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
 							std::string stackedEntry;
-							std::vector<std::string> wrappedComboLines = WrapTextToWidth(comboLine, standardInner);
-							for (size_t wrappedComboPi = 0; wrappedComboPi < wrappedComboLines.size(); wrappedComboPi++) {
-								if (wrappedComboPi) stackedEntry += "\n";
-								stackedEntry += wrappedComboLines[wrappedComboPi];
+							for (USHORT stackedKey : CanonicalizeComboKeys(comboLineEntry.first)) {
+								std::vector<std::string> keyParts = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
+								for (size_t pi = 0; pi < keyParts.size(); pi++) {
+									if (pi) stackedEntry += "\n";
+									stackedEntry += keyParts[pi];
+								}
 							}
 							visual.lines.push_back(stackedEntry);
 							visual.lineVKeys.push_back((USHORT)0);
