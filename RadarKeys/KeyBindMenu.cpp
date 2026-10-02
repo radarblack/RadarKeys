@@ -4711,16 +4711,18 @@ namespace RadarKeys {
 					}
 					for (const auto& comboLineEntry : comboLines) {
 						std::string comboLine = ComboKeysDisplayName(comboLineEntry.first);
-						if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
-							std::string stackedEntry;
-							for (USHORT stackedKey : CanonicalizeComboKeys(comboLineEntry.first)) {
-								std::vector<std::string> keyParts = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
-								for (size_t pi = 0; pi < keyParts.size(); pi++) {
-									if (pi) stackedEntry += "\n";
-									stackedEntry += keyParts[pi];
-								}
-							}
-							visual.lines.push_back(stackedEntry);
+									if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
+										std::string stackedEntry;
+										bool firstStackedKeyLine = true;
+										for (USHORT stackedKey : CanonicalizeComboKeys(comboLineEntry.first)) {
+											std::vector<std::string> keyParts = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
+											for (size_t pi = 0; pi < keyParts.size(); pi++) {
+												if (!firstStackedKeyLine) stackedEntry += "\n";
+												stackedEntry += keyParts[pi];
+												firstStackedKeyLine = false;
+											}
+										}
+										visual.lines.push_back(stackedEntry);
 							visual.lineVKeys.push_back((USHORT)0);
 							visual.lineIsAlt.push_back(comboLineEntry.second);
 							visual.lineIsCombo.push_back(true);
