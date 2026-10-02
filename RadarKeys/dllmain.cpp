@@ -289,10 +289,10 @@ namespace RadarKeys {
 		const char* rawKey = LuaToString(L, 1);
 		const char* scriptName = LuaToString(L, 2);
 		const char* functionName = LuaToString(L, 3);
-		const char* toggleState = LuaToString(L, 4);
-		const char* declaredTypeRaw = LuaToString(L, 5);
-		const char* declaredHoldRaw = LuaToString(L, 6);
-		const char* declaredRepeatRaw = LuaToString(L, 7);
+		const char* declaredTypeRaw = LuaToString(L, 4);
+		const char* declaredHoldRaw = LuaToString(L, 5);
+		const char* declaredRepeatRaw = LuaToString(L, 6);
+		const char* toggleState = LuaToString(L, 7);
 		int declaredTriggerType = -1;
 		double declaredHoldSeconds = -1.0;
 		double declaredRepeatSeconds = -1.0;
