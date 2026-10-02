@@ -251,6 +251,27 @@ namespace RadarKeys {
 		return 1;
 	}
 
+	static int l_GetModPadKeyBinding(lua_State* L) {
+		const char* scriptName = LuaToString(L, 1);
+		const char* functionName = LuaToString(L, 2);
+		if (!scriptName || !functionName) {
+			LuaPushNil(L);
+			return 1;
+		}
+		std::string pad = ModKeyBindings::GetSlotOverride(scriptName, functionName, ModKeyBindings::BindSlot::Pad);
+		if (pad.empty()) {
+			USHORT nativeVKey = KeyBindMenu::NativeVKeyForMod(scriptName, functionName);
+			if (nativeVKey != 0 && KeyBindMenu::SlotOfVKey(nativeVKey) == ModKeyBindings::BindSlot::Pad) {
+				LuaPushString(L, KeyBindMenu::NameForVKey(nativeVKey).c_str());
+				return 1;
+			}
+			LuaPushNil(L);
+			return 1;
+		}
+		LuaPushString(L, pad.c_str());
+		return 1;
+	}
+
 	static int l_DebugLog(lua_State* L) {
 		const char* message = LuaToString(L, 1);
 		if (message) {
@@ -454,6 +475,7 @@ extern "C" __declspec(dllexport) int __cdecl luaopen_RadarKeys(lua_State* L) {
 		{ "DescribeKeyLines", RadarKeys::l_DescribeKeyLines },
 		{ "GetModKeyBinding", RadarKeys::l_GetModKeyBinding },
 		{ "GetModAltKeyBinding", RadarKeys::l_GetModAltKeyBinding },
+		{ "GetModPadKeyBinding", RadarKeys::l_GetModPadKeyBinding },
 		{ "GetTriggerType", RadarKeys::l_GetTriggerType },
 		{ "GetRepeatBaseSeconds", RadarKeys::l_GetRepeatBaseSeconds },
 		{ NULL, NULL }
