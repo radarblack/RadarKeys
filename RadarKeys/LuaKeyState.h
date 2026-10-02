@@ -40,7 +40,7 @@ namespace RadarKeys {
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState, int declaredTriggerType = -1, double declaredHoldSeconds = -1.0, double declaredRepeatSeconds = -1.0);
 		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState, int declaredTriggerType = -1, double declaredHoldSeconds = -1.0, double declaredRepeatSeconds = -1.0);
 		void SweepStaleComboDescriptions();
-		void RetireCombosForIdentity(const std::string& scriptName, const std::string& functionName, const std::vector<USHORT>& keepActiveKeys);
+		void RetireCombosForIdentity(const std::string& scriptName, const std::string& functionName, const std::vector<std::vector<USHORT>>& keepActiveKeySets);
 		double GetStaleSweepSecondsRemaining();
 		double GetStaleSweepSecondsTotal();
 		void OnFocusLost();
