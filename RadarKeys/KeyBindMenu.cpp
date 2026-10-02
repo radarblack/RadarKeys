@@ -3617,6 +3617,7 @@ namespace RadarKeys {
 					if (isAssigningModKey) {
 						comboAvailable = IsModComboAssignmentAvailable(
 							capturedComboKeys, modKeyCaptureScriptName, modKeyCaptureFunctionName, modPendingMask);
+						if (modKeyCaptureEditingAlt) comboAvailable = false;
 					} else {
 						comboAvailable = IsMultiKeyComboAvailable(
 							capturedComboKeys,
@@ -3855,6 +3856,7 @@ namespace RadarKeys {
 						LogActivity("KeyBindMenu: Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
 						applyTriggerChoice();
 						MarkDisplayCacheDirty();
+						LuaKeyState::RetireCombosForIdentity(modKeyCaptureScriptName, modKeyCaptureFunctionName, capturedComboKeys);
 
 						ResetComboCaptureState();
 						captureIsCombo = false;
@@ -3901,6 +3903,7 @@ namespace RadarKeys {
 						}
 						applyTriggerChoice();
 						MarkDisplayCacheDirty();
+						LuaKeyState::RetireCombosForIdentity(modKeyCaptureScriptName, modKeyCaptureFunctionName, std::vector<USHORT>());
 					}
 
 					capturedVKey = 0; capturedHoldSeconds = 0.0f;
@@ -4843,8 +4846,6 @@ namespace RadarKeys {
 						for (UnifiedRow& r : rows) {
 							if (r.isComboScript || r.isManual || !r.info.hasDescription) continue;
 							if (r.info.scriptName == cinfo.scriptName && r.info.functionName == cinfo.functionName) {
-								std::vector<USHORT> rowOverrideMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(r.info.scriptName, r.info.functionName));
-								if (rowOverrideMembers.size() >= 2) continue;
 								r.mergedCombos.push_back(cinfo);
 								if (rows[i].conflicted) r.conflicted = true;
 								merged = true;
