@@ -764,6 +764,15 @@ namespace RadarKeys {
 			std::sort(b.begin(), b.end());
 			return a == b;
 		}
+		bool ComboMatchesAltCombo(const std::vector<USHORT>& activeKeys, const std::vector<std::string>& altNames) {
+			for (const std::string& altName : altNames) {
+				std::vector<USHORT> altMembers = ParseComboKeyNames(altName);
+				if (!altMembers.empty() && VectorsEqualUnordered(altMembers, activeKeys)) {
+					return true;
+				}
+			}
+			return false;
+		}
 
 		std::string CenterMultilineLabel(const std::vector<std::string>& lines) {
 			float maxWidth = 0.0f;
@@ -2671,6 +2680,7 @@ namespace RadarKeys {
 		static bool modKeyCaptureEditingAlt = false;
 		static USHORT modKeyCapturePrimaryVKey = 0;
 		static USHORT modKeyCaptureEditingAltVKey = 0;
+		static std::string modKeyCaptureEditingAltName;
 		static bool captureIsCombo = false;
 		static bool captureIsInject = false;
 		static int capturedInjectLineStart = 1;
@@ -2716,6 +2726,7 @@ namespace RadarKeys {
 			capturedToggleLocked = false;
 			modKeyCaptureEditingAlt = false;
 			modKeyCaptureEditingAltVKey = 0;
+			modKeyCaptureEditingAltName.clear();
 			capturedInstantMode = false; capturedInstantTriggerType = 0; capturedRepeatAccelMult = 1.0f;
 			capturedRepeatIntervalSeconds = (float)kRepeatIntervalSeconds;
 			capturedInstantUserSet = false;
@@ -3617,7 +3628,14 @@ namespace RadarKeys {
 					if (isAssigningModKey) {
 						comboAvailable = IsModComboAssignmentAvailable(
 							capturedComboKeys, modKeyCaptureScriptName, modKeyCaptureFunctionName, modPendingMask);
-						if (modKeyCaptureEditingAlt) comboAvailable = false;
+						if (comboAvailable) {
+							std::vector<USHORT> primaryComboMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName));
+							if (!primaryComboMembers.empty() && VectorsEqualUnordered(primaryComboMembers, capturedComboKeys)) comboAvailable = false;
+							for (const std::string& gateAltName : ModKeyBindings::GetAltKbmOverrides(modKeyCaptureScriptName, modKeyCaptureFunctionName)) {
+								std::vector<USHORT> gateAltMembers = ParseComboKeyNames(gateAltName);
+								if (!gateAltMembers.empty() && VectorsEqualUnordered(gateAltMembers, capturedComboKeys)) { comboAvailable = false; break; }
+							}
+						}
 					} else {
 						comboAvailable = IsMultiKeyComboAvailable(
 							capturedComboKeys,
@@ -3851,19 +3869,33 @@ namespace RadarKeys {
 				if (isAssigningModKey) {
 					if (captureIsCombo) {
 						std::string comboKeyName = ComboKeysDisplayName(capturedComboKeys);
-						ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, comboKeyName);
-						DebuggerMenu::LogBindEvent("Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
-						LogActivity("KeyBindMenu: Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
+						if (modKeyCaptureEditingAlt) {
+							ModKeyBindings::ReplaceAltKbm(modKeyCaptureScriptName, modKeyCaptureFunctionName, modKeyCaptureEditingAltName, comboKeyName);
+							DebuggerMenu::LogBindEvent("Mod alt combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
+							LogActivity("KeyBindMenu: Mod alt combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
+						} else {
+							ModKeyBindings::SetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName, comboKeyName);
+							DebuggerMenu::LogBindEvent("Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
+							LogActivity("KeyBindMenu: Mod combo reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + comboKeyName);
+						}
 						applyTriggerChoice();
 						MarkDisplayCacheDirty();
-						LuaKeyState::RetireCombosForIdentity(modKeyCaptureScriptName, modKeyCaptureFunctionName, capturedComboKeys);
+						std::vector<std::vector<USHORT>> keepComboSets;
+						std::vector<USHORT> primaryKeepMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName));
+						if (!primaryKeepMembers.empty()) keepComboSets.push_back(primaryKeepMembers);
+						for (const std::string& keepAltName : ModKeyBindings::GetAltKbmOverrides(modKeyCaptureScriptName, modKeyCaptureFunctionName)) {
+							std::vector<USHORT> keepAltMembers = ParseComboKeyNames(keepAltName);
+							if (!keepAltMembers.empty()) keepComboSets.push_back(keepAltMembers);
+						}
+						LuaKeyState::RetireCombosForIdentity(modKeyCaptureScriptName, modKeyCaptureFunctionName, keepComboSets);
+						LuaKeyState::DescribeComboKey(capturedComboKeys, modKeyCaptureScriptName, modKeyCaptureFunctionName, std::string(), -1, -1.0, -1.0);
 
 						ResetComboCaptureState();
 						captureIsCombo = false;
 					}
 					else if (modKeyCaptureEditingAlt) {
 						int oldAltVKey = modKeyCaptureEditingAltVKey;
-						ModKeyBindings::ReplaceAltKbm(modKeyCaptureScriptName, modKeyCaptureFunctionName, modKeyCaptureEditingAltVKey > 0 ? NameForVKey(modKeyCaptureEditingAltVKey) : std::string(), NameForVKey(capturedVKey));
+						ModKeyBindings::ReplaceAltKbm(modKeyCaptureScriptName, modKeyCaptureFunctionName, !modKeyCaptureEditingAltName.empty() ? modKeyCaptureEditingAltName : (modKeyCaptureEditingAltVKey > 0 ? NameForVKey(modKeyCaptureEditingAltVKey) : std::string()), NameForVKey(capturedVKey));
 						DebuggerMenu::LogBindEvent("Mod alt key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
 						LogActivity("KeyBindMenu: Mod alt key reassigned: " + modKeyCaptureScriptName + " [" + modKeyCaptureFunctionName + "] -> " + NameForVKey(capturedVKey));
 						if (oldAltVKey > 0 && (USHORT)oldAltVKey != capturedVKey) {
@@ -3903,7 +3935,14 @@ namespace RadarKeys {
 						}
 						applyTriggerChoice();
 						MarkDisplayCacheDirty();
-						LuaKeyState::RetireCombosForIdentity(modKeyCaptureScriptName, modKeyCaptureFunctionName, std::vector<USHORT>());
+						std::vector<std::vector<USHORT>> keepComboSets;
+						std::vector<USHORT> primaryKeepMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(modKeyCaptureScriptName, modKeyCaptureFunctionName));
+						if (!primaryKeepMembers.empty()) keepComboSets.push_back(primaryKeepMembers);
+						for (const std::string& keepAltName : ModKeyBindings::GetAltKbmOverrides(modKeyCaptureScriptName, modKeyCaptureFunctionName)) {
+							std::vector<USHORT> keepAltMembers = ParseComboKeyNames(keepAltName);
+							if (!keepAltMembers.empty()) keepComboSets.push_back(keepAltMembers);
+						}
+						LuaKeyState::RetireCombosForIdentity(modKeyCaptureScriptName, modKeyCaptureFunctionName, keepComboSets);
 					}
 
 					capturedVKey = 0; capturedHoldSeconds = 0.0f;
@@ -3913,6 +3952,7 @@ namespace RadarKeys {
 					capturedInstantUserSet = false;
 					modKeyCaptureEditingAlt = false;
 					modKeyCaptureEditingAltVKey = 0;
+					modKeyCaptureEditingAltName.clear();
 					showCapturePrompt = isAssigningModKey = false;
 				}
 				else if (isAssigningMenuToggleKey) {
@@ -4264,6 +4304,7 @@ namespace RadarKeys {
 					USHORT displayVKey = 0;
 					std::vector<LuaKeyState::TrackedKeyInfo> groupMembers;
 					std::vector<LuaKeyState::TrackedComboKeyInfo> mergedCombos;
+					std::vector<bool> mergedComboIsAlt;
 					std::string storeNativeName;
 				std::string triggerLabel;
 				bool releaseSuppressedByHold = false;
@@ -4278,6 +4319,8 @@ namespace RadarKeys {
 				std::vector<std::string> keyButtonLines;
 				std::vector<USHORT> keyButtonLineVKeys;
 				std::vector<bool> keyButtonLineIsAlt;
+				std::vector<bool> keyButtonLineIsCombo;
+				std::vector<std::vector<USHORT>> keyButtonLineComboKeys;
 				};
 				auto FormatTrimmedSeconds = [](double v) -> std::string {
 					char buf[32];
@@ -4493,6 +4536,8 @@ namespace RadarKeys {
 					std::vector<std::string> lines;
 					std::vector<USHORT> lineVKeys;
 					std::vector<bool> lineIsAlt;
+					std::vector<bool> lineIsCombo;
+					std::vector<std::vector<USHORT>> lineComboKeys;
 				};
 				auto BuildModKeyGroupVisual = [&](const UnifiedRow& row) -> ModKeyRowVisual {
 					ModKeyRowVisual visual;
@@ -4584,12 +4629,25 @@ namespace RadarKeys {
 					} else if (!groupNames.empty()) {
 						keyLabelLines.push_back(groupNames.front());
 					}
-						for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
-							std::string comboLine = ComboKeysDisplayName(mergedCombo.activeKeys);
+						std::vector<std::pair<std::vector<USHORT>, bool>> comboLines;
+						for (size_t comboCi = 0; comboCi < row.mergedCombos.size(); comboCi++) {
+							comboLines.push_back(std::make_pair(row.mergedCombos[comboCi].activeKeys, comboCi < row.mergedComboIsAlt.size() && row.mergedComboIsAlt[comboCi]));
+						}
+						for (const std::string& altComboName : altAuthorityNames) {
+							std::vector<USHORT> altComboMembers = ParseComboKeyNames(altComboName);
+							if (altComboMembers.empty()) continue;
+							bool altComboAlreadyListed = false;
+							for (const auto& existingComboLine : comboLines) {
+								if (VectorsEqualUnordered(existingComboLine.first, altComboMembers)) { altComboAlreadyListed = true; break; }
+							}
+							if (!altComboAlreadyListed) comboLines.push_back(std::make_pair(altComboMembers, true));
+						}
+						for (const auto& comboLineEntry : comboLines) {
+							std::string comboLine = ComboKeysDisplayName(comboLineEntry.first);
 							if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
 								visual.stacked = true;
 							visual.showPlusBadge = true;
-								std::vector<USHORT> stackedKeys = CanonicalizeComboKeys(mergedCombo.activeKeys);
+								std::vector<USHORT> stackedKeys = CanonicalizeComboKeys(comboLineEntry.first);
 								for (USHORT stackedKey : stackedKeys) {
 									std::vector<std::string> wrappedKey = WrapTextToWidth(NameForVKey(stackedKey), standardInner);
 									for (const std::string& keyLine : wrappedKey) {
@@ -4632,9 +4690,11 @@ namespace RadarKeys {
 						visual.lineVKeys.push_back(gi < groupVKeys.size() ? groupVKeys[gi] : (USHORT)0);
 						visual.lineIsAlt.push_back(gi < groupVKeys.size()
 							&& std::find(altAuthorityVKeys.begin(), altAuthorityVKeys.end(), (int)groupVKeys[gi]) != altAuthorityVKeys.end());
+						visual.lineIsCombo.push_back(false);
+						visual.lineComboKeys.push_back(std::vector<USHORT>());
 					}
-					for (const LuaKeyState::TrackedComboKeyInfo& mergedCombo : row.mergedCombos) {
-						std::string comboLine = ComboKeysDisplayName(mergedCombo.activeKeys);
+					for (const auto& comboLineEntry : comboLines) {
+						std::string comboLine = ComboKeysDisplayName(comboLineEntry.first);
 						if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
 							std::string stackedEntry;
 							for (USHORT stackedKey : CanonicalizeComboKeys(mergedCombo.activeKeys)) {
@@ -4646,11 +4706,15 @@ namespace RadarKeys {
 							}
 							visual.lines.push_back(stackedEntry);
 							visual.lineVKeys.push_back((USHORT)0);
-							visual.lineIsAlt.push_back(false);
+							visual.lineIsAlt.push_back(comboLineEntry.second);
+							visual.lineIsCombo.push_back(true);
+							visual.lineComboKeys.push_back(comboLineEntry.first);
 						} else {
 							visual.lines.push_back(comboLine);
 							visual.lineVKeys.push_back((USHORT)0);
-							visual.lineIsAlt.push_back(false);
+							visual.lineIsAlt.push_back(comboLineEntry.second);
+							visual.lineIsCombo.push_back(true);
+							visual.lineComboKeys.push_back(comboLineEntry.first);
 						}
 					}
 					if (visual.lines.size() > 1) {
@@ -4776,6 +4840,7 @@ namespace RadarKeys {
 							synthCombo.scriptName = entry.scriptName;
 							synthCombo.functionName = entry.functionName;
 							row.mergedCombos.push_back(synthCombo);
+							row.mergedComboIsAlt.push_back(false);
 						}
 						row.displayVKey = (USHORT)resolvedVKey;
 						row.conflicted = conflictedVKeys.count((USHORT)resolvedVKey) > 0;
@@ -4789,7 +4854,8 @@ namespace RadarKeys {
 					std::vector<USHORT> ownerNativeMembers = ParseComboKeyNames(ModKeyBindings::GetNativeKey(cinfo.scriptName, cinfo.functionName));
 					bool overrideContradicts = !ownerOverrideMembers.empty() && !VectorsEqualUnordered(ownerOverrideMembers, cinfo.activeKeys);
 					bool nativeContradicts = !ownerNativeMembers.empty() && !VectorsEqualUnordered(ownerNativeMembers, cinfo.activeKeys);
-					if (overrideContradicts || nativeContradicts) continue;
+					bool altComboMatch = ComboMatchesAltCombo(cinfo.activeKeys, ModKeyBindings::GetAltKbmOverrides(cinfo.scriptName, cinfo.functionName));
+					if ((overrideContradicts || nativeContradicts) && !altComboMatch) continue;
 					unsigned cinfoMask = ModComboTriggerMask(cinfo);
 					bool conflicted = IsComboConflictedWithBindings(cinfo.activeKeys, -1, cinfoMask, true);
 					if (!conflicted) {
@@ -4840,13 +4906,15 @@ namespace RadarKeys {
 					LuaKeyState::TrackedComboKeyInfo& cinfo = rows[i].comboInfo;
 					std::vector<USHORT> ownerOverrideMembers = ParseComboKeyNames(ModKeyBindings::GetOverride(cinfo.scriptName, cinfo.functionName));
 					std::vector<USHORT> ownerNativeMembers = ParseComboKeyNames(ModKeyBindings::GetNativeKey(cinfo.scriptName, cinfo.functionName));
-					bool corroborated = VectorsEqualUnordered(ownerOverrideMembers, cinfo.activeKeys) || VectorsEqualUnordered(ownerNativeMembers, cinfo.activeKeys);
+					bool altComboMatch = ComboMatchesAltCombo(cinfo.activeKeys, ModKeyBindings::GetAltKbmOverrides(cinfo.scriptName, cinfo.functionName));
+					bool corroborated = VectorsEqualUnordered(ownerOverrideMembers, cinfo.activeKeys) || VectorsEqualUnordered(ownerNativeMembers, cinfo.activeKeys) || altComboMatch;
 					bool merged = false;
 					if (corroborated) {
 						for (UnifiedRow& r : rows) {
 							if (r.isComboScript || r.isManual || !r.info.hasDescription) continue;
 							if (r.info.scriptName == cinfo.scriptName && r.info.functionName == cinfo.functionName) {
 								r.mergedCombos.push_back(cinfo);
+								r.mergedComboIsAlt.push_back(!VectorsEqualUnordered(ownerOverrideMembers, cinfo.activeKeys) && !VectorsEqualUnordered(ownerNativeMembers, cinfo.activeKeys));
 								if (rows[i].conflicted) r.conflicted = true;
 								merged = true;
 								break;
@@ -4870,6 +4938,7 @@ namespace RadarKeys {
 					synthesized.scriptName = r.info.scriptName;
 					synthesized.functionName = r.info.functionName;
 					r.mergedCombos.push_back(synthesized);
+					r.mergedComboIsAlt.push_back(false);
 				}
 				for (const auto& entry : ModKeyBindings::GetAllOverrides()) {
 					std::vector<USHORT> overrideMembers = ParseComboKeyNames(entry.keyName);
@@ -5041,6 +5110,8 @@ namespace RadarKeys {
 						row.keyButtonLines = visual.lines;
 						row.keyButtonLineVKeys = visual.lineVKeys;
 						row.keyButtonLineIsAlt = visual.lineIsAlt;
+						row.keyButtonLineIsCombo = visual.lineIsCombo;
+						row.keyButtonLineComboKeys = visual.lineComboKeys;
 					}
 					if (row.conflicted) {
 						continue;
@@ -5381,6 +5452,7 @@ namespace RadarKeys {
 							capturedComboKeys = row.comboInfo.activeKeys;
 							modKeyCaptureEditingAlt = false;
 							modKeyCaptureEditingAltVKey = 0;
+							modKeyCaptureEditingAltName.clear();
 							capturedCtrl = capturedShift = capturedAlt = false;
 							capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
 							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
@@ -5464,11 +5536,45 @@ namespace RadarKeys {
 							modKeyCaptureEditingAlt = altMode;
 							modKeyCapturePrimaryVKey = row.displayVKey;
 							modKeyCaptureEditingAltVKey = altMode ? seedVKey : (USHORT)0;
+							modKeyCaptureEditingAltName = altMode ? NameForVKey(seedVKey) : std::string();
 							requestCaptureFocus = true;
 							showCapturePrompt = true;
 						};
 						auto openReassignPrompt = [&row, &openReassignPromptFor]() { openReassignPromptFor(row.displayVKey, false); };
 						auto openAltReassignPrompt = [&row, &openReassignPromptFor](USHORT altVKey) { openReassignPromptFor(altVKey, true); };
+						auto openModComboReassignPromptFor = [&row](const std::vector<USHORT>& seedKeys, bool altMode, const std::string& altName) {
+							modKeyCaptureScriptName = row.info.scriptName;
+							modKeyCaptureFunctionName = row.info.functionName;
+							captureIsCombo = true;
+							ResetComboCaptureState();
+							capturedVKey = 0;
+							capturedComboKeys = seedKeys;
+							modKeyCaptureEditingAlt = altMode;
+							modKeyCaptureEditingAltVKey = 0;
+							modKeyCaptureEditingAltName = altMode ? altName : std::string();
+							capturedCtrl = capturedShift = capturedAlt = false;
+							capturedScriptPathOnBuffer[0] = capturedScriptPathOffBuffer[0] = '\0';
+							capturedFuncOnBuffer[0] = capturedFuncOffBuffer[0] = capturedFuncTapBuffer[0] = '\0';
+							capturedHasFuncOn = capturedHasFuncOff = false;
+							capturedToggleType = 0;
+							capturedToggleLocked = true;
+							capturedToggleMode = row.info.hasToggleState;
+							capturedInstantUserSet = false;
+							editingBindingIndex = -1;
+							isAssigningMenuToggleKey = false;
+							isAssigningModKey = true;
+							ModKeyReadOnlyInfo seededInfo = ComputeOwnComboModKeyInfo(modKeyCaptureScriptName, modKeyCaptureFunctionName, capturedComboKeys);
+							capturedLongPressMode = seededInfo.anyLongPress;
+							capturedHoldSeconds = (float)seededInfo.longPressSeconds;
+							capturedInstantMode = seededInfo.anyInstant;
+							capturedInstantTriggerType = seededInfo.instantType;
+							if (!capturedInstantMode && !capturedLongPressMode) capturedInstantMode = true;
+							capturedRepeatIntervalSeconds = (float)LuaKeyState::GetComboRepeatIntervalSeconds(capturedComboKeys);
+							if (capturedRepeatIntervalSeconds <= 0.0f) capturedRepeatIntervalSeconds = (float)kModKeyRepeatBaseSeconds;
+							capturedRepeatAccelMult = (float)(kModKeyRepeatBaseSeconds / (double)capturedRepeatIntervalSeconds);
+							requestCaptureFocus = true;
+							showCapturePrompt = true;
+						};
 
 						ImVec4 keyNameColor;
 						if (row.keyAnyToggle) {
@@ -5501,7 +5607,10 @@ namespace RadarKeys {
 									if (ImGui::Button(row.keyButtonLines[li].c_str(), ImVec2(row.keyButtonW, entryHeight))) {
 										USHORT lineTarget = (li < row.keyButtonLineVKeys.size()) ? row.keyButtonLineVKeys[li] : (USHORT)0;
 										bool lineIsAlt = (li < row.keyButtonLineIsAlt.size()) && row.keyButtonLineIsAlt[li];
-										if (lineTarget == 0 || lineTarget == row.displayVKey) openReassignPrompt();
+										bool lineIsCombo = (li < row.keyButtonLineIsCombo.size()) && row.keyButtonLineIsCombo[li];
+										std::vector<USHORT> lineComboKeys = (li < row.keyButtonLineComboKeys.size()) ? row.keyButtonLineComboKeys[li] : std::vector<USHORT>();
+										if (lineIsCombo && !lineComboKeys.empty()) openModComboReassignPromptFor(lineComboKeys, lineIsAlt, ComboKeysDisplayName(lineComboKeys));
+										else if (lineTarget == 0 || lineTarget == row.displayVKey) openReassignPrompt();
 										else if (lineIsAlt) openAltReassignPrompt(lineTarget);
 										else openReassignPromptFor(lineTarget, false);
 									}
