@@ -3,6 +3,8 @@
 
 #include "RawInput.h"
 #include "DirectInputHook.h"
+#include "DebuggerMenu.h"
+#include "KeyBindMenu.h"
 #include "spdlog/spdlog.h"
 #include <Xinput.h>
 #include <tlhelp32.h>
@@ -1050,6 +1052,17 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent) {
 			if (vKey >= vKeyMax) {
 				return;
+			}
+			if (buttonEvent == BUTTONEVENT::ONDOWN) {
+				DWORD fgProcessId = 0;
+				GetWindowThreadProcessId(GetForegroundWindow(), &fgProcessId);
+				if (fgProcessId == GetCurrentProcessId()) {
+					std::string pressMods;
+					if (IsKeyHeldReal(VK_CONTROL)) pressMods += "Ctrl+";
+					if (IsKeyHeldReal(VK_SHIFT)) pressMods += "Shift+";
+					if (IsKeyHeldReal(VK_MENU)) pressMods += "Alt+";
+					DebuggerMenu::LogButtonPress(pressMods + KeyBindMenu::NameForVKey(vKey) + " pressed");
+				}
 			}
 			std::vector<ButtonAction> snapshot;
 			{
