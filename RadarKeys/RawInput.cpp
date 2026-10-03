@@ -137,6 +137,7 @@ namespace RadarKeys {
 			return keys;
 		}
 
+		static std::atomic<size_t> g_totalActionCount{ 0 };
 		void DoActions(USHORT vKey, RawInput::BUTTONEVENT buttonEvent);
 
 		typedef DWORD(WINAPI* XInputGetStateFunc)(DWORD, XINPUT_STATE*);
@@ -1023,7 +1024,9 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 
 				// safety filter
 				if (!ignore[vKey] && vKey != VK_LBUTTON && vKey != VK_RBUTTON) {
-					DoActions(vKey, buttonEvent);
+					if (flags != oldFlags) {
+						DoActions(vKey, buttonEvent);
+					}
 				}
 			}
 
@@ -1069,6 +1072,9 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 					}
 				}
 			}
+			if (buttonEvent != BUTTONEVENT::ONDOWN && g_totalActionCount.load(std::memory_order_relaxed) == 0) {
+				return;
+			}
 			std::vector<ButtonAction> snapshot;
 			{
 				std::lock_guard<std::recursive_mutex> lock(g_actionMutex);
@@ -1102,6 +1108,7 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 
 			ActionHandle handle = nextActionHandle++;
 			buttonActions[vKey]->push_back({ handle, action });
+			g_totalActionCount.fetch_add(1, std::memory_order_relaxed);
 			return handle;
 		}//RegisterAction
 
@@ -1115,6 +1122,7 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 				return;
 			}
 			else {
+				g_totalActionCount.fetch_sub(buttonActions[vKey]->size(), std::memory_order_relaxed);
 				buttonActions[vKey]->clear();
 				delete buttonActions[vKey];
 				buttonActions[vKey] = nullptr;
@@ -1134,6 +1142,7 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 			for (auto it = actions->begin(); it != actions->end(); ++it) {
 				if (it->first == handle) {
 					actions->erase(it);
+					g_totalActionCount.fetch_sub(1, std::memory_order_relaxed);
 					spdlog::debug(LOG_RAWINPUT_UNREGISTERACTION_REMOVED_HANDLE_FMT_FROM, handle, vKey);
 					if (actions->empty()) {
 						delete buttonActions[vKey];
