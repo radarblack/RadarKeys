@@ -5643,20 +5643,6 @@ namespace RadarKeys {
 						if (row.info.hasDescription) {
 							bool modStackHovered = false;
 							if (row.keyButtonLines.size() > 1) {
-								ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
-								float stackBlockMaxW = 0.0f;
-								for (const std::string& stackWidthEntry : row.keyButtonLines) {
-									std::string::size_type stackWidthPos = 0;
-									while (stackWidthPos <= stackWidthEntry.size()) {
-										std::string::size_type stackWidthNl = stackWidthEntry.find('\n', stackWidthPos);
-										std::string stackWidthSeg = stackWidthEntry.substr(stackWidthPos, (stackWidthNl == std::string::npos ? stackWidthEntry.size() : stackWidthNl) - stackWidthPos);
-										stackBlockMaxW = (std::max)(stackBlockMaxW, ImGui::CalcTextSize(stackWidthSeg.c_str()).x);
-										if (stackWidthNl == std::string::npos) break;
-										stackWidthPos = stackWidthNl + 1;
-									}
-								}
-								const float stackTextPadX = (std::max)(0.0f, (row.keyButtonW - stackBlockMaxW) * 0.5f);
-								ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(stackTextPadX, ImGui::GetStyle().FramePadding.y));
 								const float stackStartX = ImGui::GetCursorPosX();
 								float stackY = ImGui::GetCursorPosY();
 								size_t plusBadgeEntry = row.keyButtonLines.size();
@@ -5692,8 +5678,6 @@ namespace RadarKeys {
 									}
 									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y * kStackButtonGapFactor;
 								}
-							ImGui::PopStyleVar();
-							ImGui::PopStyleVar();
 							} else if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
 								openReassignPrompt();
 							} else {
@@ -5707,20 +5691,7 @@ namespace RadarKeys {
 							bool modStackHovered = false;
 							ImGui::BeginDisabled();
 							if (row.keyButtonLines.size() > 1) {
-								ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
-								float stackBlockMaxW = 0.0f;
-								for (const std::string& stackWidthEntry : row.keyButtonLines) {
-									std::string::size_type stackWidthPos = 0;
-									while (stackWidthPos <= stackWidthEntry.size()) {
-										std::string::size_type stackWidthNl = stackWidthEntry.find('\n', stackWidthPos);
-										std::string stackWidthSeg = stackWidthEntry.substr(stackWidthPos, (stackWidthNl == std::string::npos ? stackWidthEntry.size() : stackWidthNl) - stackWidthPos);
-										stackBlockMaxW = (std::max)(stackBlockMaxW, ImGui::CalcTextSize(stackWidthSeg.c_str()).x);
-										if (stackWidthNl == std::string::npos) break;
-										stackWidthPos = stackWidthNl + 1;
-									}
-								}
-								const float stackTextPadX = (std::max)(0.0f, (row.keyButtonW - stackBlockMaxW) * 0.5f);
-								ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(stackTextPadX, ImGui::GetStyle().FramePadding.y));
+							ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
 								const float stackStartX = ImGui::GetCursorPosX();
 								float stackY = ImGui::GetCursorPosY();
 								for (size_t li = 0; li < row.keyButtonLines.size(); li++) {
@@ -5732,7 +5703,6 @@ namespace RadarKeys {
 									modStackHovered = modStackHovered || ImGui::IsItemHovered();
 									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y * kStackButtonGapFactor;
 								}
-							ImGui::PopStyleVar();
 							ImGui::PopStyleVar();
 							} else {
 								ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
