@@ -5002,8 +5002,30 @@ namespace RadarKeys {
 						if (sortIsCombo) {
 							sortKeys = CanonicalizeComboKeys(r.mergedCombos.front().activeKeys);
 						} else {
+							std::vector<USHORT> memberKeys;
 							for (const LuaKeyState::TrackedKeyInfo& sortMember : r.groupMembers) {
 								sortKeys.push_back(ResolveDisplayVKey(sortMember));
+								memberKeys.push_back(ResolveDisplayVKey(sortMember));
+							}
+							std::map<int, int> memberCategoryCounts;
+							for (USHORT memberKey : memberKeys) {
+								memberCategoryCounts[KeyCategoryRank(memberKey)]++;
+							}
+							int primaryCategory = kCategoryUnranked;
+							int primaryCategoryBest = 0;
+							for (const auto& memberCategory : memberCategoryCounts) {
+								if (memberCategory.second > primaryCategoryBest) {
+									primaryCategoryBest = memberCategory.second;
+									primaryCategory = memberCategory.first;
+								}
+							}
+							for (USHORT memberKey : memberKeys) {
+								if (KeyCategoryRank(memberKey) == primaryCategory) {
+									sortKeys.push_back(memberKey);
+								}
+							}
+							if (sortKeys.empty()) {
+								sortKeys = memberKeys;
 							}
 						}
 					}
@@ -5015,7 +5037,7 @@ namespace RadarKeys {
 						minVKey = (std::min)(minVKey, (int)sortKey);
 						minPairKey = (std::min)(minPairKey, (int)SymbolPairKey(sortKey));
 					}
-					return std::make_tuple(sortIsCombo, minCategory, sortKeys.size(), minPairKey, minVKey);
+					return std::make_tuple(sortIsCombo, minCategory, (size_t)1, minPairKey, minVKey);
 				};
 				std::stable_sort(rows.begin(), rows.end(), [&](const UnifiedRow& a, const UnifiedRow& b) {
 					const std::string ag = rowGroupKey(a);
