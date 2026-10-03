@@ -305,13 +305,11 @@ namespace RadarKeys {
 					}
 					if (!RawInput::IsKeyHeldReal(vKey)) {
 						s.downEdgePending--;
-						DebuggerMenu::LogButtonPress(KeyBindMenu::NameForVKey(vKey) + " pressed");
 						return true;
 					}
 					return false;
 				}
 				s.downEdgePending--;
-				DebuggerMenu::LogButtonPress(KeyBindMenu::NameForVKey(vKey) + " pressed");
 				return true;
 			}
 			return false;
