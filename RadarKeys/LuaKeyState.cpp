@@ -925,6 +925,21 @@ namespace RadarKeys {
 			if (erasedAny) ++g_comboInfoVersion;
 		}
 
+		void FlushPendingEdgesForIdentity(const std::string& scriptName, const std::string& functionName) {
+			KeyStateLock lock(g_keyStateMutex);
+			for (int vKeyInt = 0; vKeyInt < RawInput::kMaxVKey; ++vKeyInt) {
+				KeyPollState& s = states[vKeyInt];
+				if (s.descriptions.empty()) continue;
+				bool matches = false;
+				for (const KeyDescription& d : s.descriptions) {
+					if (d.scriptName == scriptName && d.functionName == functionName) { matches = true; break; }
+				}
+				if (!matches) continue;
+				s.downEdgePending = 0;
+				s.upEdgePending = 0;
+			}
+		}
+
 
 		std::vector<TrackedComboKeyInfo> BuildTrackedComboKeyInfoLocked() {
 			std::vector<TrackedComboKeyInfo> result;
