@@ -2,6 +2,7 @@
 #include "RawInput.h"
 #include "ModKeyBindings.h"
 #include "KeyBindMenu.h"
+#include "DebuggerMenu.h"
 #include "spdlog/spdlog.h"
 #include <chrono>
 #include <algorithm>
@@ -281,6 +282,7 @@ namespace RadarKeys {
 			return false;
 		}
 
+		bool MemberComboGateState(USHORT vKey, bool& comboArmed);
 		bool OnButtonDown(USHORT vKey) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
@@ -295,7 +297,21 @@ namespace RadarKeys {
 				return false;
 			}
 			if (s.downEdgePending > 0) {
+				bool memberComboArmed = false;
+				if (MemberComboGateState(vKey, memberComboArmed)) {
+					if (memberComboArmed) {
+						s.downEdgePending = 0;
+						return false;
+					}
+					if (!RawInput::IsKeyHeldReal(vKey)) {
+						s.downEdgePending--;
+						DebuggerMenu::LogButtonPress(KeyBindMenu::NameForVKey(vKey) + " pressed");
+						return true;
+					}
+					return false;
+				}
 				s.downEdgePending--;
+				DebuggerMenu::LogButtonPress(KeyBindMenu::NameForVKey(vKey) + " pressed");
 				return true;
 			}
 			return false;
@@ -572,6 +588,12 @@ namespace RadarKeys {
 				state.pressTime = clock::now();
 				state.repeatStart = state.pressTime;
 				state.currentIncrementMult = 1.0;
+				std::string comboPressLabel;
+				for (size_t comboPressI = 0; comboPressI < active.size(); comboPressI++) {
+					if (comboPressI) comboPressLabel += " + ";
+					comboPressLabel += KeyBindMenu::NameForVKey(active[comboPressI]);
+				}
+				DebuggerMenu::LogButtonPress(comboPressLabel + " pressed");
 				return true;
 			}
 			if (!allHeld) {
@@ -776,6 +798,25 @@ namespace RadarKeys {
 			std::string functionName;
 		};
 		std::map<std::string, ComboKeyDescription> comboDescriptions;
+		bool MemberComboGateState(USHORT vKey, bool& comboArmed) {
+			bool member = false;
+			comboArmed = false;
+			for (const auto& entry : comboDescriptions) {
+				auto redirectIt = comboRedirectTarget.find(ComboStateKey(entry.second.nativeKeys));
+				std::vector<USHORT> activeMembers = (redirectIt != comboRedirectTarget.end() && ValidCombo(redirectIt->second)) ? redirectIt->second : entry.second.nativeKeys;
+				bool isMember = false;
+				for (USHORT k : activeMembers) {
+					if (k == vKey) { isMember = true; break; }
+				}
+				if (!isMember) continue;
+				member = true;
+				if (RawComboAllHeld(activeMembers)) {
+					comboArmed = true;
+					break;
+				}
+			}
+			return member;
+		}
 
 		std::string LowercaseCopy(const std::string& text) {
 			std::string out;
