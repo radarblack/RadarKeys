@@ -1054,14 +1054,19 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 				return;
 			}
 			if (buttonEvent == BUTTONEVENT::ONDOWN) {
-				DWORD fgProcessId = 0;
-				GetWindowThreadProcessId(GetForegroundWindow(), &fgProcessId);
-				if (fgProcessId == GetCurrentProcessId()) {
-					std::string pressMods;
-					if (IsKeyHeldReal(VK_CONTROL)) pressMods += "Ctrl+";
-					if (IsKeyHeldReal(VK_SHIFT)) pressMods += "Shift+";
-					if (IsKeyHeldReal(VK_MENU)) pressMods += "Alt+";
-					DebuggerMenu::LogButtonPress(pressMods + KeyBindMenu::NameForVKey(vKey) + " pressed");
+				if (DebuggerMenu::logButtonPress) {
+					HWND fgWindow = GetForegroundWindow();
+					if (fgWindow != nullptr) {
+						DWORD fgProcessId = 0;
+						GetWindowThreadProcessId(fgWindow, &fgProcessId);
+						if (fgProcessId == GetCurrentProcessId()) {
+							std::string pressMods;
+							if (IsKeyHeldReal(VK_CONTROL)) pressMods += "Ctrl+";
+							if (IsKeyHeldReal(VK_SHIFT)) pressMods += "Shift+";
+							if (IsKeyHeldReal(VK_MENU)) pressMods += "Alt+";
+							DebuggerMenu::LogButtonPress(pressMods + KeyBindMenu::NameForVKey(vKey) + " pressed");
+						}
+					}
 				}
 			}
 			std::vector<ButtonAction> snapshot;
