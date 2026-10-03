@@ -4217,6 +4217,7 @@ namespace RadarKeys {
 		void Draw(bool* p_open) {
 			RebuildDisplayCacheIfNeeded();
 			static float s_requiredContentWidth = 0.0f;
+			static float s_detailLabelLongestW = 0.0f;
 			float longestItemWidth = 0.0f;
 			for (const auto& entry : displayCache) {
 				float stringPixelWidth = ImGui::CalcTextSize(entry.fullLine.c_str()).x;
@@ -5029,6 +5030,7 @@ namespace RadarKeys {
 				});
 				std::stable_partition(rows.begin(), rows.end(), [](const UnifiedRow& r) { return r.conflicted; });
 				float notesColumnX = 0.0f;
+				float frameDetailLabelLongestW = 0.0f;
 				std::unordered_set<USHORT> holdUsageVKeys;
 				for (const LuaKeyState::TrackedKeyInfo& tk : trackedKeys) {
 					if (tk.usesHoldTime || (tk.declaredTriggerType == 0 && tk.declaredHoldSeconds > 0.0)) holdUsageVKeys.insert(tk.vKey);
@@ -5242,6 +5244,9 @@ namespace RadarKeys {
 					}
 
 					float detailFullW = ImGui::CalcTextSize(detailText.c_str()).x;
+					if (detailFullW > frameDetailLabelLongestW) {
+						frameDetailLabelLongestW = detailFullW;
+					}
 					float rowRequiredW = notesColumnX + ImGui::GetStyle().ItemSpacing.x + detailFullW;
 					if (rowRequiredW > frameRequiredWidth) {
 						frameRequiredWidth = rowRequiredW;
@@ -5252,12 +5257,7 @@ namespace RadarKeys {
 					ImGui::SetCursorPos(ImVec2(0.0f, rowTopY));
 					float rowAvailWidth = ImGui::GetContentRegionAvail().x;
 					float detailAvailX = (rowAvailWidth - notesColumnX) > 50.0f ? (rowAvailWidth - notesColumnX) : 50.0f;
-					std::vector<std::string> detailLines = row.conflicted ? std::vector<std::string>() : WrapTextToWidth(detailText, detailAvailX);
-					float detailBlockW = 0.0f;
-					for (const std::string& detailLine : detailLines) {
-						detailBlockW = (std::max)(detailBlockW, ImGui::CalcTextSize(detailLine.c_str()).x);
-					}
-					float detailPredictedHeight = row.conflicted ? conflictBoxHeight : (float)detailLines.size() * ImGui::GetTextLineHeight();
+					float detailPredictedHeight = row.conflicted ? conflictBoxHeight : ImGui::CalcTextSize(detailText.c_str(), nullptr, false, detailAvailX).y;
 					float rowContentHeight = (detailPredictedHeight > row.keyButtonH) ? detailPredictedHeight : row.keyButtonH;
 					float keyButtonYOffset = (rowContentHeight - row.keyButtonH) * 0.5f;
 					float stdButtonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
@@ -5727,22 +5727,21 @@ namespace RadarKeys {
 						float buttonCenterY = rowTopY + keyButtonYOffset + row.keyButtonH * 0.5f;
 						float labelLineH = ImGui::GetTextLineHeight();
 						float buttonLabelRowY = buttonCenterY - labelLineH * 0.5f - kButtonLabelRowNudge;
-						const float labelRightEdge = ImGui::GetContentRegionMax().x;
+						const float detailLabelX = (std::max)(ImGui::GetContentRegionMax().x - s_detailLabelLongestW, notesColumnX);
 						if (!triggerLabel.empty()) {
 							ImGui::SameLine();
 							ImGui::SetCursorPosY(buttonLabelRowY);
-							ImGui::SetCursorPosX(labelRightEdge - detailBlockW - ImGui::GetStyle().ItemSpacing.x - ImGui::CalcTextSize(triggerLabel.c_str()).x);
 							ImGui::TextDisabled("%s", triggerLabel.c_str());
 							if (row.releaseSuppressedByHold && ImGui::IsItemHovered()) {
 								ImGui::SetTooltip("%s", UI_TIP_RELEASE_AFTER_HOLD);
 							}
 						}
 						ImGui::SameLine();
-						for (size_t detailLineI = 0; detailLineI < detailLines.size(); detailLineI++) {
-							ImGui::SetCursorPosY(buttonLabelRowY + (float)detailLineI * ImGui::GetTextLineHeight());
-							ImGui::SetCursorPosX(labelRightEdge - ImGui::CalcTextSize(detailLines[detailLineI].c_str()).x);
-							ImGui::TextUnformatted(detailLines[detailLineI].c_str());
-						}
+						ImGui::SetCursorPosY(buttonLabelRowY);
+						ImGui::SetCursorPosX(detailLabelX);
+						ImGui::BeginGroup();
+						ImGui::TextUnformatted(detailText.c_str());
+						ImGui::EndGroup();
 					}
 
 					const float rowBottomY = rowTopY + rowContentHeight;
@@ -5764,6 +5763,7 @@ namespace RadarKeys {
 					ImGui::PopID();
 				}
 				s_requiredContentWidth = frameRequiredWidth;
+				s_detailLabelLongestW = frameDetailLabelLongestW;
 				ImGui::EndChild();
 
 				if (removeConfirmPopupRequested) {
