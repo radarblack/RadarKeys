@@ -1300,20 +1300,6 @@ namespace RadarKeys {
 
 		std::vector<USHORT> ComputeConflictedVKeys() {
 			std::unordered_set<USHORT> conflicted;
-			for (const auto& bind : bindings) {
-				if (!bind.IsCombo()) continue;
-				bool allHeld = true;
-				for (USHORT k : bind.comboKeys) {
-					if (!RawInput::IsKeyHeldReal(k)) { allHeld = false; break; }
-				}
-				if (!allHeld) continue;
-				for (USHORT k : bind.comboKeys) conflicted.insert(k);
-			}
-
-			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
-				if (!info.isPressed) continue;
-				for (USHORT k : info.activeKeys) conflicted.insert(k);
-			}
 
 			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
 				if (info.isConflicted) {
@@ -1333,6 +1319,27 @@ namespace RadarKeys {
 				}
 			}
 			return std::vector<USHORT>(conflicted.begin(), conflicted.end());
+		}
+
+		std::vector<USHORT> ComputeSuppressedVKeys() {
+			std::unordered_set<USHORT> suppressed;
+			for (USHORT vKey : ComputeConflictedVKeys()) {
+				suppressed.insert(vKey);
+			}
+			for (const auto& bind : bindings) {
+				if (!bind.IsCombo()) continue;
+				bool allHeld = true;
+				for (USHORT k : bind.comboKeys) {
+					if (!RawInput::IsKeyHeldReal(k)) { allHeld = false; break; }
+				}
+				if (!allHeld) continue;
+				for (USHORT k : bind.comboKeys) suppressed.insert(k);
+			}
+			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (!info.isPressed) continue;
+				for (USHORT k : info.activeKeys) suppressed.insert(k);
+			}
+			return std::vector<USHORT>(suppressed.begin(), suppressed.end());
 		}
 
 		std::vector<USHORT> ComputeDisabledModVKeys() {
@@ -1417,7 +1424,7 @@ namespace RadarKeys {
 			lastVKeyComputeTick = vkeyComputeNow;
 			lastVKeyComputeMenuOpen = menuOpen;
 			lastVKeyComputeCapturePrompt = showCapturePrompt;
-			cachedSuppressedVKeys = ComputeConflictedVKeys();
+			cachedSuppressedVKeys = ComputeSuppressedVKeys();
 			cachedDisabledVKeys = ComputeDisabledModVKeys();
 			cachedDisabledCombos = ComputeDisabledModCombos();
 			LuaKeyState::SetSuppressedVKeys(cachedSuppressedVKeys);
