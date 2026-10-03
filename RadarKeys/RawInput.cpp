@@ -1061,9 +1061,9 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 						GetWindowThreadProcessId(fgWindow, &fgProcessId);
 						if (fgProcessId == GetCurrentProcessId()) {
 							std::string pressMods;
-							if (IsKeyHeldReal(VK_CONTROL)) pressMods += "Ctrl+";
-							if (IsKeyHeldReal(VK_SHIFT)) pressMods += "Shift+";
-							if (IsKeyHeldReal(VK_MENU)) pressMods += "Alt+";
+							if (vKey != VK_CONTROL && IsKeyHeldReal(VK_CONTROL)) pressMods += "Ctrl+";
+							if (vKey != VK_SHIFT && IsKeyHeldReal(VK_SHIFT)) pressMods += "Shift+";
+							if (vKey != VK_MENU && IsKeyHeldReal(VK_MENU)) pressMods += "Alt+";
 							DebuggerMenu::LogButtonPress(pressMods + KeyBindMenu::NameForVKey(vKey) + " pressed");
 						}
 					}
