@@ -2544,13 +2544,15 @@ namespace RadarKeys {
 				if (bulkNativeVKey != 0 && bulkNativeVKey != info.vKey) {
 					LuaKeyState::ReassignBinding(info.vKey, bulkNativeVKey, info.scriptName, info.functionName);
 				}
+				LuaKeyState::FlushPendingEdgesForIdentity(info.scriptName, info.functionName);
 				ModKeyBindings::SetDisabledWithoutSave(info.scriptName, info.functionName, false);
 				resetCount++;
 			}
 			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
-				if (ModKeyBindings::GetOverride(cinfo.scriptName, cinfo.functionName).empty()) continue;
 				ModKeyBindings::SetOverrideWithoutSave(cinfo.scriptName, cinfo.functionName, "");
 				LuaKeyState::ClearComboRedirect(cinfo.nativeKeys);
+				LuaKeyState::RetireCombosForIdentity(cinfo.scriptName, cinfo.functionName, std::vector<std::vector<USHORT>>());
+				LuaKeyState::FlushPendingEdgesForIdentity(cinfo.scriptName, cinfo.functionName);
 				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, false);
 				resetCount++;
 			}
@@ -2600,15 +2602,17 @@ namespace RadarKeys {
 					if (bulkNativeVKey != 0 && bulkNativeVKey != info.vKey) {
 						LuaKeyState::ReassignBinding(info.vKey, bulkNativeVKey, info.scriptName, info.functionName);
 					}
+					LuaKeyState::FlushPendingEdgesForIdentity(info.scriptName, info.functionName);
 					resetCount++;
 				}
 				ModKeyBindings::SetDisabledWithoutSave(info.scriptName, info.functionName, false);
 			}
 			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
 				if (GroupScriptKeyOf(cinfo.scriptName) != normalizedGroup) continue;
-				if (ModKeyBindings::GetOverride(cinfo.scriptName, cinfo.functionName).empty()) continue;
 				ModKeyBindings::SetOverrideWithoutSave(cinfo.scriptName, cinfo.functionName, "");
 				LuaKeyState::ClearComboRedirect(cinfo.nativeKeys);
+				LuaKeyState::RetireCombosForIdentity(cinfo.scriptName, cinfo.functionName, std::vector<std::vector<USHORT>>());
+				LuaKeyState::FlushPendingEdgesForIdentity(cinfo.scriptName, cinfo.functionName);
 				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, false);
 				resetCount++;
 			}
@@ -5606,6 +5610,7 @@ namespace RadarKeys {
 						if (row.info.hasDescription) {
 							bool modStackHovered = false;
 							if (row.keyButtonLines.size() > 1) {
+								ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
 								const float stackStartX = ImGui::GetCursorPosX();
 								float stackY = ImGui::GetCursorPosY();
 								size_t plusBadgeEntry = row.keyButtonLines.size();
@@ -5641,6 +5646,7 @@ namespace RadarKeys {
 									}
 									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y * kStackButtonGapFactor;
 								}
+							ImGui::PopStyleVar();
 							} else if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
 								openReassignPrompt();
 							} else {
@@ -5654,6 +5660,7 @@ namespace RadarKeys {
 							bool modStackHovered = false;
 							ImGui::BeginDisabled();
 							if (row.keyButtonLines.size() > 1) {
+								ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
 								const float stackStartX = ImGui::GetCursorPosX();
 								float stackY = ImGui::GetCursorPosY();
 								for (size_t li = 0; li < row.keyButtonLines.size(); li++) {
@@ -5665,6 +5672,7 @@ namespace RadarKeys {
 									modStackHovered = modStackHovered || ImGui::IsItemHovered();
 									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y * kStackButtonGapFactor;
 								}
+							ImGui::PopStyleVar();
 							} else {
 								ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
 							}
@@ -5846,6 +5854,8 @@ namespace RadarKeys {
 								break;
 							}
 						}
+						LuaKeyState::RetireCombosForIdentity(pendingResetScriptName, pendingResetFunctionName, std::vector<std::vector<USHORT>>());
+						LuaKeyState::FlushPendingEdgesForIdentity(pendingResetScriptName, pendingResetFunctionName);
 						ModKeyBindings::SetTriggerConfigWithoutSave(pendingResetScriptName, pendingResetFunctionName, 0, 0.0f, 1.0f, false);
 						ModKeyBindings::SetDisabled(pendingResetScriptName, pendingResetFunctionName, false);
 						LogActivity("KeyBindMenu: Reset mod key to default: " + pendingResetScriptName + " [" + pendingResetFunctionName + "]");
