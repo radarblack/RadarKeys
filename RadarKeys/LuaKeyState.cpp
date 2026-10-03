@@ -586,12 +586,14 @@ namespace RadarKeys {
 				state.pressTime = clock::now();
 				state.repeatStart = state.pressTime;
 				state.currentIncrementMult = 1.0;
-				std::string comboPressLabel;
-				for (size_t comboPressI = 0; comboPressI < active.size(); comboPressI++) {
-					if (comboPressI) comboPressLabel += " + ";
-					comboPressLabel += KeyBindMenu::NameForVKey(active[comboPressI]);
+				if (DebuggerMenu::logButtonPress) {
+					std::string comboPressLabel;
+					for (size_t comboPressI = 0; comboPressI < active.size(); comboPressI++) {
+						if (comboPressI) comboPressLabel += " + ";
+						comboPressLabel += KeyBindMenu::NameForVKey(active[comboPressI]);
+					}
+					DebuggerMenu::LogButtonPress(comboPressLabel + " pressed");
 				}
-				DebuggerMenu::LogButtonPress(comboPressLabel + " pressed");
 				return true;
 			}
 			if (!allHeld) {
