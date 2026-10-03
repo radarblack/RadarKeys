@@ -5802,6 +5802,12 @@ namespace RadarKeys {
 					ImGui::TextDisabled(UI_TXT_CLEARS_REASSIGNMENT);
 					ImGui::Spacing();
 					if (ImGui::Button(UI_BTN_YES, ImVec2(80, 0))) {
+						std::vector<USHORT> altResetSingleVKeys;
+						for (const std::string& altResetName : ModKeyBindings::GetAltKbmOverrides(pendingResetScriptName, pendingResetFunctionName)) {
+							int altResetVKey = altResetName.empty() ? -1 : VKeyForName(altResetName);
+							if (altResetVKey > 0) altResetSingleVKeys.push_back((USHORT)altResetVKey);
+						}
+						ModKeyBindings::SetAltKbmWithoutSave(pendingResetScriptName, pendingResetFunctionName, "");
 						ModKeyBindings::SetOverride(pendingResetScriptName, pendingResetFunctionName, "");
 						for (auto& b : bindings) {
 							if (!b.isInject || !b.scriptDescribed || b.injectScriptName != pendingResetScriptName || b.injectFunctionName != pendingResetFunctionName) continue;
@@ -5829,6 +5835,9 @@ namespace RadarKeys {
 						MarkDisplayCacheDirty();
 						for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
 							if (info.scriptName != pendingResetScriptName || info.functionName != pendingResetFunctionName) {
+								continue;
+							}
+							if (std::find(altResetSingleVKeys.begin(), altResetSingleVKeys.end(), info.vKey) != altResetSingleVKeys.end()) {
 								continue;
 							}
 							USHORT resetNativeVKey = 0;
