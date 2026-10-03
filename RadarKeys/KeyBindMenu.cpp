@@ -5252,7 +5252,12 @@ namespace RadarKeys {
 					ImGui::SetCursorPos(ImVec2(0.0f, rowTopY));
 					float rowAvailWidth = ImGui::GetContentRegionAvail().x;
 					float detailAvailX = (rowAvailWidth - notesColumnX) > 50.0f ? (rowAvailWidth - notesColumnX) : 50.0f;
-					float detailPredictedHeight = row.conflicted ? conflictBoxHeight : ImGui::CalcTextSize(detailText.c_str(), nullptr, false, detailAvailX).y;
+					std::vector<std::string> detailLines = row.conflicted ? std::vector<std::string>() : WrapTextToWidth(detailText, detailAvailX);
+					float detailBlockW = 0.0f;
+					for (const std::string& detailLine : detailLines) {
+						detailBlockW = (std::max)(detailBlockW, ImGui::CalcTextSize(detailLine.c_str()).x);
+					}
+					float detailPredictedHeight = row.conflicted ? conflictBoxHeight : (float)detailLines.size() * ImGui::GetTextLineHeight();
 					float rowContentHeight = (detailPredictedHeight > row.keyButtonH) ? detailPredictedHeight : row.keyButtonH;
 					float keyButtonYOffset = (rowContentHeight - row.keyButtonH) * 0.5f;
 					float stdButtonYOffset = (rowContentHeight - buttonHeight) * 0.5f;
@@ -5722,19 +5727,22 @@ namespace RadarKeys {
 						float buttonCenterY = rowTopY + keyButtonYOffset + row.keyButtonH * 0.5f;
 						float labelLineH = ImGui::GetTextLineHeight();
 						float buttonLabelRowY = buttonCenterY - labelLineH * 0.5f - kButtonLabelRowNudge;
+						const float labelRightEdge = ImGui::GetContentRegionMax().x;
 						if (!triggerLabel.empty()) {
 							ImGui::SameLine();
 							ImGui::SetCursorPosY(buttonLabelRowY);
+							ImGui::SetCursorPosX(labelRightEdge - detailBlockW - ImGui::GetStyle().ItemSpacing.x - ImGui::CalcTextSize(triggerLabel.c_str()).x);
 							ImGui::TextDisabled("%s", triggerLabel.c_str());
 							if (row.releaseSuppressedByHold && ImGui::IsItemHovered()) {
 								ImGui::SetTooltip("%s", UI_TIP_RELEASE_AFTER_HOLD);
 							}
 						}
-						ImGui::SameLine(notesColumnX);
-						ImGui::SetCursorPosY(buttonLabelRowY);
-						ImGui::BeginGroup();
-						ImGui::TextWrapped("%s", detailText.c_str());
-						ImGui::EndGroup();
+						ImGui::SameLine();
+						for (size_t detailLineI = 0; detailLineI < detailLines.size(); detailLineI++) {
+							ImGui::SetCursorPosY(buttonLabelRowY + (float)detailLineI * ImGui::GetTextLineHeight());
+							ImGui::SetCursorPosX(labelRightEdge - ImGui::CalcTextSize(detailLines[detailLineI].c_str()).x);
+							ImGui::TextUnformatted(detailLines[detailLineI].c_str());
+						}
 					}
 
 					const float rowBottomY = rowTopY + rowContentHeight;
