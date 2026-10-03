@@ -128,6 +128,19 @@ namespace RadarKeys {
 		}
 
 		bool OnMessage(HWND wnd, UINT message, WPARAM w_param, LPARAM l_param) {
+		LARGE_INTEGER stallStart{};
+		QueryPerformanceCounter(&stallStart);
+		struct WndprocStallWatchdog {
+			LARGE_INTEGER start;
+			UINT message;
+			~WndprocStallWatchdog() {
+				LARGE_INTEGER now{};
+				QueryPerformanceCounter(&now);
+				static const double invFreq = []() { LARGE_INTEGER f{}; QueryPerformanceFrequency(&f); return f.QuadPart ? 1000.0 / (double)f.QuadPart : 0.0; }();
+				double stallMs = (double)(now.QuadPart - start.QuadPart) * invFreq;
+				if (stallMs > 25.0) spdlog::warn("Render: wndproc message 0x{0:04X} stalled for {1:.1f} ms", message, stallMs);
+			}
+		} stallWatch{ stallStart, message };
 			if (message == WM_KILLFOCUS ||
 				(message == WM_ACTIVATE && LOWORD(w_param) == WA_INACTIVE) ||
 				(message == WM_ACTIVATEAPP && w_param == 0)) {
