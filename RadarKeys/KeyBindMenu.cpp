@@ -1444,7 +1444,6 @@ namespace RadarKeys {
 
 				if (LuaKeyState::PhysicalOnButtonDown(vKey)) {
 					bool ctrlHeld = RawInput::IsKeyHeldReal(VK_CONTROL), shiftHeld = RawInput::IsKeyHeldReal(VK_SHIFT), altHeld = RawInput::IsKeyHeldReal(VK_MENU);
-					DebuggerMenu::LogButtonPress(std::string(ctrlHeld ? "Ctrl+" : "") + (shiftHeld ? "Shift+" : "") + (altHeld ? "Alt+" : "") + NameForVKey(vKey) + " pressed");
 
 					bool hasHoldOptionOnKey = false;
 					for (const auto& bind : bindings) {
