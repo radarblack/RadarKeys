@@ -5375,15 +5375,15 @@ namespace RadarKeys {
 						const std::string& mkFunctionName = row.isComboScript ? row.comboInfo.functionName : row.info.functionName;
 						std::string mkHoldKey = mkScriptName + "\x1f" + mkFunctionName;
 						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName) || (FindAutoDisabledDescribedInject(mkScriptName, mkFunctionName) != nullptr);
+						bool isPendingThisKey = pendingResetActive && pendingResetScriptName == mkScriptName && pendingResetFunctionName == mkFunctionName;
 						ImGui::SetCursorPosY(rowTopY + chipYOffset);
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyStateChipRounding);
-						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? kKeyStateRed : kKeyStateGreen);
+						ImGui::PushStyleColor(ImGuiCol_Button, isPendingThisKey ? ImVec4(1.0f, 70.0f / 255.0f, 70.0f / 255.0f, 1.0f) : (isDisabled ? kKeyStateRed : kKeyStateGreen));
 						bool clicked = ImGui::Button("", ImVec2(kKeyStateChipWidth, kKeyStateChipHeight));
 						ImGui::PopStyleColor();
 						ImGui::PopStyleVar();
 						ImVec2 modKeyBtnMin = ImGui::GetItemRectMin();
 						ImVec2 modKeyBtnMax = ImGui::GetItemRectMax();
-						bool isPendingThisKey = pendingResetActive && pendingResetScriptName == mkScriptName && pendingResetFunctionName == mkFunctionName;
 						if (ImGui::IsItemActive()) {
 							auto holdIt = modKeyHoldStart.find(mkHoldKey);
 							if (holdIt == modKeyHoldStart.end()) {
@@ -5422,10 +5422,32 @@ namespace RadarKeys {
 					else {
 						ImGui::SetCursorPosY(rowTopY + chipYOffset);
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyStateChipRounding);
-						ImGui::BeginDisabled();
 						ImGui::Button("", ImVec2(kKeyStateChipWidth, kKeyStateChipHeight));
-						ImGui::EndDisabled();
 						ImGui::PopStyleVar();
+						ImVec2 undescribedBtnMin = ImGui::GetItemRectMin();
+						ImVec2 undescribedBtnMax = ImGui::GetItemRectMax();
+						std::string undescribedHoldKey = row.info.scriptName + "\x1f" + row.info.functionName;
+						bool undescribedPending = pendingResetActive && pendingResetScriptName == row.info.scriptName && pendingResetFunctionName == row.info.functionName;
+						if (ImGui::IsItemActive()) {
+							auto holdIt = modKeyHoldStart.find(undescribedHoldKey);
+							if (holdIt == modKeyHoldStart.end()) {
+								modKeyHoldStart[undescribedHoldKey] = std::chrono::steady_clock::now();
+							} else if (!undescribedPending) {
+								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
+								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
+								ImVec2 barMin(undescribedBtnMin.x, undescribedBtnMin.y);
+								ImVec2 barMax(undescribedBtnMax.x, undescribedBtnMin.y + (undescribedBtnMax.y - undescribedBtnMin.y) * holdProgress);
+								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(255, 70, 70, 255), kKeyStateChipRounding);
+								if (heldSeconds >= kRemoveHoldSeconds) {
+									pendingResetScriptName = row.info.scriptName;
+									pendingResetFunctionName = row.info.functionName;
+									pendingResetActive = true;
+									resetConfirmPopupRequested = true;
+								}
+							}
+						} else {
+							modKeyHoldStart.erase(undescribedHoldKey);
+						}
 					}
 					ImGui::SameLine();
 					ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ImGui::GetStyle().ItemSpacing.x * kChipToKeyGapTrim);
@@ -5655,10 +5677,14 @@ namespace RadarKeys {
 							}
 							const float entryLineStep = ImGui::GetTextLineHeight() + 2.0f;
 							const float entryBlockTop = entryRectMin.y + ((entryH - (float)entrySegments.size() * ImGui::GetTextLineHeight() - (float)(entrySegments.size() - 1) * 2.0f) * 0.5f);
+							float entryBlockMaxW = 0.0f;
+							for (const std::string& entryWidthSegment : entrySegments) {
+								entryBlockMaxW = (std::max)(entryBlockMaxW, ImGui::CalcTextSize(entryWidthSegment.c_str()).x);
+							}
+							const float entryBlockLeft = entryRectMin.x + (row.keyButtonW - entryBlockMaxW) * 0.5f;
 							for (size_t entrySi = 0; entrySi < entrySegments.size(); entrySi++) {
 								const std::string& entrySegment = entrySegments[entrySi];
-								const float entryTextCenterX = entryRectMin.x + (row.keyButtonW - ImGui::CalcTextSize(entrySegment.c_str()).x) * 0.5f;
-								ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(entryTextCenterX, entryBlockTop + (float)entrySi * entryLineStep), ImGui::GetColorU32(ImGuiCol_Text), entrySegment.c_str());
+								ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(entryBlockLeft, entryBlockTop + (float)entrySi * entryLineStep), ImGui::GetColorU32(ImGuiCol_Text), entrySegment.c_str());
 							}
 							return entryClicked;
 						};
