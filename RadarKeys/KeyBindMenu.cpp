@@ -73,9 +73,7 @@ namespace RadarKeys {
 		static const char* LOG_KEYBINDMENU_INJECTDESCRIBE_UPDATED_FMT = "KeyBindMenu: Updated script-lines binding: {} -> lines {}-{} of {}";
 		static const char* LOG_RADARKEYS_KEYBINDMENU_INITIALIZING = "KeyBindMenu: initializing";
 		static const char* LOG_KEY_ASSIGNMENT_PROMPT_CANCELLED = "KeyBindMenu: Key Assignment Prompt cancelled";
-		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_KEY = "KeyBindMenu: Combo Key capture cancelled - a key was released before the hold completed";
 		static const char* LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_MORE = "KeyBindMenu: Combo Key capture cancelled - more than 3 keys held";
-		static const char* LOG_SINGLE_KEY_CAPTURE_CANCELLED_KEY_RELEASED = "KeyBindMenu: Single-key capture cancelled - key was released before the hold completed";
 		static const char* LOG_KEYBINDMENU_CAPTURED_SINGLE_KEY_VKEY_FMT = "KeyBindMenu: captured single key vKey={} name=\"{}\" ctrl={} shift={} alt={}";
 		static const char* LOG_KEYBIND_HAS_BEEN_RESET = "KeyBindMenu: Keybind has been reset";
 		static const char* LOG_MULTI_KEY_COMBO_HAS_BEEN_RESET = "KeyBindMenu: Combo Key has been reset";
@@ -91,11 +89,10 @@ namespace RadarKeys {
 		static const char* UI_LBL_LINE_END = "Line End:";
 		static const char* UI_LBL_KEY = "Key";
 		static const char* UI_TXT_PRESS_KEY = "PRESS KEY...";
-		static const char* UI_LBL_HOLD = "HOLD";
 		static const char* UI_BTN_RESET = "Reset";
 		static const char* UI_LBL_KEYS = "Keys";
-		static const char* UI_TXT_COMBO_PROMPT = "HOLD 2-3 KEYS";
-		static const char* UI_TIP_COMBO_HOLD = "Hold every key in the combo down for %.1fs.\nReleasing any key before then cancels the capture.";
+		static const char* UI_TXT_COMBO_PROMPT = "PRESS 2-3 KEYS";
+		static const char* UI_TIP_COMBO_HOLD = "Press every key in the combo down together.\nRelease them to capture the combo.";
 		static const char* UI_CHK_TOGGLE = "Toggle";
 		static const char* UI_TIP_TOGGLE_SCRIPT_DECLARED = "This key is declared from the mod! Toggle triggers should be declared from the script.";
 		static const char* UI_TIP_TRIGGER_SIBLING_OWNED = "Owned by another function on this key. Reassign that function key or change its trigger to free this.";
@@ -177,7 +174,6 @@ namespace RadarKeys {
 		static const char* UI_TIP_REASSIGN_COMBO = "Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder.";
 		static const char* UI_TIP_REASSIGN_KEY = "Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder.";
 
-		static const char* UI_TIP_CANNOT_REASSIGN_UNDESCRIBED = "Unable to reassign an override - Key is not yet described through RadarKeys module.";
 		static const char* UI_POPUP_REMOVE_BINDING = "Remove Binding?";
 		static const char* UI_FMT_REMOVE_CONFIRM = "Remove \"%s\"?";
 		static const char* UI_TXT_CANNOT_BE_UNDONE = "This can't be undone.";
@@ -2696,19 +2692,12 @@ namespace RadarKeys {
 		static int capturedInjectLineEnd = 1;
 		static std::vector<USHORT> capturedComboKeys;
 		static std::vector<USHORT> comboHoldKeys;
-		static std::chrono::steady_clock::time_point comboHoldStartTime;
 		static bool comboHoldActive = false;
-		static USHORT singleHoldKey = 0;
-		static std::chrono::steady_clock::time_point singleHoldStartTime;
-		static bool singleHoldActive = false;
-		constexpr double kComboHoldSeconds = 2.0;
 
 		void ResetComboCaptureState() {
 			capturedComboKeys.clear();
 			comboHoldKeys.clear();
 			comboHoldActive = false;
-			singleHoldKey = 0;
-			singleHoldActive = false;
 		}
 
 		unsigned ModPendingTriggerMask() {
@@ -2786,7 +2775,6 @@ namespace RadarKeys {
 			if (!comboHoldActive) {
 				if (currentlyHeld.size() >= 2 && currentlyHeld.size() <= 3) {
 					comboHoldKeys = currentlyHeld;
-					comboHoldStartTime = std::chrono::steady_clock::now();
 					comboHoldActive = true;
 				}
 				return;
@@ -2794,15 +2782,14 @@ namespace RadarKeys {
 
 			for (USHORT k : comboHoldKeys) {
 				if (!RawInput::IsKeyHeldReal(k)) {
-					if (currentlyHeld.size() >= 2 && currentlyHeld.size() <= 3) {
-						comboHoldKeys = currentlyHeld;
-						comboHoldStartTime = std::chrono::steady_clock::now();
-						LogActivity("KeyBindMenu: Combo Key capture adjusted: now holding " + ComboKeysDisplayName(currentlyHeld));
-					} else {
-						comboHoldActive = false;
-						comboHoldKeys.clear();
-						LogActivity(LOG_MULTI_KEY_COMBO_CAPTURE_CANCELLED_KEY);
+					capturedComboKeys = comboHoldKeys;
+					comboHoldActive = false;
+					comboHoldKeys.clear();
+					if (!isAssigningModKey && !capturedInstantUserSet) {
+						capturedInstantMode = true;
+						capturedInstantTriggerType = 0;
 					}
+					LogActivity("KeyBindMenu: Combo Key captured: " + ComboKeysDisplayName(capturedComboKeys));
 					return;
 				}
 			}
@@ -2815,19 +2802,6 @@ namespace RadarKeys {
 
 			if (currentlyHeld.size() > comboHoldKeys.size() && currentlyHeld.size() <= 3) {
 				comboHoldKeys = currentlyHeld;
-				comboHoldStartTime = std::chrono::steady_clock::now();
-			}
-
-			double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - comboHoldStartTime).count();
-			if (heldSeconds >= kComboHoldSeconds) {
-				capturedComboKeys = comboHoldKeys;
-				comboHoldActive = false;
-				comboHoldKeys.clear();
-				if (!isAssigningModKey && !capturedInstantUserSet) {
-					capturedInstantMode = true;
-					capturedInstantTriggerType = 0;
-				}
-				LogActivity("KeyBindMenu: Combo Key captured: " + ComboKeysDisplayName(capturedComboKeys));
 			}
 		}
 
@@ -3254,88 +3228,69 @@ namespace RadarKeys {
 				capturedShift = ImGui::GetIO().KeyShift;
 				capturedAlt   = ImGui::GetIO().KeyAlt;
 
-				if (!singleHoldActive) {
-					USHORT pressedKey = 0;
-					if (ImGui::IsMouseClicked(2)) pressedKey = VK_MBUTTON;
-					else if (ImGui::IsMouseClicked(3)) pressedKey = VK_XBUTTON1;
-					else if (ImGui::IsMouseClicked(4)) pressedKey = VK_XBUTTON2;
-					else {
-						for (int i = 1; i < 256; i++) {
-							if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
-								i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU)
-								continue;
-							if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
-							if (ImGui::IsKeyPressed((ImGuiKey)i)) { pressedKey = (USHORT)i; break; }
-						} 
-						if (pressedKey == 0) {
-							if (!psCaptureEdgePrimed) {
-								prevHeldPsKeysCapture.clear();
-								for (USHORT psKey : RawInput::PlaystationVKeys()) {
-									if (RawInput::IsKeyHeldReal(psKey)) {
-										prevHeldPsKeysCapture.insert(psKey);
-									}
-								}
-								psCaptureEdgePrimed = true;
-							}
-							std::unordered_set<USHORT> nowHeldPsKeys;
+				USHORT pressedKey = 0;
+				if (ImGui::IsMouseClicked(2)) pressedKey = VK_MBUTTON;
+				else if (ImGui::IsMouseClicked(3)) pressedKey = VK_XBUTTON1;
+				else if (ImGui::IsMouseClicked(4)) pressedKey = VK_XBUTTON2;
+				else {
+					for (int i = 1; i < 256; i++) {
+						if (i == VK_CONTROL || i == VK_SHIFT || i == VK_MENU || i == VK_LWIN || i == VK_RWIN ||
+							i == VK_LCONTROL || i == VK_RCONTROL || i == VK_LSHIFT || i == VK_RSHIFT || i == VK_LMENU || i == VK_RMENU)
+							continue;
+						if (i == VK_LBUTTON && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) continue;
+						if (ImGui::IsKeyPressed((ImGuiKey)i)) { pressedKey = (USHORT)i; break; }
+					} 
+					if (pressedKey == 0) {
+						if (!psCaptureEdgePrimed) {
+							prevHeldPsKeysCapture.clear();
 							for (USHORT psKey : RawInput::PlaystationVKeys()) {
 								if (RawInput::IsKeyHeldReal(psKey)) {
-									nowHeldPsKeys.insert(psKey);
-									if (prevHeldPsKeysCapture.count(psKey) == 0) { pressedKey = psKey; break; }
+									prevHeldPsKeysCapture.insert(psKey);
 								}
 							}
-							prevHeldPsKeysCapture = nowHeldPsKeys;
+							psCaptureEdgePrimed = true;
 						}
-						if (pressedKey == 0) {
-							if (!padCaptureEdgePrimed) {
-								prevHeldPadKeysCapture.clear();
-								for (USHORT gpKey : RawInput::GamepadVKeys()) {
-									if (RawInput::IsKeyHeldReal(gpKey)) {
-										prevHeldPadKeysCapture.insert(gpKey);
-									}
-								}
-								padCaptureEdgePrimed = true;
+						std::unordered_set<USHORT> nowHeldPsKeys;
+						for (USHORT psKey : RawInput::PlaystationVKeys()) {
+							if (RawInput::IsKeyHeldReal(psKey)) {
+								nowHeldPsKeys.insert(psKey);
+								if (prevHeldPsKeysCapture.count(psKey) == 0) { pressedKey = psKey; break; }
 							}
-							std::unordered_set<USHORT> nowHeldPadKeys;
+						}
+						prevHeldPsKeysCapture = nowHeldPsKeys;
+					}
+					if (pressedKey == 0) {
+						if (!padCaptureEdgePrimed) {
+							prevHeldPadKeysCapture.clear();
 							for (USHORT gpKey : RawInput::GamepadVKeys()) {
 								if (RawInput::IsKeyHeldReal(gpKey)) {
-									nowHeldPadKeys.insert(gpKey);
-									if (prevHeldPadKeysCapture.count(gpKey) == 0) { pressedKey = gpKey; break; }
+									prevHeldPadKeysCapture.insert(gpKey);
 								}
 							}
-							prevHeldPadKeysCapture = nowHeldPadKeys;
+							padCaptureEdgePrimed = true;
 						}
-					}
-					if (pressedKey != 0) {
-						singleHoldKey = pressedKey;
-						capturedCtrl = ImGui::GetIO().KeyCtrl;
-						capturedShift = ImGui::GetIO().KeyShift;
-						capturedAlt = ImGui::GetIO().KeyAlt;
-						singleHoldStartTime = std::chrono::steady_clock::now();
-						singleHoldActive = true;
+						std::unordered_set<USHORT> nowHeldPadKeys;
+						for (USHORT gpKey : RawInput::GamepadVKeys()) {
+							if (RawInput::IsKeyHeldReal(gpKey)) {
+								nowHeldPadKeys.insert(gpKey);
+								if (prevHeldPadKeysCapture.count(gpKey) == 0) { pressedKey = gpKey; break; }
+							}
+						}
+						prevHeldPadKeysCapture = nowHeldPadKeys;
 					}
 				}
-
-				if (singleHoldActive) {
-					if (!RawInput::IsKeyHeldReal(singleHoldKey)) {
-						singleHoldActive = false;
-						singleHoldKey = 0;
-						LogActivity(LOG_SINGLE_KEY_CAPTURE_CANCELLED_KEY_RELEASED);
-					} else {
-						double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - singleHoldStartTime).count();
-						if (heldSeconds >= kComboHoldSeconds) {
-							capturedVKey = singleHoldKey;
-							singleHoldActive = false;
-							singleHoldKey = 0;
-							if (!isAssigningModKey && !capturedInstantUserSet) {
-								capturedInstantMode = true;
-								capturedInstantTriggerType = 0;
-							}
-							LogActivity("KeyBindMenu: Single key captured: " + NameForVKey(capturedVKey));
-							spdlog::info(LOG_KEYBINDMENU_CAPTURED_SINGLE_KEY_VKEY_FMT,
-								capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt);
-						}
+				if (pressedKey != 0) {
+					capturedVKey = pressedKey;
+					capturedCtrl = ImGui::GetIO().KeyCtrl;
+					capturedShift = ImGui::GetIO().KeyShift;
+					capturedAlt = ImGui::GetIO().KeyAlt;
+					if (!isAssigningModKey && !capturedInstantUserSet) {
+						capturedInstantMode = true;
+						capturedInstantTriggerType = 0;
 					}
+					LogActivity("KeyBindMenu: Single key captured: " + NameForVKey(capturedVKey));
+					spdlog::info(LOG_KEYBINDMENU_CAPTURED_SINGLE_KEY_VKEY_FMT,
+						capturedVKey, NameForVKey(capturedVKey), capturedCtrl, capturedShift, capturedAlt);
 				}
 			}
 		
@@ -3349,28 +3304,11 @@ namespace RadarKeys {
 			float lowerBoxRemainingHeight = availHeight + ImGui::GetStyle().WindowPadding.y - (lowerBoxTopY - boxContentTopY);
 		
 			if (capturedVKey == 0) {
-				const bool showingHold = singleHoldActive && singleHoldKey != 0;
-				if (!showingHold) {
-					const std::string pressPrompt = UI_TXT_PRESS_KEY;
-					const size_t pressSpace = pressPrompt.find(' ');
-					const std::string pressWord1 = pressPrompt.substr(0, pressSpace);
-					const std::string pressWord2 = pressPrompt.substr(pressSpace + 1);
-					DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), pressWord1.c_str(), pressWord2.c_str());
-				} else {
-					std::string holdName = NameForVKey(singleHoldKey);
-					float lineHeight = ImGui::GetTextLineHeight();
-					float lineSpacing = ImGui::GetStyle().ItemSpacing.y;
-					float blockHeight = lineHeight * 2.0f + lineSpacing * 2.0f + 8.0f;
-					ImGui::SetCursorPosY(lowerBoxTopY + ((std::max)(0.0f, lowerBoxRemainingHeight - blockHeight) * 0.5f));
-					ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(holdName.c_str()).x) * 0.5f));
-					ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", holdName.c_str());
-					ImGui::SetCursorPosX(contentStartX + (std::max)(0.0f, (availWidth - ImGui::CalcTextSize(UI_LBL_HOLD).x) * 0.5f));
-					ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", UI_LBL_HOLD);
-					double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - singleHoldStartTime).count();
-					float progress = (float)(std::min)(heldSeconds / kComboHoldSeconds, 1.0);
-					ImGui::Spacing();
-					ImGui::ProgressBar(progress, ImVec2(availWidth - 4.0f, 8.0f), "");
-				}
+				const std::string pressPrompt = UI_TXT_PRESS_KEY;
+				const size_t pressSpace = pressPrompt.find(' ');
+				const std::string pressWord1 = pressPrompt.substr(0, pressSpace);
+				const std::string pressWord2 = pressPrompt.substr(pressSpace + 1);
+				DrawCenteredPlaceholder(availWidth, lowerBoxTopY, lowerBoxRemainingHeight, ImVec4(0.4f, 0.8f, 1.0f, 1.0f), pressWord1.c_str(), pressWord2.c_str());
 			} else {
 				std::string keyName = NameForVKey(capturedVKey);
 				ImGui::SetCursorPosY(lowerBoxTopY + ((lowerBoxRemainingHeight - ImGui::GetTextLineHeight()) * 0.5f));
@@ -3441,8 +3379,7 @@ namespace RadarKeys {
 					float lineHeight = ImGui::GetTextLineHeight();
 					float lineSpacing = ImGui::GetStyle().ItemSpacing.y;
 					float textHeight = lineHeight * displayLines.size() + lineSpacing * (displayLines.size() - 1);
-					float reserveForBar = isFinal ? 0.0f : 12.0f;
-					ImGui::SetCursorPosY(lowerBoxTopY + (std::max)(0.0f, (lowerBoxRemainingHeight - textHeight - reserveForBar) * 0.5f));
+					ImGui::SetCursorPosY(lowerBoxTopY + (std::max)(0.0f, (lowerBoxRemainingHeight - textHeight) * 0.5f));
 					ImGui::PushStyleColor(ImGuiCol_Text, isFinal ? ImVec4(0.2f, 1.0f, 0.2f, 1.0f) : ImVec4(1.0f, 0.85f, 0.2f, 1.0f));
 					for (const std::string& line : displayLines) {
 						float lineWidth = ImGui::CalcTextSize(line.c_str()).x;
@@ -3452,16 +3389,11 @@ namespace RadarKeys {
 					ImGui::PopStyleColor();
 					ImGui::SetWindowFontScale(1.0f);
 
-					if (!isFinal) {
-						double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - comboHoldStartTime).count();
-						float progress = (float)(std::min)(heldSeconds / kComboHoldSeconds, 1.0);
-						ImGui::ProgressBar(progress, ImVec2(availWidth - 4.0f, 8.0f), "");
-					}
 				}
 				ImGui::EndChild();
 				ImGui::PopStyleVar();
 				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip(UI_TIP_COMBO_HOLD, kComboHoldSeconds);
+					ImGui::SetTooltip(UI_TIP_COMBO_HOLD);
 				}
 
 				ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyButtonRounding);
@@ -5312,7 +5244,9 @@ namespace RadarKeys {
 						ImGui::SetCursorPosY(rowTopY + chipYOffset);
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyStateChipRounding);
 						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? kKeyStateRed : kKeyStateGreen);
+						ImGui::PushID("keystate");
 						bool clicked = ImGui::Button("", ImVec2(kKeyStateChipWidth, kKeyStateChipHeight));
+						ImGui::PopID();
 						ImGui::PopStyleColor();
 						ImGui::PopStyleVar();
 						ImVec2 disableBtnMin = ImGui::GetItemRectMin();
@@ -5379,7 +5313,9 @@ namespace RadarKeys {
 						ImGui::SetCursorPosY(rowTopY + chipYOffset);
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyStateChipRounding);
 						ImGui::PushStyleColor(ImGuiCol_Button, isPendingThisKey ? ImVec4(1.0f, 70.0f / 255.0f, 70.0f / 255.0f, 1.0f) : (isDisabled ? kKeyStateRed : kKeyStateGreen));
+						ImGui::PushID("keystate");
 						bool clicked = ImGui::Button("", ImVec2(kKeyStateChipWidth, kKeyStateChipHeight));
+						ImGui::PopID();
 						ImGui::PopStyleColor();
 						ImGui::PopStyleVar();
 						ImVec2 modKeyBtnMin = ImGui::GetItemRectMin();
@@ -5422,7 +5358,9 @@ namespace RadarKeys {
 					else {
 						ImGui::SetCursorPosY(rowTopY + chipYOffset);
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyStateChipRounding);
+						ImGui::PushID("keystate");
 						ImGui::Button("", ImVec2(kKeyStateChipWidth, kKeyStateChipHeight));
+						ImGui::PopID();
 						ImGui::PopStyleVar();
 						ImVec2 undescribedBtnMin = ImGui::GetItemRectMin();
 						ImVec2 undescribedBtnMax = ImGui::GetItemRectMax();
@@ -5663,7 +5601,9 @@ namespace RadarKeys {
 							if (!entryIsMultiline) {
 								return ImGui::Button(entryText.c_str(), ImVec2(row.keyButtonW, entryH));
 							}
+							ImGui::PushID(entryText.c_str());
 							const bool entryClicked = ImGui::Button("", ImVec2(row.keyButtonW, entryH));
+							ImGui::PopID();
 							const ImVec2 entryRectMin = ImGui::GetItemRectMin();
 							std::vector<std::string> entrySegments;
 							std::string entrySegment;
@@ -5707,6 +5647,7 @@ namespace RadarKeys {
 									ImGui::SetCursorPosY(stackY);
 									const int entryLineCount = 1 + (int)std::count(row.keyButtonLines[li].begin(), row.keyButtonLines[li].end(), '\n');
 									const float entryHeight = buttonBaseHeight + (float)(entryLineCount - 1) * (ImGui::GetTextLineHeight() + 2.0f);
+									ImGui::PushID((int)li);
 									if (DrawStackedEntryButton(row.keyButtonLines[li], entryHeight)) {
 										USHORT lineTarget = (li < row.keyButtonLineVKeys.size()) ? row.keyButtonLineVKeys[li] : (USHORT)0;
 										bool lineIsAlt = (li < row.keyButtonLineIsAlt.size()) && row.keyButtonLineIsAlt[li];
@@ -5717,6 +5658,7 @@ namespace RadarKeys {
 										else if (lineIsAlt) openAltReassignPrompt(lineTarget);
 										else openReassignPromptFor(lineTarget, false);
 									}
+									ImGui::PopID();
 									modStackHovered = modStackHovered || ImGui::IsItemHovered();
 									if (li == plusBadgeEntry) {
 										ImVec2 modPlusSize = ImGui::CalcTextSize("+");
@@ -5737,7 +5679,6 @@ namespace RadarKeys {
 						}
 						else {
 							bool modStackHovered = false;
-							ImGui::BeginDisabled();
 							if (row.keyButtonLines.size() > 1) {
 							ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
 								const float stackStartX = ImGui::GetCursorPosX();
@@ -5747,17 +5688,30 @@ namespace RadarKeys {
 									ImGui::SetCursorPosY(stackY);
 									const int entryLineCount = 1 + (int)std::count(row.keyButtonLines[li].begin(), row.keyButtonLines[li].end(), '\n');
 									const float entryHeight = buttonBaseHeight + (float)(entryLineCount - 1) * (ImGui::GetTextLineHeight() + 2.0f);
-									DrawStackedEntryButton(row.keyButtonLines[li], entryHeight);
+									ImGui::PushID((int)li);
+									if (DrawStackedEntryButton(row.keyButtonLines[li], entryHeight)) {
+										USHORT lineTarget = (li < row.keyButtonLineVKeys.size()) ? row.keyButtonLineVKeys[li] : (USHORT)0;
+										bool lineIsAlt = (li < row.keyButtonLineIsAlt.size()) && row.keyButtonLineIsAlt[li];
+										bool lineIsCombo = (li < row.keyButtonLineIsCombo.size()) && row.keyButtonLineIsCombo[li];
+										std::vector<USHORT> lineComboKeys = (li < row.keyButtonLineComboKeys.size()) ? row.keyButtonLineComboKeys[li] : std::vector<USHORT>();
+										if (lineIsCombo && !lineComboKeys.empty()) openModComboReassignPromptFor(lineComboKeys, lineIsAlt, ComboKeysDisplayName(lineComboKeys));
+										else if (lineTarget == 0 || lineTarget == row.displayVKey) openReassignPrompt();
+										else if (lineIsAlt) openAltReassignPrompt(lineTarget);
+										else openReassignPromptFor(lineTarget, false);
+									}
+									ImGui::PopID();
 									modStackHovered = modStackHovered || ImGui::IsItemHovered();
 									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y * kStackButtonGapFactor;
 								}
 							ImGui::PopStyleVar();
 							} else {
-								ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
-							}
-							ImGui::EndDisabled();
+								if (ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH))) {
+									openReassignPrompt();
+								} else {
+									modStackHovered = ImGui::IsItemHovered();
+								}							}
 							if (modStackHovered) {
-								ImGui::SetTooltip(UI_TIP_CANNOT_REASSIGN_UNDESCRIBED);
+								ImGui::SetTooltip(UI_TIP_REASSIGN_KEY);
 							}
 						}
 						if (row.keyButtonStacked && row.keyButtonShowPlusBadge && row.keyButtonLines.size() <= 1) {
