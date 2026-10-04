@@ -4668,6 +4668,11 @@ namespace RadarKeys {
 							if (!altComboAlreadyListed) comboLines.push_back(std::make_pair(altComboMembers, true));
 						}
 						for (const auto& comboLineEntry : comboLines) {
+						bool comboLineAllHeld = !comboLineEntry.first.empty();
+						for (USHORT comboLineKey : comboLineEntry.first) {
+							if (!RawInput::IsKeyHeldReal(comboLineKey)) { comboLineAllHeld = false; break; }
+						}
+						if (comboLineAllHeld) visual.anyPressed = true;
 							std::string comboLine = ComboKeysDisplayName(comboLineEntry.first);
 							if (ImGui::CalcTextSize(comboLine.c_str()).x + 24.0f > kComboStackThresholdWidth) {
 								visual.stacked = true;
