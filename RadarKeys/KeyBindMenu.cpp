@@ -173,7 +173,6 @@ namespace RadarKeys {
 		static const char* UI_TIP_CONFLICT_REASSIGNABLE = "Another binding is using this same key - it's disabled until resolved.\nClick the key name to reassign this one.";
 		static const char* UI_TIP_CONFLICT_NOT_DESCRIBED = "Another binding is using this same key - it's disabled until resolved.\nUnable to reassign an override - Key is not yet described through RadarKeys module.";
 		static const char* UI_TIP_CLICK_HOLD_RESET = "Click to %s.\nHold for 1.5 seconds to reset to the mod's default key.";
-		static const char* UI_TIP_CLICK_NO_REMOVE = "Click to %s.\nMod keys can't be removed - only disabled.";
 		static const char* UI_TIP_INJECT_SOURCE_MISSING = "Script source for this trigger was not found in the modules folder - Restore the file to re-enable.";
 		static const char* UI_TIP_REASSIGN_COMBO = "Click to reassign this combo.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder.";
 		static const char* UI_TIP_REASSIGN_KEY = "Click to reassign this key.\nSaved in radar_keybinds.conf in the (...modules/radarKeys) folder.";
@@ -5375,9 +5374,6 @@ namespace RadarKeys {
 						const std::string& mkScriptName = row.isComboScript ? row.comboInfo.scriptName : row.info.scriptName;
 						const std::string& mkFunctionName = row.isComboScript ? row.comboInfo.functionName : row.info.functionName;
 						std::string mkHoldKey = mkScriptName + "\x1f" + mkFunctionName;
-						bool hasOverride = !ModKeyBindings::GetOverride(mkScriptName, mkFunctionName).empty();
-						bool hasAltOverrides = !ModKeyBindings::GetAltKbmOverrides(mkScriptName, mkFunctionName).empty();
-						bool hasResettableConfig = hasOverride || hasAltOverrides;
 						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName) || (FindAutoDisabledDescribedInject(mkScriptName, mkFunctionName) != nullptr);
 						ImGui::SetCursorPosY(rowTopY + chipYOffset);
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyStateChipRounding);
@@ -5388,15 +5384,15 @@ namespace RadarKeys {
 						ImVec2 modKeyBtnMin = ImGui::GetItemRectMin();
 						ImVec2 modKeyBtnMax = ImGui::GetItemRectMax();
 						bool isPendingThisKey = pendingResetActive && pendingResetScriptName == mkScriptName && pendingResetFunctionName == mkFunctionName;
-						if (hasResettableConfig && ImGui::IsItemActive()) {
+						if (ImGui::IsItemActive()) {
 							auto holdIt = modKeyHoldStart.find(mkHoldKey);
 							if (holdIt == modKeyHoldStart.end()) {
 								modKeyHoldStart[mkHoldKey] = std::chrono::steady_clock::now();
 							} else if (!isPendingThisKey) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
 								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
-								ImVec2 barMin(modKeyBtnMin.x, modKeyBtnMax.y - 3.0f);
-								ImVec2 barMax(modKeyBtnMin.x + (modKeyBtnMax.x - modKeyBtnMin.x) * holdProgress, modKeyBtnMax.y);
+								ImVec2 barMin(modKeyBtnMin.x, modKeyBtnMin.y);
+								ImVec2 barMax(modKeyBtnMax.x, modKeyBtnMin.y + (modKeyBtnMax.y - modKeyBtnMin.y) * holdProgress);
 								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(255, 70, 70, 255), kKeyStateChipRounding);
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingResetScriptName = mkScriptName;
@@ -5419,9 +5415,7 @@ namespace RadarKeys {
 								std::string missingTip = std::string(UI_TIP_INJECT_SOURCE_MISSING) + "\n" + std::filesystem::path(missingInject->scriptPathOn).filename().string();
 								ImGui::SetTooltip("%s", missingTip.c_str());
 							} else {
-								ImGui::SetTooltip(hasResettableConfig
-									? UI_TIP_CLICK_HOLD_RESET
-									: UI_TIP_CLICK_NO_REMOVE, isDisabled ? UI_WORD_ENABLE : UI_WORD_DISABLE);
+								ImGui::SetTooltip(UI_TIP_CLICK_HOLD_RESET, isDisabled ? UI_WORD_ENABLE : UI_WORD_DISABLE);
 							}
 						}
 					}
