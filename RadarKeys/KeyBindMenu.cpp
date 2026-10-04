@@ -5465,7 +5465,18 @@ namespace RadarKeys {
 
 					if (row.isManual) {
 						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
-						ImGui::PushStyleColor(ImGuiCol_Text, bindings[row.bindIndex].isToggle ? (bindings[row.bindIndex].toggleState ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f)) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
+						auto& manualRowBind = bindings[row.bindIndex];
+						bool manualPressed = false;
+						if (manualRowBind.IsCombo()) {
+							manualPressed = !manualRowBind.comboKeys.empty();
+							for (USHORT manualRowBindKey : manualRowBind.comboKeys) {
+								if (!RawInput::IsKeyHeldReal(manualRowBindKey)) { manualPressed = false; break; }
+							}
+						} else {
+							manualPressed = manualRowBind.vKey > 0 && RawInput::IsKeyHeldReal(manualRowBind.vKey);
+						}
+						ImGui::PushStyleColor(ImGuiCol_Text, manualRowBind.isToggle ? (manualRowBind.toggleState ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.35f, 0.35f, 1.0f)) : (manualPressed ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f)));
 						bool keyClicked = ImGui::Button(row.keyButtonLabel.c_str(), ImVec2(row.keyButtonW, row.keyButtonH));
 						ImGui::PopStyleColor();
 						if (row.keyButtonStacked && row.keyButtonShowPlusBadge) {
