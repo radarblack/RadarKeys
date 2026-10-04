@@ -5465,7 +5465,6 @@ namespace RadarKeys {
 
 					if (row.isManual) {
 						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
-						const std::string& itemLabel = displayCache[row.bindIndex].itemLabel;
 						auto& manualRowBind = bindings[row.bindIndex];
 						bool manualPressed = false;
 						if (manualRowBind.IsCombo()) {
