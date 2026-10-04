@@ -5376,6 +5376,8 @@ namespace RadarKeys {
 						const std::string& mkFunctionName = row.isComboScript ? row.comboInfo.functionName : row.info.functionName;
 						std::string mkHoldKey = mkScriptName + "\x1f" + mkFunctionName;
 						bool hasOverride = !ModKeyBindings::GetOverride(mkScriptName, mkFunctionName).empty();
+						bool hasAltOverrides = !ModKeyBindings::GetAltKbmOverrides(mkScriptName, mkFunctionName).empty();
+						bool hasResettableConfig = hasOverride || hasAltOverrides;
 						bool isDisabled = ModKeyBindings::IsDisabled(mkScriptName, mkFunctionName) || (FindAutoDisabledDescribedInject(mkScriptName, mkFunctionName) != nullptr);
 						ImGui::SetCursorPosY(rowTopY + chipYOffset);
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyStateChipRounding);
@@ -5386,16 +5388,16 @@ namespace RadarKeys {
 						ImVec2 modKeyBtnMin = ImGui::GetItemRectMin();
 						ImVec2 modKeyBtnMax = ImGui::GetItemRectMax();
 						bool isPendingThisKey = pendingResetActive && pendingResetScriptName == mkScriptName && pendingResetFunctionName == mkFunctionName;
-						if (hasOverride && ImGui::IsItemActive()) {
+						if (hasResettableConfig && ImGui::IsItemActive()) {
 							auto holdIt = modKeyHoldStart.find(mkHoldKey);
 							if (holdIt == modKeyHoldStart.end()) {
 								modKeyHoldStart[mkHoldKey] = std::chrono::steady_clock::now();
 							} else if (!isPendingThisKey) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
 								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
-								ImVec2 barMin(modKeyBtnMin.x, modKeyBtnMin.y);
-								ImVec2 barMax(modKeyBtnMax.x, modKeyBtnMin.y + (modKeyBtnMax.y - modKeyBtnMin.y) * holdProgress);
-								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(128, 82, 20, 255), kKeyStateChipRounding);
+								ImVec2 barMin(modKeyBtnMin.x, modKeyBtnMax.y - 3.0f);
+								ImVec2 barMax(modKeyBtnMin.x + (modKeyBtnMax.x - modKeyBtnMin.x) * holdProgress, modKeyBtnMax.y);
+								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(255, 70, 70, 255), kKeyStateChipRounding);
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingResetScriptName = mkScriptName;
 									pendingResetFunctionName = mkFunctionName;
@@ -5417,7 +5419,7 @@ namespace RadarKeys {
 								std::string missingTip = std::string(UI_TIP_INJECT_SOURCE_MISSING) + "\n" + std::filesystem::path(missingInject->scriptPathOn).filename().string();
 								ImGui::SetTooltip("%s", missingTip.c_str());
 							} else {
-								ImGui::SetTooltip(hasOverride
+								ImGui::SetTooltip(hasResettableConfig
 									? UI_TIP_CLICK_HOLD_RESET
 									: UI_TIP_CLICK_NO_REMOVE, isDisabled ? UI_WORD_ENABLE : UI_WORD_DISABLE);
 							}
@@ -5640,6 +5642,32 @@ namespace RadarKeys {
 						}
 						ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.5f));
 						ImGui::PushStyleColor(ImGuiCol_Text, keyNameColor);
+						auto DrawStackedEntryButton = [&](const std::string& entryText, float entryH) -> bool {
+							const bool entryIsMultiline = entryText.find('\n') != std::string::npos;
+							if (!entryIsMultiline) {
+								return ImGui::Button(entryText.c_str(), ImVec2(row.keyButtonW, entryH));
+							}
+							const bool entryClicked = ImGui::Button("", ImVec2(row.keyButtonW, entryH));
+							const ImVec2 entryRectMin = ImGui::GetItemRectMin();
+							std::vector<std::string> entrySegments;
+							std::string entrySegment;
+							for (std::string::size_type entryCh = 0; entryCh <= entryText.size(); entryCh++) {
+								if (entryCh == entryText.size() || entryText[entryCh] == '\n') {
+									if (!entrySegment.empty()) entrySegments.push_back(entrySegment);
+									entrySegment.clear();
+								} else {
+									entrySegment += entryText[entryCh];
+								}
+							}
+							const float entryLineStep = ImGui::GetTextLineHeight() + 2.0f;
+							const float entryBlockTop = entryRectMin.y + ((entryH - (float)entrySegments.size() * ImGui::GetTextLineHeight() - (float)(entrySegments.size() - 1) * 2.0f) * 0.5f);
+							for (size_t entrySi = 0; entrySi < entrySegments.size(); entrySi++) {
+								const std::string& entrySegment = entrySegments[entrySi];
+								const float entryTextCenterX = entryRectMin.x + (row.keyButtonW - ImGui::CalcTextSize(entrySegment.c_str()).x) * 0.5f;
+								ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(entryTextCenterX, entryBlockTop + (float)entrySi * entryLineStep), ImGui::GetColorU32(ImGuiCol_Text), entrySegment.c_str());
+							}
+							return entryClicked;
+						};
 						if (row.info.hasDescription) {
 							bool modStackHovered = false;
 							if (row.keyButtonLines.size() > 1) {
@@ -5659,7 +5687,7 @@ namespace RadarKeys {
 									ImGui::SetCursorPosY(stackY);
 									const int entryLineCount = 1 + (int)std::count(row.keyButtonLines[li].begin(), row.keyButtonLines[li].end(), '\n');
 									const float entryHeight = buttonBaseHeight + (float)(entryLineCount - 1) * (ImGui::GetTextLineHeight() + 2.0f);
-									if (ImGui::Button(row.keyButtonLines[li].c_str(), ImVec2(row.keyButtonW, entryHeight))) {
+									if (DrawStackedEntryButton(row.keyButtonLines[li], entryHeight)) {
 										USHORT lineTarget = (li < row.keyButtonLineVKeys.size()) ? row.keyButtonLineVKeys[li] : (USHORT)0;
 										bool lineIsAlt = (li < row.keyButtonLineIsAlt.size()) && row.keyButtonLineIsAlt[li];
 										bool lineIsCombo = (li < row.keyButtonLineIsCombo.size()) && row.keyButtonLineIsCombo[li];
@@ -5699,7 +5727,7 @@ namespace RadarKeys {
 									ImGui::SetCursorPosY(stackY);
 									const int entryLineCount = 1 + (int)std::count(row.keyButtonLines[li].begin(), row.keyButtonLines[li].end(), '\n');
 									const float entryHeight = buttonBaseHeight + (float)(entryLineCount - 1) * (ImGui::GetTextLineHeight() + 2.0f);
-									ImGui::Button(row.keyButtonLines[li].c_str(), ImVec2(row.keyButtonW, entryHeight));
+									DrawStackedEntryButton(row.keyButtonLines[li], entryHeight);
 									modStackHovered = modStackHovered || ImGui::IsItemHovered();
 									stackY += entryHeight + ImGui::GetStyle().ItemSpacing.y * kStackButtonGapFactor;
 								}
