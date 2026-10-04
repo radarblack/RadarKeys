@@ -127,9 +127,9 @@ local this = {}
                 local eq = ""
                 while scriptPath:find("]" .. eq .. "]", 1, true) do eq = eq .. "=" end
                 RunDoScript(
-                    "local f, ferr = loadfile([" .. eq .. "[[" ..
+                    "local f, ferr = loadfile([" .. eq .. "[" ..
                         scriptPath ..
-                            "]]" .. eq .. "]); assert(f, ferr); f(); local fn=" ..
+                            "]" .. eq .. "]); assert(f, ferr); f(); local fn=" ..
                                 tostring(functionExpr) .. '; if type(fn)=="function" then fn(); end'
                 )
 					else
