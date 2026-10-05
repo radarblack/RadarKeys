@@ -27,10 +27,6 @@ public:
         return (T*)m_original;
     }
 
-    auto is_valid() const {
-        return m_original != 0;
-    }
-
     FunctionHook& operator=(const FunctionHook& other) = delete;
     FunctionHook& operator=(FunctionHook&& other) = delete;
 
