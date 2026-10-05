@@ -2491,7 +2491,6 @@ namespace RadarKeys {
 					LuaKeyState::ReassignBinding(info.vKey, bulkNativeVKey, info.scriptName, info.functionName);
 				}
 				LuaKeyState::FlushPendingEdgesForIdentity(info.scriptName, info.functionName);
-				ModKeyBindings::SetDisabledWithoutSave(info.scriptName, info.functionName, false);
 				resetCount++;
 			}
 			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
@@ -2499,7 +2498,6 @@ namespace RadarKeys {
 				LuaKeyState::ClearComboRedirect(cinfo.nativeKeys);
 				LuaKeyState::RetireCombosForIdentity(cinfo.scriptName, cinfo.functionName, std::vector<std::vector<USHORT>>());
 				LuaKeyState::FlushPendingEdgesForIdentity(cinfo.scriptName, cinfo.functionName);
-				ModKeyBindings::SetDisabledWithoutSave(cinfo.scriptName, cinfo.functionName, false);
 				resetCount++;
 			}
 
@@ -5951,7 +5949,6 @@ namespace RadarKeys {
 						LuaKeyState::RetireCombosForIdentity(pendingResetScriptName, pendingResetFunctionName, std::vector<std::vector<USHORT>>());
 						LuaKeyState::FlushPendingEdgesForIdentity(pendingResetScriptName, pendingResetFunctionName);
 						ModKeyBindings::SetTriggerConfigWithoutSave(pendingResetScriptName, pendingResetFunctionName, 0, 0.0f, 1.0f, false);
-						ModKeyBindings::SetDisabled(pendingResetScriptName, pendingResetFunctionName, false);
 						LogActivity("KeyBindMenu: Reset mod key to default: " + pendingResetScriptName + " [" + pendingResetFunctionName + "]");
 						pendingResetActive = false;
 						ImGui::CloseCurrentPopup();
