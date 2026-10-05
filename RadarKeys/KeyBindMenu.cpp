@@ -38,8 +38,6 @@ namespace RadarKeys {
 	namespace KeyBindMenu {
 		std::vector<KeyBind> bindings;
 		bool EnsureBindsDirectory();
-		bool ManualSingleOverlapsCombo(USHORT vKey, unsigned singleMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = "");
-		bool ManualComboOverlapsSingle(const std::vector<USHORT>& comboKeys, unsigned comboMask, int editingIndex, const std::string& ignoreScript = "", const std::string& ignoreFunc = "");
 
 		static float capturedHoldSeconds = 0.0f;
 		static std::unordered_set<USHORT> prevHeldPadKeysCapture;
@@ -973,24 +971,6 @@ namespace RadarKeys {
 			return modMask != Trigger_None && (manualMask & modMask) != 0;
 		}
 
-		unsigned GetModSingleTriggerMask(const std::string& scriptName, const std::string& functionName) {
-			unsigned mask = Trigger_None;
-			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
-				if (info.scriptName != scriptName || info.functionName != functionName) continue;
-				mask |= ModTriggerMask(info);
-			}
-			return mask;
-		}
-
-		unsigned GetModComboTriggerMask(const std::string& scriptName, const std::string& functionName) {
-			unsigned mask = Trigger_None;
-			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
-				if (info.scriptName != scriptName || info.functionName != functionName) continue;
-				mask |= ModComboTriggerMask(info);
-			}
-			return mask;
-		}
-
 		bool IsModSingleAssignmentAvailable(USHORT vKey, const std::string& scriptName, const std::string& functionName, unsigned pendingMask) {
 			if (IsReservedVKey(vKey)) return false;
 			for (const auto& bind : bindings) {
@@ -1122,46 +1102,6 @@ namespace RadarKeys {
 		constexpr double kMinRepeatSpeedMult = 0.05;
 		constexpr double kRemoveHoldSeconds = 1.5;
 		USHORT ResolveDisplayVKey(const LuaKeyState::TrackedKeyInfo& info);
-
-		bool ManualSingleOverlapsCombo(USHORT vKey, unsigned singleMask, int editingIndex, const std::string& ignoreScript, const std::string& ignoreFunc) {
-			for (int i = 0; i < (int)bindings.size(); ++i) {
-				if (i == editingIndex) continue;
-				const KeyBind& bind = bindings[i];
-				if (!bind.IsCombo() || bind.disabled) continue;
-				if (bind.isInject && bind.injectScriptName == ignoreScript && bind.injectFunctionName == ignoreFunc) continue;
-				bool isMember = false;
-				for (USHORT k : bind.comboKeys) if (k == vKey) { isMember = true; break; }
-				if (isMember && (ManualTriggerMask(bind) & singleMask) != 0) return true;
-			}
-			for (const auto& info : LuaKeyState::GetTrackedComboKeyInfo()) {
-				if (!ignoreScript.empty() && info.scriptName == ignoreScript && info.functionName == ignoreFunc) continue;
-				bool isMember = false;
-				for (USHORT k : info.activeKeys) if (k == vKey) { isMember = true; break; }
-				if (isMember && IsComboTriggerConflict(singleMask, info)) return true;
-			}
-			return false;
-		}
-
-		bool ManualComboOverlapsSingle(const std::vector<USHORT>& comboKeys, unsigned comboMask, int editingIndex, const std::string& ignoreScript, const std::string& ignoreFunc) {
-			for (int i = 0; i < (int)bindings.size(); ++i) {
-				if (i == editingIndex) continue;
-				const KeyBind& bind = bindings[i];
-				if (bind.IsCombo() || bind.disabled) continue;
-				if (bind.isInject && bind.injectScriptName == ignoreScript && bind.injectFunctionName == ignoreFunc) continue;
-				bool hitsMember = false;
-				for (USHORT k : comboKeys) if (k == bind.vKey) { hitsMember = true; break; }
-				if (hitsMember && (ManualTriggerMask(bind) & comboMask) != 0) return true;
-			}
-			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
-				if (!info.hasDescription) continue;
-				if (!ignoreScript.empty() && info.scriptName == ignoreScript && info.functionName == ignoreFunc) continue;
-				USHORT activeVKey = ResolveDisplayVKey(info);
-				bool hitsMember = false;
-				for (USHORT k : comboKeys) if (k == activeVKey) { hitsMember = true; break; }
-				if (hitsMember && IsSingleTriggerConflict(comboMask, info)) return true;
-			}
-			return false;
-		}
 
 		const KeyBind* FindMatchingBinding(USHORT vKey, bool ctrlHeld, bool shiftHeld, bool altHeld, bool preferHold) {
 
