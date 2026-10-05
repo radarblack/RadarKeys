@@ -75,41 +75,41 @@ local this = {}
 					end
 				end
 				if isCombo then
-					if RK.OnComboButtonRepeat and RK.OnComboButtonRepeat(key) then
+					if RK.OnComboButtonRepeat and RK.OnComboButtonRepeat(key, scriptName, functionName) then
 						fireOnce()
 					end
 				else
-					if RK.OnButtonRepeat and RK.OnButtonRepeat(key) then
+					if RK.OnButtonRepeat and RK.OnButtonRepeat(key, scriptName, functionName) then
 						fireOnce()
 					end
 				end
 			elseif triggerType == 3 then
 				if isCombo then
-					if RK.OnComboButtonDown and RK.OnComboButtonDown(key) then
+					if RK.OnComboButtonDown and RK.OnComboButtonDown(key, scriptName, functionName) then
 						fireOnce()
 					end
 				else
-					if RK.OnButtonDown and RK.OnButtonDown(key) then
+					if RK.OnButtonDown and RK.OnButtonDown(key, scriptName, functionName) then
 						fireOnce()
 					end
 				end
 			elseif triggerType == 1 then
 				if isCombo then
-					if RK.OnComboButtonUp and RK.OnComboButtonUp(key) then fireOnce() end
+					if RK.OnComboButtonUp and RK.OnComboButtonUp(key, scriptName, functionName) then fireOnce() end
 				else
-					if RK.OnButtonUp and RK.OnButtonUp(key) then fireOnce() end
+					if RK.OnButtonUp and RK.OnButtonUp(key, scriptName, functionName) then fireOnce() end
 				end
 			elseif triggerType == 0 and triggerHold > 0 then
 				if isCombo then
-					if RK.OnComboButtonHoldTime and RK.OnComboButtonHoldTime(key, triggerHold) then fireOnce() end
+					if RK.OnComboButtonHoldTime and RK.OnComboButtonHoldTime(key, triggerHold, scriptName, functionName) then fireOnce() end
 				else
-					if RK.OnButtonHoldTime and RK.OnButtonHoldTime(key, triggerHold) then fireOnce() end
+					if RK.OnButtonHoldTime and RK.OnButtonHoldTime(key, triggerHold, scriptName, functionName) then fireOnce() end
 				end
 			else
 				if isCombo then
-					if RK.OnComboButtonDown and RK.OnComboButtonDown(key) then fireOnce() end
+					if RK.OnComboButtonDown and RK.OnComboButtonDown(key, scriptName, functionName) then fireOnce() end
 				else
-					if RK.OnButtonDown and RK.OnButtonDown(key) then fireOnce() end
+					if RK.OnButtonDown and RK.OnButtonDown(key, scriptName, functionName) then fireOnce() end
 				end
 			end
 		end
