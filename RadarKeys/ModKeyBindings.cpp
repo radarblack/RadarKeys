@@ -427,11 +427,6 @@ namespace RadarKeys {
 			g_configGeneration.fetch_add(1, std::memory_order_relaxed);
 		}
 
-		void SetAltKbm(const std::string& scriptName, const std::string& functionName, const std::string& keyName) {
-			SetAltKbmWithoutSave(scriptName, functionName, keyName);
-			KeyBindMenu::SaveBindings();
-		}
-
 		void ReplaceAltKbm(const std::string& scriptName, const std::string& functionName, const std::string& oldKey, const std::string& newKey) {
 			{
 				std::lock_guard<std::recursive_mutex> lock(g_overridesMutex);
