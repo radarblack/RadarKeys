@@ -50,7 +50,6 @@ namespace RadarKeys {
 		ActionHandle RegisterAction(USHORT vKey, ButtonAction action);
 		void UnRegisterAction(USHORT vKey);
 		void UnRegisterAction(USHORT vKey, ActionHandle handle);
-		bool IsKeyDown(USHORT vKey);
 		bool OnMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 		void BlockMouseClick(); 
 		void UnBlockMouseClick();
