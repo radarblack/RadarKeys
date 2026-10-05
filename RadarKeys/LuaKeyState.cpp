@@ -124,6 +124,12 @@ namespace RadarKeys {
 		bool IsDisabledVKey(USHORT vKey) {
 			return ValidVKey(vKey) && disabledVKey[vKey];
 		}
+		std::set<std::string> disabledFunctionIdentities;
+
+		bool IsFunctionIdentityDisabled(const std::string& scriptName, const std::string& functionName) {
+			return disabledFunctionIdentities.count(scriptName + "\x1f" + functionName) > 0;
+		}
+
 
 		void SetHoldSecondsOverrides(const std::map<USHORT, double>& overrides) {
 			KeyStateLock lock(g_keyStateMutex);
@@ -527,12 +533,6 @@ namespace RadarKeys {
 				}
 			}
 		}
-		std::set<std::string> disabledFunctionIdentities;
-
-		bool IsFunctionIdentityDisabled(const std::string& scriptName, const std::string& functionName) {
-			return disabledFunctionIdentities.count(scriptName + "\x1f" + functionName) > 0;
-		}
-
 		void SetDisabledFunctionIdentities(const std::vector<std::string>& identities) {
 			KeyStateLock lock(g_keyStateMutex);
 			disabledFunctionIdentities.clear();
