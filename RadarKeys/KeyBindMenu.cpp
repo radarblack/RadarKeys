@@ -4368,6 +4368,9 @@ namespace RadarKeys {
 							holdSeconds = storedTrigger.holdSeconds;
 						} else if (storedTrigger.triggerType == 2) {
 							usesRepeat = true;
+							if (storedTrigger.repeatAccelMult > 0.0f) {
+								repeatInterval = kModKeyRepeatBaseSeconds / storedTrigger.repeatAccelMult;
+							}
 						} else if (storedTrigger.triggerType == 1) {
 							usesRelease = true;
 						} else {
