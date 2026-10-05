@@ -158,35 +158,55 @@ namespace RadarKeys {
 		return 1;
 	}
 	static int l_OnButtonDown(lua_State* L) {
-		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonDown(ResolveKeyListArg(L))); return 1; }
+		const char* identScriptRaw = LuaToString(L, 2);
+		const char* identFuncRaw = LuaToString(L, 3);
+		const std::string identScript = identScriptRaw ? identScriptRaw : "";
+		const std::string identFunc = identFuncRaw ? identFuncRaw : "";
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonDown(ResolveKeyListArg(L), identScript, identFunc)); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
-		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonDown((USHORT)vKey));
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonDown((USHORT)vKey, identScript, identFunc));
 		return 1;
 	}
 	static int l_OnButtonUp(lua_State* L) {
-		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonUp(ResolveKeyListArg(L))); return 1; }
+		const char* identScriptRaw = LuaToString(L, 2);
+		const char* identFuncRaw = LuaToString(L, 3);
+		const std::string identScript = identScriptRaw ? identScriptRaw : "";
+		const std::string identFunc = identFuncRaw ? identFuncRaw : "";
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonUp(ResolveKeyListArg(L), identScript, identFunc)); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
-		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonUp((USHORT)vKey));
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonUp((USHORT)vKey, identScript, identFunc));
 		return 1;
 	}
 	static int l_ButtonHeld(lua_State* L) {
+		const char* identScriptRaw = LuaToString(L, 3);
+		const char* identFuncRaw = LuaToString(L, 4);
+		const std::string identScript = identScriptRaw ? identScriptRaw : "";
+		const std::string identFunc = identFuncRaw ? identFuncRaw : "";
 		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::ComboButtonHeld(ResolveKeyListArg(L), ResolveHoldSecondsArg(L))); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
 		double holdOverride = RadarKeys::ResolveHoldSecondsArg(L);
-		LuaPushBool(L, vKey >= 0 && LuaKeyState::ButtonHeld((USHORT)vKey, holdOverride));
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::ButtonHeld((USHORT)vKey, holdOverride, identScript, identFunc));
 		return 1;
 	}
 	static int l_OnButtonHoldTime(lua_State* L) {
-		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonHoldTime(ResolveKeyListArg(L), ResolveHoldSecondsArg(L))); return 1; }
+		const char* identScriptRaw = LuaToString(L, 3);
+		const char* identFuncRaw = LuaToString(L, 4);
+		const std::string identScript = identScriptRaw ? identScriptRaw : "";
+		const std::string identFunc = identFuncRaw ? identFuncRaw : "";
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonHoldTime(ResolveKeyListArg(L), ResolveHoldSecondsArg(L), identScript, identFunc)); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
 		double holdOverride = RadarKeys::ResolveHoldSecondsArg(L);
-		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonHoldTime((USHORT)vKey, holdOverride));
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonHoldTime((USHORT)vKey, holdOverride, identScript, identFunc));
 		return 1;
 	}
 	static int l_OnButtonRepeat(lua_State* L) {
-		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonRepeat(ResolveKeyListArg(L))); return 1; }
+		const char* identScriptRaw = LuaToString(L, 2);
+		const char* identFuncRaw = LuaToString(L, 3);
+		const std::string identScript = identScriptRaw ? identScriptRaw : "";
+		const std::string identFunc = identFuncRaw ? identFuncRaw : "";
+		if (ArgIsCombo(L)) { LuaPushBool(L, LuaKeyState::OnComboButtonRepeat(ResolveKeyListArg(L), identScript, identFunc)); return 1; }
 		int vKey = RadarKeys::ResolveKeyNameArg(L);
-		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonRepeat((USHORT)vKey));
+		LuaPushBool(L, vKey >= 0 && LuaKeyState::OnButtonRepeat((USHORT)vKey, identScript, identFunc));
 		return 1;
 	}
 	static int l_GetRepeatMult(lua_State* L) {
