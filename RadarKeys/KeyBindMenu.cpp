@@ -4114,11 +4114,19 @@ namespace RadarKeys {
 			ImGui::End();
 		}
 
-		static void DrawKeyStateHoldRing(ImDrawList* drawList, const ImVec2& center) {
-			if (!drawList) {
+		static void DrawKeyStateHoldRing(ImDrawList* drawList, const ImVec2& center, float fraction) {
+			if (!drawList || fraction <= 0.0f) {
 				return;
 			}
-			drawList->AddCircle(center, kKeyStateChipRadius + 3.0f, kKeyStateHoldRingColor, 0, 1.5f);
+			const float radius = kKeyStateChipRadius + 3.0f;
+			const float angleStart = -1.5707963f;
+			if (fraction >= 1.0f) {
+				drawList->AddCircle(center, radius, kKeyStateHoldRingColor, 0, 1.5f);
+				return;
+			}
+			const float sweep = 6.2831853f * fraction;
+			drawList->PathArcTo(center, radius, angleStart - sweep, angleStart);
+			drawList->PathStroke(kKeyStateHoldRingColor, 0, 1.5f);
 		}
 		void RebuildDisplayCacheIfNeeded() {
 			if (!displayCacheDirty && displayCache.size() == bindings.size()) return;
@@ -5262,10 +5270,12 @@ namespace RadarKeys {
 						ImGui::SetCursorPosY(rowTopY + chipYOffset);
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyStateChipRounding);
 						ImGui::PushStyleColor(ImGuiCol_Button, isDisabled ? kKeyStateRed : kKeyStateGreen);
+						ImGui::PushStyleColor(ImGuiCol_ButtonHovered, isDisabled ? kKeyStateRed : kKeyStateGreen);
+						ImGui::PushStyleColor(ImGuiCol_ButtonActive, isDisabled ? kKeyStateRed : kKeyStateGreen);
 						ImGui::PushID("keystate");
 						bool clicked = ImGui::Button("", ImVec2(kKeyStateChipWidth, kKeyStateChipHeight));
 						ImGui::PopID();
-						ImGui::PopStyleColor();
+						ImGui::PopStyleColor(3);
 						ImGui::PopStyleVar();
 						ImVec2 disableBtnMin = ImGui::GetItemRectMin();
 						ImVec2 disableBtnMax = ImGui::GetItemRectMax();
@@ -5276,7 +5286,8 @@ namespace RadarKeys {
 								disableHoldStart[bindIdx] = std::chrono::steady_clock::now();
 							} else if (pendingRemoveConfirmIndex != bindIdx) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
-								DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
+								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
+								DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter, holdProgress);
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingRemoveConfirmIndex = bindIdx;
 									removeConfirmPopupRequested = true;
@@ -5286,7 +5297,7 @@ namespace RadarKeys {
 							disableHoldStart.erase(bindIdx);
 						}
 						if (pendingRemoveConfirmIndex == bindIdx) {
-							DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
+							DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter, 1.0f);
 						}
 
 						if (clicked && pendingRemoveConfirmIndex != bindIdx) {
@@ -5332,10 +5343,12 @@ namespace RadarKeys {
 						ImGui::SetCursorPosY(rowTopY + chipYOffset);
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyStateChipRounding);
 						ImGui::PushStyleColor(ImGuiCol_Button, isPendingThisKey ? ImVec4(1.0f, 70.0f / 255.0f, 70.0f / 255.0f, 1.0f) : (isDisabled ? kKeyStateRed : kKeyStateGreen));
+						ImGui::PushStyleColor(ImGuiCol_ButtonHovered, isPendingThisKey ? ImVec4(1.0f, 70.0f / 255.0f, 70.0f / 255.0f, 1.0f) : (isDisabled ? kKeyStateRed : kKeyStateGreen));
+						ImGui::PushStyleColor(ImGuiCol_ButtonActive, isPendingThisKey ? ImVec4(1.0f, 70.0f / 255.0f, 70.0f / 255.0f, 1.0f) : (isDisabled ? kKeyStateRed : kKeyStateGreen));
 						ImGui::PushID("keystate");
 						bool clicked = ImGui::Button("", ImVec2(kKeyStateChipWidth, kKeyStateChipHeight));
 						ImGui::PopID();
-						ImGui::PopStyleColor();
+						ImGui::PopStyleColor(3);
 						ImGui::PopStyleVar();
 						ImVec2 modKeyBtnMin = ImGui::GetItemRectMin();
 						ImVec2 modKeyBtnMax = ImGui::GetItemRectMax();
@@ -5346,7 +5359,8 @@ namespace RadarKeys {
 								modKeyHoldStart[mkHoldKey] = std::chrono::steady_clock::now();
 							} else if (!isPendingThisKey) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
-								DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
+								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
+								DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter, holdProgress);
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingResetScriptName = mkScriptName;
 									pendingResetFunctionName = mkFunctionName;
@@ -5358,7 +5372,7 @@ namespace RadarKeys {
 							modKeyHoldStart.erase(mkHoldKey);
 						}
 						if (isPendingThisKey) {
-							DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
+							DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter, 1.0f);
 						}
 
 						if (clicked && !isPendingThisKey) {
@@ -5378,9 +5392,12 @@ namespace RadarKeys {
 					else {
 						ImGui::SetCursorPosY(rowTopY + chipYOffset);
 						ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kKeyStateChipRounding);
+						ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyle().Colors[ImGuiCol_Button]);
+						ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetStyle().Colors[ImGuiCol_Button]);
 						ImGui::PushID("keystate");
 						ImGui::Button("", ImVec2(kKeyStateChipWidth, kKeyStateChipHeight));
 						ImGui::PopID();
+						ImGui::PopStyleColor(2);
 						ImGui::PopStyleVar();
 						ImVec2 undescribedBtnMin = ImGui::GetItemRectMin();
 						ImVec2 undescribedBtnMax = ImGui::GetItemRectMax();
@@ -5393,7 +5410,8 @@ namespace RadarKeys {
 								modKeyHoldStart[undescribedHoldKey] = std::chrono::steady_clock::now();
 							} else if (!undescribedPending) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
-								DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
+								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
+								DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter, holdProgress);
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingResetScriptName = row.info.scriptName;
 									pendingResetFunctionName = row.info.functionName;
@@ -5405,7 +5423,7 @@ namespace RadarKeys {
 							modKeyHoldStart.erase(undescribedHoldKey);
 						}
 						if (undescribedPending) {
-							DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
+							DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter, 1.0f);
 						}
 					}
 					ImGui::SameLine();
