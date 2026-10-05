@@ -283,7 +283,7 @@ namespace RadarKeys {
 		}
 
 		bool MemberComboGateState(USHORT vKey, bool& comboArmed);
-		bool OnButtonDown(USHORT vKey) {
+		bool OnButtonDown(USHORT vKey, const std::string& scriptName, const std::string& functionName) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
@@ -292,7 +292,7 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			s.pendingUsesOnPress = true;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
+			if (IsSuppressed(vKey) || (scriptName.empty() || functionName.empty() ? IsDisabledVKey(vKey) : IsFunctionIdentityDisabled(scriptName, functionName)) || showCapturePrompt) {
 				s.downEdgePending = 0;
 				return false;
 			}
@@ -333,7 +333,7 @@ namespace RadarKeys {
 			return false;
 		}
 
-		bool OnButtonUp(USHORT vKey) {
+		bool OnButtonUp(USHORT vKey, const std::string& scriptName, const std::string& functionName) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
@@ -342,7 +342,7 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			s.pendingUsesOnRelease = true;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
+			if (IsSuppressed(vKey) || (scriptName.empty() || functionName.empty() ? IsDisabledVKey(vKey) : IsFunctionIdentityDisabled(scriptName, functionName)) || showCapturePrompt) {
 				s.upEdgePending = 0;
 				return false;
 			}
@@ -358,7 +358,7 @@ namespace RadarKeys {
 			return false;
 		}
 
-		bool ButtonHeld(USHORT vKey, double holdSecondsOverride) {
+		bool ButtonHeld(USHORT vKey, double holdSecondsOverride, const std::string& scriptName, const std::string& functionName) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
@@ -368,7 +368,7 @@ namespace RadarKeys {
 			double heldHoldTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds;
 			states[vKey].pendingUsesHoldTime = true;
 			states[vKey].pendingLastHoldSeconds = heldHoldTime;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
+			if (IsSuppressed(vKey) || (scriptName.empty() || functionName.empty() ? IsDisabledVKey(vKey) : IsFunctionIdentityDisabled(scriptName, functionName)) || showCapturePrompt) {
 				return false;
 			}
 			KeyPollState& s = states[vKey];
@@ -401,7 +401,7 @@ namespace RadarKeys {
 			return false;
 		}
 
-		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride) {
+		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride, const std::string& scriptName, const std::string& functionName) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
@@ -416,7 +416,7 @@ namespace RadarKeys {
 			}
 			s.pendingUsesHoldTime = true;
 			s.pendingLastHoldSeconds = holdTime;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
+			if (IsSuppressed(vKey) || (scriptName.empty() || functionName.empty() ? IsDisabledVKey(vKey) : IsFunctionIdentityDisabled(scriptName, functionName)) || showCapturePrompt) {
 				return false;
 			}
 			if (s.isPressed && s.onHoldStartSet) {
@@ -430,7 +430,7 @@ namespace RadarKeys {
 			return false;
 		}
 
-		bool OnButtonRepeat(USHORT vKey) {
+		bool OnButtonRepeat(USHORT vKey, const std::string& scriptName, const std::string& functionName) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidVKey(vKey)) {
 				return false;
@@ -439,7 +439,7 @@ namespace RadarKeys {
 			EnsureTracked(vKey);
 			KeyPollState& s = states[vKey];
 			s.pendingUsesRepeat = true;
-			if (IsSuppressed(vKey) || IsDisabledVKey(vKey) || showCapturePrompt) {
+			if (IsSuppressed(vKey) || (scriptName.empty() || functionName.empty() ? IsDisabledVKey(vKey) : IsFunctionIdentityDisabled(scriptName, functionName)) || showCapturePrompt) {
 				return false;
 			}
 			if (!s.isPressed) {
@@ -527,6 +527,19 @@ namespace RadarKeys {
 				}
 			}
 		}
+		std::set<std::string> disabledFunctionIdentities;
+
+		bool IsFunctionIdentityDisabled(const std::string& scriptName, const std::string& functionName) {
+			return disabledFunctionIdentities.count(scriptName + "\x1f" + functionName) > 0;
+		}
+
+		void SetDisabledFunctionIdentities(const std::vector<std::string>& identities) {
+			KeyStateLock lock(g_keyStateMutex);
+			disabledFunctionIdentities.clear();
+			for (const std::string& identity : identities) {
+				disabledFunctionIdentities.insert(identity);
+			}
+		}
 
 		std::map<std::string, std::vector<USHORT>> comboRedirectTarget;
 		std::vector<USHORT> ResolveActiveCombo(const std::vector<USHORT>& vKeys) {
@@ -568,7 +581,7 @@ namespace RadarKeys {
 			return RawComboAllHeld(active);
 		}
 
-		bool OnComboButtonDown(const std::vector<USHORT>& vKeys) {
+		bool OnComboButtonDown(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
@@ -576,7 +589,7 @@ namespace RadarKeys {
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesOnPress = true;
-			if (IsComboDisabled(active) || showCapturePrompt) return false;
+			if ((scriptName.empty() || functionName.empty() ? IsComboDisabled(active) : IsFunctionIdentityDisabled(scriptName, functionName)) || showCapturePrompt) return false;
 			bool allHeld = RawComboAllHeld(active);
 			if (allHeld && !state.active) {
 				state.active = true;
@@ -605,7 +618,7 @@ namespace RadarKeys {
 			return false;
 		}
 
-		bool OnComboButtonUp(const std::vector<USHORT>& vKeys) {
+		bool OnComboButtonUp(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
@@ -613,7 +626,7 @@ namespace RadarKeys {
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesOnRelease = true;
-			if (IsComboDisabled(active) || showCapturePrompt) return false;
+			if ((scriptName.empty() || functionName.empty() ? IsComboDisabled(active) : IsFunctionIdentityDisabled(scriptName, functionName)) || showCapturePrompt) return false;
 			bool allHeld = RawComboAllHeld(active);
 			if (allHeld && !state.active) {
 				state.active = true;
@@ -663,7 +676,7 @@ namespace RadarKeys {
 			return state.holdStartSet && std::chrono::duration<double>(clock::now() - state.pressTime).count() >= holdTime;
 		}
 
-		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride) {
+		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride, const std::string& scriptName, const std::string& functionName) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
@@ -673,7 +686,7 @@ namespace RadarKeys {
 			state.pendingUsesHoldTime = true;
 			double holdTime = (holdSecondsOverride >= 0.0) ? holdSecondsOverride : kHoldTimeSeconds; // L46: explicit 0 = immediate
 			state.pendingLastHoldSeconds = holdTime;
-			if (IsComboDisabled(active) || showCapturePrompt) return false;
+			if ((scriptName.empty() || functionName.empty() ? IsComboDisabled(active) : IsFunctionIdentityDisabled(scriptName, functionName)) || showCapturePrompt) return false;
 			if (!RawComboAllHeld(active)) {
 				state.active = false;
 				state.holdStartSet = false;
@@ -695,7 +708,7 @@ namespace RadarKeys {
 			return false;
 		}
 
-		bool OnComboButtonRepeat(const std::vector<USHORT>& vKeys) {
+		bool OnComboButtonRepeat(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName) {
 			KeyStateLock lock(g_keyStateMutex);
 			if (!ValidCombo(vKeys)) return false;
 			std::vector<USHORT> active = ResolveActiveCombo(vKeys);
@@ -703,7 +716,7 @@ namespace RadarKeys {
 			std::string stateKey = ComboStateKey(active);
 			ComboPollState& state = comboStates[stateKey];
 			state.pendingUsesRepeat = true;
-			if (IsComboDisabled(active) || showCapturePrompt) return false;
+			if ((scriptName.empty() || functionName.empty() ? IsComboDisabled(active) : IsFunctionIdentityDisabled(scriptName, functionName)) || showCapturePrompt) return false;
 			if (!RawComboAllHeld(active)) {
 				state.active = false;
 				state.holdStartSet = false;
