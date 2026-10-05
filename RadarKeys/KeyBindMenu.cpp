@@ -153,6 +153,7 @@ namespace RadarKeys {
 		constexpr float kKeyStateChipHeight = 13.0f;
 		constexpr float kKeyStateChipRounding = 6.5f;
 		constexpr float kKeyStateChipRadius = kKeyStateChipHeight * 0.5f;
+		constexpr ImU32 kKeyStateHoldRingColor = IM_COL32(255, 140, 0, 255);
 		constexpr float kKeyButtonRounding = 5.0f;
 		constexpr float kChipToKeyGapTrim = 0.5f;
 		constexpr float kFooterButtonWidth = 145.0f * 0.65f;
@@ -4113,23 +4114,11 @@ namespace RadarKeys {
 			ImGui::End();
 		}
 
-		static void DrawCircleTopDownFill(ImDrawList* drawList, const ImVec2& center, float radius, float fraction, ImU32 col) {
-			if (!drawList || fraction <= 0.0f) {
+		static void DrawKeyStateHoldRing(ImDrawList* drawList, const ImVec2& center) {
+			if (!drawList) {
 				return;
 			}
-			if (fraction >= 1.0f) {
-				drawList->AddCircleFilled(center, radius, col, 0);
-				return;
-			}
-			const float dy = radius * (2.0f * fraction - 1.0f);
-			const float dx = 2.0f * radius * sqrtf(fraction * (1.0f - fraction));
-			float angleMin = atan2f(dy, -dx);
-			float angleMax = atan2f(dy, dx);
-			if (angleMax < angleMin) {
-				angleMax += 6.2831853f;
-			}
-			drawList->PathArcTo(center, radius, angleMin, angleMax);
-			drawList->PathFillConvex(col);
+			drawList->AddCircle(center, kKeyStateChipRadius + 3.0f, kKeyStateHoldRingColor, 0, 1.5f);
 		}
 		void RebuildDisplayCacheIfNeeded() {
 			if (!displayCacheDirty && displayCache.size() == bindings.size()) return;
@@ -5280,15 +5269,14 @@ namespace RadarKeys {
 						ImGui::PopStyleVar();
 						ImVec2 disableBtnMin = ImGui::GetItemRectMin();
 						ImVec2 disableBtnMax = ImGui::GetItemRectMax();
+						const ImVec2 chipCenter((disableBtnMin.x + disableBtnMax.x) * 0.5f, (disableBtnMin.y + disableBtnMax.y) * 0.5f);
 						if (ImGui::IsItemActive()) {
 							auto holdIt = disableHoldStart.find(bindIdx);
 							if (holdIt == disableHoldStart.end()) {
 								disableHoldStart[bindIdx] = std::chrono::steady_clock::now();
 							} else if (pendingRemoveConfirmIndex != bindIdx) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
-								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
-								const ImVec2 chipCenter((disableBtnMin.x + disableBtnMax.x) * 0.5f, (disableBtnMin.y + disableBtnMax.y) * 0.5f);
-								DrawCircleTopDownFill(ImGui::GetWindowDrawList(), chipCenter, kKeyStateChipRadius, holdProgress, IM_COL32(128, 82, 20, 255));
+								DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingRemoveConfirmIndex = bindIdx;
 									removeConfirmPopupRequested = true;
@@ -5296,6 +5284,9 @@ namespace RadarKeys {
 							}
 						} else {
 							disableHoldStart.erase(bindIdx);
+						}
+						if (pendingRemoveConfirmIndex == bindIdx) {
+							DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
 						}
 
 						if (clicked && pendingRemoveConfirmIndex != bindIdx) {
@@ -5348,15 +5339,14 @@ namespace RadarKeys {
 						ImGui::PopStyleVar();
 						ImVec2 modKeyBtnMin = ImGui::GetItemRectMin();
 						ImVec2 modKeyBtnMax = ImGui::GetItemRectMax();
+						const ImVec2 chipCenter((modKeyBtnMin.x + modKeyBtnMax.x) * 0.5f, (modKeyBtnMin.y + modKeyBtnMax.y) * 0.5f);
 						if (ImGui::IsItemActive()) {
 							auto holdIt = modKeyHoldStart.find(mkHoldKey);
 							if (holdIt == modKeyHoldStart.end()) {
 								modKeyHoldStart[mkHoldKey] = std::chrono::steady_clock::now();
 							} else if (!isPendingThisKey) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
-								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
-								const ImVec2 chipCenter((modKeyBtnMin.x + modKeyBtnMax.x) * 0.5f, (modKeyBtnMin.y + modKeyBtnMax.y) * 0.5f);
-								DrawCircleTopDownFill(ImGui::GetWindowDrawList(), chipCenter, kKeyStateChipRadius, holdProgress, IM_COL32(255, 70, 70, 255));
+								DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingResetScriptName = mkScriptName;
 									pendingResetFunctionName = mkFunctionName;
@@ -5366,6 +5356,9 @@ namespace RadarKeys {
 							}
 						} else {
 							modKeyHoldStart.erase(mkHoldKey);
+						}
+						if (isPendingThisKey) {
+							DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
 						}
 
 						if (clicked && !isPendingThisKey) {
@@ -5391,6 +5384,7 @@ namespace RadarKeys {
 						ImGui::PopStyleVar();
 						ImVec2 undescribedBtnMin = ImGui::GetItemRectMin();
 						ImVec2 undescribedBtnMax = ImGui::GetItemRectMax();
+						const ImVec2 chipCenter((undescribedBtnMin.x + undescribedBtnMax.x) * 0.5f, (undescribedBtnMin.y + undescribedBtnMax.y) * 0.5f);
 						std::string undescribedHoldKey = row.info.scriptName + "\x1f" + row.info.functionName;
 						bool undescribedPending = pendingResetActive && pendingResetScriptName == row.info.scriptName && pendingResetFunctionName == row.info.functionName;
 						if (ImGui::IsItemActive()) {
@@ -5399,9 +5393,7 @@ namespace RadarKeys {
 								modKeyHoldStart[undescribedHoldKey] = std::chrono::steady_clock::now();
 							} else if (!undescribedPending) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
-								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
-								const ImVec2 chipCenter((undescribedBtnMin.x + undescribedBtnMax.x) * 0.5f, (undescribedBtnMin.y + undescribedBtnMax.y) * 0.5f);
-								DrawCircleTopDownFill(ImGui::GetWindowDrawList(), chipCenter, kKeyStateChipRadius, holdProgress, IM_COL32(255, 70, 70, 255));
+								DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingResetScriptName = row.info.scriptName;
 									pendingResetFunctionName = row.info.functionName;
@@ -5411,6 +5403,9 @@ namespace RadarKeys {
 							}
 						} else {
 							modKeyHoldStart.erase(undescribedHoldKey);
+						}
+						if (undescribedPending) {
+							DrawKeyStateHoldRing(ImGui::GetWindowDrawList(), chipCenter);
 						}
 					}
 					ImGui::SameLine();
