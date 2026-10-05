@@ -7,17 +7,17 @@
 namespace RadarKeys {
 	namespace LuaKeyState {
 		bool ButtonDown(USHORT vKey);
-		bool ButtonHeld(USHORT vKey, double holdSecondsOverride = -1.0);
-		bool OnButtonDown(USHORT vKey);
-		bool OnButtonUp(USHORT vKey);
-		bool OnButtonRepeat(USHORT vKey);
-		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride = -1.0);
+		bool ButtonHeld(USHORT vKey, double holdSecondsOverride = -1.0, const std::string& scriptName = std::string(), const std::string& functionName = std::string());
+		bool OnButtonDown(USHORT vKey, const std::string& scriptName = std::string(), const std::string& functionName = std::string());
+		bool OnButtonUp(USHORT vKey, const std::string& scriptName = std::string(), const std::string& functionName = std::string());
+		bool OnButtonRepeat(USHORT vKey, const std::string& scriptName = std::string(), const std::string& functionName = std::string());
+		bool OnButtonHoldTime(USHORT vKey, double holdSecondsOverride = -1.0, const std::string& scriptName = std::string(), const std::string& functionName = std::string());
 		bool ComboButtonDown(const std::vector<USHORT>& vKeys);
-		bool OnComboButtonDown(const std::vector<USHORT>& vKeys);
-		bool OnComboButtonUp(const std::vector<USHORT>& vKeys);
+		bool OnComboButtonDown(const std::vector<USHORT>& vKeys, const std::string& scriptName = std::string(), const std::string& functionName = std::string());
+		bool OnComboButtonUp(const std::vector<USHORT>& vKeys, const std::string& scriptName = std::string(), const std::string& functionName = std::string());
 		bool ComboButtonHeld(const std::vector<USHORT>& vKeys, double holdSecondsOverride = -1.0);
-		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride = -1.0);
-		bool OnComboButtonRepeat(const std::vector<USHORT>& vKeys);
+		bool OnComboButtonHoldTime(const std::vector<USHORT>& vKeys, double holdSecondsOverride = -1.0, const std::string& scriptName = std::string(), const std::string& functionName = std::string());
+		bool OnComboButtonRepeat(const std::vector<USHORT>& vKeys, const std::string& scriptName = std::string(), const std::string& functionName = std::string());
 		double GetComboRepeatMult(const std::vector<USHORT>& vKeys);
 		double GetComboRepeatIntervalSeconds(const std::vector<USHORT>& vKeys);
 		void ResetComboRepeat(const std::vector<USHORT>& vKeys);
@@ -36,6 +36,7 @@ namespace RadarKeys {
 		void SetDisabledVKeys(const std::vector<USHORT>& vKeys);
 		void SetHoldSecondsOverrides(const std::map<USHORT, double>& overrides);
 		void SetDisabledCombos(const std::vector<std::vector<USHORT>>& combos);
+		void SetDisabledFunctionIdentities(const std::vector<std::string>& identities);
 		void ReassignBinding(USHORT oldVKey, USHORT newVKey, const std::string& scriptName, const std::string& functionName);
 		void DescribeKey(USHORT vKey, const std::string& scriptName, const std::string& functionName, const std::string& toggleState, int declaredTriggerType = -1, double declaredHoldSeconds = -1.0, double declaredRepeatSeconds = -1.0);
 		void DescribeComboKey(const std::vector<USHORT>& vKeys, const std::string& scriptName, const std::string& functionName, const std::string& toggleState, int declaredTriggerType = -1, double declaredHoldSeconds = -1.0, double declaredRepeatSeconds = -1.0);
