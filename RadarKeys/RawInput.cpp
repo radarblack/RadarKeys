@@ -1154,10 +1154,6 @@ static GetProcAddress_t g_origGetProcAddressTramp = nullptr;
 			spdlog::warn(LOG_RAWINPUT_UNREGISTERACTION_HANDLE_FMT_NOT_FOUND, handle, vKey);
 		}//UnRegisterAction (handle)
 
-		bool IsKeyDown(USHORT vKey) {
-			return vKey < vKeyMax && !((currFlags[vKey].load(std::memory_order_relaxed) & RI_KEY_BREAK) != 0);
-		}//IsKeyDown
-
 		//DEBUG
 		//tex: don't process key //DEBUGNOW what am I doing here?
 		void InitIgnoreKeys() {
