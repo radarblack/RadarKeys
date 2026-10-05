@@ -1291,6 +1291,19 @@ namespace RadarKeys {
 			}
 			return result;
 		}
+		std::vector<std::string> ComputeDisabledModFunctionIdentities() {
+			std::vector<std::string> result;
+			for (const auto& info : LuaKeyState::GetTrackedKeyInfo()) {
+				if (!info.hasDescription) continue;
+				if (!ModKeyBindings::IsDisabled(info.scriptName, info.functionName)) continue;
+				result.push_back(info.scriptName + "\x1f" + info.functionName);
+			}
+			for (const auto& cinfo : LuaKeyState::GetTrackedComboKeyInfo()) {
+				if (!ModKeyBindings::IsDisabled(cinfo.scriptName, cinfo.functionName)) continue;
+				result.push_back(cinfo.scriptName + "\x1f" + cinfo.functionName);
+			}
+			return result;
+		}
 
 		std::map<USHORT, double> ComputeHoldSecondsOverrides() {
 			std::map<USHORT, double> result;
@@ -1353,6 +1366,7 @@ namespace RadarKeys {
 			static std::vector<USHORT> cachedSuppressedVKeys;
 			static std::vector<USHORT> cachedDisabledVKeys;
 			static std::vector<std::vector<USHORT>> cachedDisabledCombos;
+			static std::vector<std::string> cachedDisabledFunctionIdentities;
 			static std::map<USHORT, double> cachedHoldSecondsOverrides;
 			static ULONGLONG lastVKeyComputeTick = 0;
 			static bool lastVKeyComputeMenuOpen = false;
@@ -1369,6 +1383,8 @@ namespace RadarKeys {
 			cachedDisabledCombos = ComputeDisabledModCombos();
 			LuaKeyState::SetSuppressedVKeys(cachedSuppressedVKeys);
 			LuaKeyState::SetDisabledVKeys(cachedDisabledVKeys);
+			cachedDisabledFunctionIdentities = ComputeDisabledModFunctionIdentities();
+			LuaKeyState::SetDisabledFunctionIdentities(cachedDisabledFunctionIdentities);
 			LuaKeyState::SetDisabledCombos(cachedDisabledCombos);
 			cachedHoldSecondsOverrides = ComputeHoldSecondsOverrides();
 			LuaKeyState::SetHoldSecondsOverrides(cachedHoldSecondsOverrides);
