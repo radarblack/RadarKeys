@@ -20,11 +20,6 @@ public:
     }
 
     template <typename T>
-    Address add(T offset) const {
-        return Address((uintptr_t)m_ptr + offset);
-    }
-
-    template <typename T>
     Address sub(T offset) const {
         return Address((uintptr_t)m_ptr - offset);
     }
@@ -38,10 +33,6 @@ public:
     template <typename T>
     T to() const {
         return *(T*)m_ptr;
-    }
-
-    Address deref() const {
-        return to<void*>();
     }
 
     void* ptr() const {
