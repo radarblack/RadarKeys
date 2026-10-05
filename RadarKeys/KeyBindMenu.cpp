@@ -152,6 +152,7 @@ namespace RadarKeys {
 		constexpr float kKeyStateChipWidth = 13.0f;
 		constexpr float kKeyStateChipHeight = 13.0f;
 		constexpr float kKeyStateChipRounding = 6.5f;
+		constexpr float kKeyStateChipRadius = kKeyStateChipHeight * 0.5f;
 		constexpr float kKeyButtonRounding = 5.0f;
 		constexpr float kChipToKeyGapTrim = 0.5f;
 		constexpr float kFooterButtonWidth = 145.0f * 0.65f;
@@ -4112,6 +4113,24 @@ namespace RadarKeys {
 			ImGui::End();
 		}
 
+		static void DrawCircleTopDownFill(ImDrawList* drawList, const ImVec2& center, float radius, float fraction, ImU32 col) {
+			if (!drawList || fraction <= 0.0f) {
+				return;
+			}
+			if (fraction >= 1.0f) {
+				drawList->AddCircleFilled(center, radius, col, 0);
+				return;
+			}
+			const float dy = radius * (2.0f * fraction - 1.0f);
+			const float dx = 2.0f * radius * sqrtf(fraction * (1.0f - fraction));
+			float angleMin = atan2f(dy, -dx);
+			float angleMax = atan2f(dy, dx);
+			if (angleMax < angleMin) {
+				angleMax += 6.2831853f;
+			}
+			drawList->PathArcTo(center, radius, angleMin, angleMax);
+			drawList->PathFillConvex(col);
+		}
 		void RebuildDisplayCacheIfNeeded() {
 			if (!displayCacheDirty && displayCache.size() == bindings.size()) return;
 
@@ -5268,9 +5287,8 @@ namespace RadarKeys {
 							} else if (pendingRemoveConfirmIndex != bindIdx) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
 								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
-								ImVec2 barMin(disableBtnMin.x, disableBtnMin.y);
-								ImVec2 barMax(disableBtnMax.x, disableBtnMin.y + (disableBtnMax.y - disableBtnMin.y) * holdProgress);
-								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(128, 82, 20, 255), kKeyStateChipRounding);
+								const ImVec2 chipCenter((disableBtnMin.x + disableBtnMax.x) * 0.5f, (disableBtnMin.y + disableBtnMax.y) * 0.5f);
+								DrawCircleTopDownFill(ImGui::GetWindowDrawList(), chipCenter, kKeyStateChipRadius, holdProgress, IM_COL32(128, 82, 20, 255));
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingRemoveConfirmIndex = bindIdx;
 									removeConfirmPopupRequested = true;
@@ -5337,9 +5355,8 @@ namespace RadarKeys {
 							} else if (!isPendingThisKey) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
 								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
-								ImVec2 barMin(modKeyBtnMin.x, modKeyBtnMin.y);
-								ImVec2 barMax(modKeyBtnMax.x, modKeyBtnMin.y + (modKeyBtnMax.y - modKeyBtnMin.y) * holdProgress);
-								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(255, 70, 70, 255), kKeyStateChipRounding);
+								const ImVec2 chipCenter((modKeyBtnMin.x + modKeyBtnMax.x) * 0.5f, (modKeyBtnMin.y + modKeyBtnMax.y) * 0.5f);
+								DrawCircleTopDownFill(ImGui::GetWindowDrawList(), chipCenter, kKeyStateChipRadius, holdProgress, IM_COL32(255, 70, 70, 255));
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingResetScriptName = mkScriptName;
 									pendingResetFunctionName = mkFunctionName;
@@ -5383,9 +5400,8 @@ namespace RadarKeys {
 							} else if (!undescribedPending) {
 								double heldSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - holdIt->second).count();
 								float holdProgress = (float)((std::min)(1.0, heldSeconds / kRemoveHoldSeconds));
-								ImVec2 barMin(undescribedBtnMin.x, undescribedBtnMin.y);
-								ImVec2 barMax(undescribedBtnMax.x, undescribedBtnMin.y + (undescribedBtnMax.y - undescribedBtnMin.y) * holdProgress);
-								ImGui::GetWindowDrawList()->AddRectFilled(barMin, barMax, IM_COL32(255, 70, 70, 255), kKeyStateChipRounding);
+								const ImVec2 chipCenter((undescribedBtnMin.x + undescribedBtnMax.x) * 0.5f, (undescribedBtnMin.y + undescribedBtnMax.y) * 0.5f);
+								DrawCircleTopDownFill(ImGui::GetWindowDrawList(), chipCenter, kKeyStateChipRadius, holdProgress, IM_COL32(255, 70, 70, 255));
 								if (heldSeconds >= kRemoveHoldSeconds) {
 									pendingResetScriptName = row.info.scriptName;
 									pendingResetFunctionName = row.info.functionName;
