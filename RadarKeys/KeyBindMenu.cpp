@@ -3799,7 +3799,6 @@ namespace RadarKeys {
 			bool assignmentIsValid = comboAvailable;
 			bool holdValid = !capturedLongPressMode || capturedHoldSeconds > 0.0f;
 			bool canFinalize = captureReady && holdValid && (assignmentIsValid && (isAssigningMenuToggleKey || isAssigningModKey || (pathsValid && functionsValid)));
-			float paddingY = ImGui::GetStyle().WindowPadding.y;
 			float buttonHeight = 30.0f;
 			float contentBottomY = ImGui::GetCursorPosY() + ImGui::GetStyle().ItemSpacing.y;
 			s_capturePromptMinHeight = contentBottomY + buttonHeight + kFooterBottomPadPx;
@@ -3828,7 +3827,6 @@ namespace RadarKeys {
 			ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x);
 			const bool finalizeClicked = ImGui::Button(UI_BTN_FINALIZE, ImVec2(kFooterButtonWidth, buttonHeight));
 			const ImVec2 finalizeRectMin = ImGui::GetItemRectMin();
-			const ImVec2 finalizeRectMax = ImGui::GetItemRectMax();
 			if (finalizeClicked) {
 				if (isAssigningModKey) {
 					if (captureIsCombo) {
