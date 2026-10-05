@@ -1873,7 +1873,7 @@ namespace RadarKeys {
 				<< (captureSuppressMouse ? "1|" : "0|")
 				<< (captureSuppressGamepad ? "1" : "0") << "\n";
 			std::string gameDirStr = std::filesystem::path(GetGameDirectory()).generic_string() + "/";
-			for (auto b : bindings) {
+			for (const auto& b : bindings) {
 				std::string genericOn = b.scriptPathOn.empty() ? "" : std::filesystem::path(b.scriptPathOn).generic_string();
 				if (!genericOn.empty() && genericOn.find(gameDirStr) == 0) {
 					genericOn.erase(0, gameDirStr.length());
