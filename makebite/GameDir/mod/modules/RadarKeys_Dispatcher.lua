@@ -1,10 +1,10 @@
 local this = {}
 
 	-- Module Loading
-		if rawget(_G, "RadarKeysDispatcher") then
-			return _G.RadarKeysDispatcher
+		if rawget(_G, "RadarKeys_Dispatcher") then
+			return _G.RadarKeys_Dispatcher
 		end
-		_G.RadarKeysDispatcher = this
+		_G.RadarKeys_Dispatcher = this
 	-- Module Loading • ends here
 
 	--[[ RadarKeys Trigger Dispatch
